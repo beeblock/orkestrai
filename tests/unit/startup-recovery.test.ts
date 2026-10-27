@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { startupRecoveryCopy } from '../../src/lib/i18n/desktop-messages.js';
 
@@ -149,10 +151,33 @@ describe('server-independent native startup recovery', () => {
     expect(boot.indexOf('createSplash();')).toBeLessThan(boot.indexOf('await ensureServer();'));
     const retry = main.split('retry: async () => {')[1];
     expect(retry.indexOf('createSplash();')).toBeLessThan(retry.indexOf('await ensureServer();'));
-    // A splash that loads during the preparation gets the notice then; nothing marks it shown before it exists.
-    const splash = main.split('function createSplash() {')[1].split('\nfunction ')[0];
-    expect(splash).toContain("once('did-finish-load', () => { if (startupPreparing) showSplashPreparing(); })");
     expect(main).not.toContain('toldSplash');
+  });
+
+  it('replays preparation after loading stops even when did-finish-load still reports loading', () => {
+    let loading = true;
+    const executeJavaScript = vi.fn(async (_script: string) => {});
+    class Splash extends EventEmitter {
+      webContents = Object.assign(new EventEmitter(), { isLoading: () => loading, executeJavaScript });
+      center() {}
+      loadFile() {}
+      show() {}
+      isDestroyed() { return false; }
+    }
+    const main = readFileSync('electron/main.cjs', 'utf8');
+    const source = main.slice(main.indexOf('function createSplash() {'), main.indexOf('function closeSplash() {'));
+    const context = {
+      BrowserWindow: Splash, splashWindow: null as Splash | null, __dirname: '/desktop', appRoot: '/app', menuLocale: 'en',
+      path: { join: (...parts: string[]) => parts.join('/') },
+      require: () => ({ startupPreparingCopy: () => ({ title: 'Preparing your data', detail: 'Backing up' }) }),
+    };
+    runInNewContext(`${source}\nstartupPreparing = true; createSplash();`, context);
+    context.splashWindow!.webContents.emit('did-finish-load');
+    expect(executeJavaScript).not.toHaveBeenCalled();
+    loading = false;
+    context.splashWindow!.webContents.emit('did-stop-loading');
+    expect(executeJavaScript).toHaveBeenCalledOnce();
+    expect(executeJavaScript.mock.calls[0][0]).toContain('Preparing your data');
   });
 
   it('reads the preparation steps the server announces and ignores anything else', () => {

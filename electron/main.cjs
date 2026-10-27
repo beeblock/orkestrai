@@ -370,7 +370,8 @@ function createSplash() {
   splashWindow.loadFile(path.join(__dirname, 'splash.html'));
   const createdSplash = splashWindow;
   createdSplash.once('ready-to-show', () => { if (!createdSplash.isDestroyed()) createdSplash.show(); });
-  createdSplash.webContents.once('did-finish-load', () => { if (startupPreparing) showSplashPreparing(); });
+  // did-finish-load can still report isLoading=true; replay after the loading state clears.
+  createdSplash.webContents.once('did-stop-loading', () => { if (startupPreparing) showSplashPreparing(); });
   createdSplash.once('closed', () => { if (splashWindow === createdSplash) splashWindow = null; });
 }
 
