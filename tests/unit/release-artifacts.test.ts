@@ -119,6 +119,26 @@ describe('release artifact validation', () => {
     expect(validation.indexOf('merge-macos-manifests')).toBeLessThan(validation.indexOf('validate-release-artifacts'));
   });
 
+  it('limits the CloudKit transport workaround to hosted Intel Macs before mandatory signed packaging', () => {
+    const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
+    const mac = workflow.jobs['build-macos'];
+    const network = mac.steps.findIndex((step: { name?: string }) => step.name === 'Use TCP for Apple notarization ticket delivery');
+    const packaging = mac.steps.findIndex((step: { name?: string }) => step.name === 'Package macOS installers');
+    expect(mac['runs-on']).toBe('macos-15-intel');
+    expect(network).toBeGreaterThanOrEqual(0);
+    expect(network).toBeLessThan(packaging);
+    expect(mac.steps[network].if).toBe("runner.os == 'macOS' && runner.arch == 'X64'");
+    expect(mac.steps[network].run).toContain('block return out quick proto udp from any to any port 443');
+    expect(mac.steps[network].run).toContain('sudo pfctl -E');
+    expect(mac.steps[packaging].env.ORKESTRAI_REQUIRE_MAC_SIGNING).toBe('true');
+    const verification = mac.steps.find((step: { name?: string }) => step.name === 'Verify macOS packages').run;
+    expect(verification).toContain('spctl --assess');
+    expect(verification).toContain('stapler validate');
+    for (const name of ['build-linux', 'build-windows', 'verify-macos-arm64-voice']) {
+      expect(JSON.stringify(workflow.jobs[name])).not.toContain('pfctl');
+    }
+  });
+
   it('builds QA from an immutable tested SHA without enabling release publication', () => {
     const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
     expect(workflow.on.workflow_dispatch.inputs.build_only).toMatchObject({ type: 'boolean', default: false });

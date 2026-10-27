@@ -358,6 +358,20 @@ repositório principal recebe releases novas.
 
 ## Assinatura
 
+Os runners hospedados `macos-15-intel` podem perder a conexão HTTP/3 com o
+CloudKit ao anexar o ticket, com `NSURLErrorDomain -1005` e `stapler Error 68`.
+O workaround confirmado em [actions/runner-images#14924](https://github.com/actions/runner-images/issues/14924)
+bloqueia UDP/443 somente no runner efêmero, fazendo o cliente usar HTTPS/TCP.
+O workflow aplica a regra antes do empacotamento macOS; não modifica o Mac do
+dono nem dispensa assinatura, notarização, Gatekeeper ou `stapler validate`.
+
+Se uma falha de infraestrutura exigir apenas corrigir o workflow, ele pode
+ser disparado de `main` com `tag` apontando para a tag existente. Todos os
+checkouts, a verificação de CI e a procedência do bundle continuam presos ao
+SHA da tag. Isso permite recuperar uma release ainda não publicada sem mover
+a tag nem recompilar o aplicativo de outro commit. Alterações no aplicativo
+continuam exigindo novo SHA, CI correspondente e o procedimento de recuperação.
+
 Windows NSIS, Linux AppImage e Linux RPM atualizam mesmo sem assinatura. Windows mostra o
 aviso esperado do SmartScreen até existir um certificado.
 

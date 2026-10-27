@@ -184,6 +184,16 @@ jobs:
       - name: Verify production bundle source and file hashes
         run: node scripts/production-bundle.mjs verify build "${{ needs.validate.outputs.source_sha }}"
 
+      - name: Use TCP for Apple notarization ticket delivery
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        shell: bash
+        run: |
+          # Hosted Intel runners can lose CloudKit HTTP/3 connections (stapler 68).
+          # Force the supported HTTPS/TCP fallback on this ephemeral runner only.
+          # https://github.com/actions/runner-images/issues/14924
+          printf '%s\n' 'block return out quick proto udp from any to any port 443' | sudo pfctl -f -
+          sudo pfctl -E
+
       - name: Package macOS installers
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
