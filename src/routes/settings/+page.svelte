@@ -1,7 +1,7 @@
 <script lang="ts">
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import { onDestroy, onMount } from 'svelte';
-  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, Smartphone, RotateCw, SquareTerminal, Trash2, Volume2 } from '@lucide/svelte';
+  import { Activity, ArrowLeft, Check, Command, Keyboard, Languages, Layers, Mic, Palette, Pencil, Play, Power, RefreshCw, Smartphone, RotateCw, SquareTerminal, Swords, Trash2, Volume2 } from '@lucide/svelte';
   import { isMacPlatform } from '$lib/components/agent-room/platform.js';
   import WorkspaceIcon from '$lib/components/agent-room/WorkspaceIcon.svelte';
   import * as m from '$lib/paraglide/messages.js';
@@ -17,6 +17,9 @@
   import { normalizeTerminalTheme, TERMINAL_THEMES, TERMINAL_THEME_ORDER } from '$lib/components/agent-room/terminal-themes.js';
   import { DEFAULT_DICTATION_HOTKEY, comboFromEvent, comboLabel } from '$lib/components/agent-room/dictation-hotkey.js';
   import { appSettingsStore, getAppSettings, invalidateAppSettings } from '$lib/components/agent-room/app-settings.svelte.js';
+  import { notifyAdventureSettings } from '$lib/components/agent-room/adventure/adventure-client.js';
+  import { configureSound, previewChannel } from '$lib/components/agent-room/adventure/adventure-audio.js';
+  import { MIXER_CHANNELS, readMixer, writeMixer, type Mixer, type MixerChannel } from '$lib/components/agent-room/adventure/adventure-mixer.js';
   import VoiceConfirmDialog from '$lib/components/agent-room/VoiceConfirmDialog.svelte';
   import { localVoiceLabel } from '$lib/components/agent-room/voice-label.js';
   import {
@@ -36,6 +39,26 @@
   import PhoneAccessSettings from '$lib/components/agent-room/PhoneAccessSettings.svelte';
 
   let settings = $state<Record<string, string>>({});
+  // The Adventure's sound mixer, kept in settings as JSON; this window plays the previews with it.
+  const mixer = $derived(readMixer(settings.adventureMixer, settings.adventureSound));
+  const CHANNEL_TEXT: Record<MixerChannel, [() => string, () => string]> = {
+    music: [m['settings.adventure_channel_music'], m['settings.adventure_channel_music_hint']],
+    combat: [m['settings.adventure_channel_combat'], m['settings.adventure_channel_combat_hint']],
+    spells: [m['settings.adventure_channel_spells'], m['settings.adventure_channel_spells_hint']],
+    loot: [m['settings.adventure_channel_loot'], m['settings.adventure_channel_loot_hint']],
+    alerts: [m['settings.adventure_channel_alerts'], m['settings.adventure_channel_alerts_hint']],
+  };
+  const channelLabel = (channel: MixerChannel) => CHANNEL_TEXT[channel][0]();
+  const channelHint = (channel: MixerChannel) => CHANNEL_TEXT[channel][1]();
+
+  function setMixer(next: Mixer) {
+    settings = { ...settings, adventureMixer: writeMixer(next) };
+    configureSound(next);
+  }
+
+  function setChannel(channel: MixerChannel, patch: Partial<Mixer['channels'][MixerChannel]>) {
+    setMixer({ ...mixer, channels: { ...mixer.channels, [channel]: { ...mixer.channels[channel], ...patch } } });
+  }
   let loaded = $state(false);
   let saved = $state(false);
   let capturingHotkey = $state(false);
@@ -65,6 +88,7 @@
     { id: 'phone', icon: Smartphone, label: m['settings.section_phone'] },
     { id: 'terminal', icon: SquareTerminal, label: m['settings.section_terminal'] },
     { id: 'appearance', icon: Palette, label: m['settings.section_appearance'] },
+    { id: 'adventure', icon: Swords, label: m['settings.section_adventure'] },
     { id: 'dictation', icon: Mic, label: m['settings.section_dictation'] },
     { id: 'voice', icon: Volume2, label: m['settings.section_voice'] },
     { id: 'shortcuts', icon: Keyboard, label: m['settings.section_shortcuts'] },
@@ -182,6 +206,8 @@
     // Invalida a store reativa: terminais aplicam o novo atalho na hora.
     invalidateAppSettings();
     await getAppSettings(true);
+    // A faixa da Aventura vive em outra janela: avisa para ela reler a aparência agora.
+    notifyAdventureSettings();
     if (desktop?.configureCore) {
       coreStatus = await desktop.configureCore({
         runInBackground: settings.coreRunInBackground === 'true',
@@ -313,6 +339,8 @@
     coreStatus?: () => Promise<CoreStatus | null>;
     configureCore?: (preferences: { runInBackground: boolean; launchAtLogin: boolean }) => Promise<CoreStatus | null>;
     restartCore?: () => Promise<CoreStatus | null>;
+    setAdventureStrip?: (enabled: boolean) => Promise<boolean>;
+    resetAdventurePosition?: () => void;
   };
   type CoreStatus = {
     running: boolean;
@@ -773,6 +801,133 @@
       </div>
     </div>
     <AppThemeSettings {settings} onChange={(next) => (settings = next)} />
+  </section>
+
+  <section class={settingsSectionClasses} id="adventure">
+    <header class="section-head">
+      <span class="icon-chip"><Swords size={15} aria-hidden="true" /></span>
+      <div class="section-titles">
+        <h2>{m['settings.section_adventure']()}</h2>
+        <p>{m['settings.section_adventure_desc']()}</p>
+      </div>
+    </header>
+    <div class="grid">
+      {#if desktop?.setAdventureStrip}
+        <div class="flex min-h-14 items-center justify-between gap-4 border-t border-[var(--app-border)] py-3 first:border-t-0 first:pt-0">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="field-label">{m['settings.adventure_strip']()}</span>
+            <p class="field-hint">{m['settings.adventure_strip_desc']()}</p>
+          </div>
+          <Switch
+            checked={settings.adventureStrip === 'true'}
+            aria-label={m['settings.adventure_strip']()}
+            onCheckedChange={(checked: boolean) => (settings = { ...settings, adventureStrip: String(checked) })}
+          />
+        </div>
+      {:else}
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-4 border-t border-[var(--app-border)] py-3 first:border-t-0 first:pt-0">
+          <p class="field-hint">{m['settings.adventure_browser_hint']()}</p>
+          <Button variant="outline" size="sm" href="/adventure" target="_blank">{m['settings.adventure_open']()}</Button>
+        </div>
+      {/if}
+      <div class="grid gap-3 border-t border-[var(--app-border)] py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <span class="field-label">{m['settings.adventure_sound']()}</span>
+            <p class="field-hint">{m['settings.adventure_sound_desc']()}</p>
+          </div>
+          <Switch checked={mixer.enabled} aria-label={m['settings.adventure_sound']()} onCheckedChange={(checked: boolean) => setMixer({ ...mixer, enabled: checked })} />
+        </div>
+        <div class="grid gap-1" class:opacity-50={!mixer.enabled}>
+          <span class="field-hint">{m['settings.adventure_volume']({ volume: mixer.volume })}</span>
+          <Slider type="single" class="max-w-[360px]" value={mixer.volume} min={0} max={100} step={5} disabled={!mixer.enabled} onValueChange={(value: number) => setMixer({ ...mixer, volume: value })} aria-label={m['settings.adventure_volume']({ volume: mixer.volume })} />
+        </div>
+        <ul class="grid gap-2" class:opacity-50={!mixer.enabled}>
+          {#each MIXER_CHANNELS as channel (channel)}
+            {@const entry = mixer.channels[channel]}
+            <li class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-md bg-[var(--app-surface-subtle)] px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_200px_auto]">
+              <Switch checked={entry.on} disabled={!mixer.enabled} aria-label={channelLabel(channel)} onCheckedChange={(checked: boolean) => setChannel(channel, { on: checked })} />
+              <span class="grid">
+                <span class="text-ui-md font-medium text-[var(--app-text)]">{channelLabel(channel)}</span>
+                <span class="field-hint">{channelHint(channel)}</span>
+              </span>
+              <Slider type="single" class="col-span-2 sm:col-span-1" value={entry.volume} min={0} max={100} step={5} disabled={!mixer.enabled || !entry.on} onValueChange={(value: number) => setChannel(channel, { volume: value })} aria-label={m['settings.adventure_channel_volume']({ channel: channelLabel(channel), volume: entry.volume })} />
+              <Button variant="ghost" size="sm" class="col-span-2 w-fit sm:col-span-1" disabled={!mixer.enabled || !entry.on} onclick={() => previewChannel(channel, mixer)}><Play size={13} aria-hidden="true" />{m['settings.adventure_channel_try']()}</Button>
+            </li>
+          {/each}
+        </ul>
+      </div>
+      <div class="grid gap-3 border-t border-[var(--app-border)] py-3">
+        <span class="field-label">{m['settings.adventure_look']()}</span>
+        <p class="field-hint">{m['settings.adventure_look_desc']()}</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-3">
+          {#if desktop?.setAdventureStrip}
+            <div class="grid gap-1">
+              <span class="field-hint">{m['settings.adventure_width']()}</span>
+              <SegmentedControl
+                class="w-fit max-w-full"
+                label={m['settings.adventure_width']()}
+                value={settings.adventureWidth ?? 'full'}
+                onValueChange={(value: string) => (settings = { ...settings, adventureWidth: value })}
+                options={[
+                  { value: 'full', label: m['settings.adventure_width_full']() },
+                  { value: 'compact', label: m['settings.adventure_width_compact']() },
+                ]}
+              />
+            </div>
+          {/if}
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_size']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_size']()}
+              value={settings.adventureSize ?? 'normal'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureSize: value })}
+              options={[
+                { value: 'small', label: m['settings.adventure_size_small']() },
+                { value: 'normal', label: m['settings.adventure_size_normal']() },
+                { value: 'large', label: m['settings.adventure_size_large']() },
+              ]}
+            />
+          </div>
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_scenery']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_scenery']()}
+              value={settings.adventureScenery ?? 'full'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureScenery: value })}
+              options={[
+                { value: 'full', label: m['settings.adventure_scenery_full']() },
+                { value: 'minimal', label: m['settings.adventure_scenery_minimal']() },
+              ]}
+            />
+          </div>
+          <div class="grid gap-1">
+            <span class="field-hint">{m['settings.adventure_hud']()}</span>
+            <SegmentedControl
+              class="w-fit max-w-full"
+              label={m['settings.adventure_hud']()}
+              value={settings.adventureHud ?? 'always'}
+              onValueChange={(value: string) => (settings = { ...settings, adventureHud: value })}
+              options={[
+                { value: 'always', label: m['settings.adventure_hud_always']() },
+                { value: 'hover', label: m['settings.adventure_hud_hover']() },
+              ]}
+            />
+          </div>
+        </div>
+      </div>
+      {#if desktop?.resetAdventurePosition}
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-4 border-t border-[var(--app-border)] py-3">
+          <div class="flex min-w-0 flex-col gap-1">
+            <span class="field-label">{m['settings.adventure_position']()}</span>
+            <p class="field-hint">{m['settings.adventure_position_desc']()}</p>
+          </div>
+          <Button variant="outline" size="sm" onclick={() => desktop?.resetAdventurePosition?.()}>{m['settings.adventure_back_to_dock']()}</Button>
+        </div>
+      {/if}
+    </div>
   </section>
 
   <section class={settingsSectionClasses} id="dictation">

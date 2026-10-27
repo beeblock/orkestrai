@@ -19,9 +19,10 @@ const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
+const { createAdventureWindowController } = require('./adventure-window.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
-const { waitForInternalServer, showStartupRecovery } = require('./startup-recovery.cjs');
+const { waitForInternalServer, createStartupWatcher, isInteractiveLaunch, showStartupRecovery } = require('./startup-recovery.cjs');
 const { openWorkspaceFolder } = require('./workspace-folder.cjs');
 const decodeAudio = createAudioDecoder();
 const { createDesktopCapture } = require('./computer-capture.cjs');
@@ -53,6 +54,9 @@ let pendingCollaborationInvite = null;
 let portalStorageFlushTimer = null;
 let diagnostics = null;
 let isQuitting = false;
+let adventureWindow = null;
+// Whether the owner keeps the Adventure strip on (read with the core preferences).
+let adventurePreferred = false;
 let recoveringStartup = false;
 let serverRestartTimer = null;
 let corePreferences = normalizeCorePreferences();
@@ -366,7 +370,28 @@ function createSplash() {
   splashWindow.loadFile(path.join(__dirname, 'splash.html'));
   const createdSplash = splashWindow;
   createdSplash.once('ready-to-show', () => { if (!createdSplash.isDestroyed()) createdSplash.show(); });
+  // did-finish-load can still report isLoading=true; replay after the loading state clears.
+  createdSplash.webContents.once('did-stop-loading', () => { if (startupPreparing) showSplashPreparing(); });
   createdSplash.once('closed', () => { if (splashWindow === createdSplash) splashWindow = null; });
+}
+
+/** Whether the server is backing up, migrating or compacting the database right now. */
+let startupPreparing = false;
+
+/**
+ * A large database takes minutes to back up and update: the splash says so
+ * instead of looking stuck. A splash that opens or finishes loading while
+ * the preparation runs gets the notice then (see createSplash).
+ */
+function showSplashPreparing() {
+  if (!splashWindow || splashWindow.isDestroyed() || splashWindow.webContents.isLoading()) return;
+  try {
+    const { startupPreparingCopy } = require(path.join(appRoot, 'build/desktop-messages/index.cjs'));
+    const copy = startupPreparingCopy(menuLocale);
+    void splashWindow.webContents.executeJavaScript(`window.showPreparing?.(${JSON.stringify(copy.title)}, ${JSON.stringify(copy.detail)})`).catch(() => undefined);
+  } catch (error) {
+    diagnostics?.write('warn', 'core', 'Startup preparation notice failed.', error);
+  }
 }
 
 function closeSplash() {
@@ -489,6 +514,7 @@ async function refreshCorePreferences() {
     });
     if (!response.ok) return corePreferences;
     const settings = (await response.json())?.data ?? {};
+    adventurePreferred = settings.adventureStrip === 'true';
     return applyCorePreferences({
       runInBackground: settings.coreRunInBackground,
       launchAtLogin: settings.coreLaunchAtLogin,
@@ -675,10 +701,17 @@ async function startServer(port) {
     }
   });
 
+  // The database step the server is in (backup, migration, compaction), so a slow preparation is not taken for a hang.
+  const startup = createStartupWatcher();
   serverProcess.stdout.on('data', (chunk) => {
     const text = String(chunk);
     process.stdout.write(`[server] ${text}`);
-    for (const line of text.split(/\r?\n/)) {
+    const lines = startup.feed(text);
+    if (startup.preparing() !== startupPreparing) {
+      startupPreparing = startup.preparing();
+      if (startupPreparing) showSplashPreparing();
+    }
+    for (const line of lines) {
       const structuredMatch = line.match(/\[orkestrai:notify\] (\{.+\})/);
       if (structuredMatch) {
         try {
@@ -714,7 +747,7 @@ async function startServer(port) {
 
   await waitForInternalServer(
     `http://127.0.0.1:${port}/api/agent-room/core/health`,
-    { timeoutMs: 30_000, headers: { 'x-orkestrai-core-token': coreToken }, server: startedServerProcess },
+    { timeoutMs: 30_000, preparing: startup.preparing, headers: { 'x-orkestrai-core-token': coreToken }, server: startedServerProcess },
   );
   return port;
 }
@@ -747,6 +780,7 @@ async function recoverServer() {
       const current = new URL(mainWindow.webContents.getURL());
       await mainWindow.loadURL(`http://127.0.0.1:${port}${current.pathname}${current.search}${current.hash}`);
     }
+    if (previousPort !== port) adventureWindow?.reload();
   } catch (error) {
     diagnostics?.write('error', 'core', 'Core recovery failed', error);
     scheduleServerRecovery(Math.min(30_000, 1_000 * 2 ** Math.min(serverRestartCount, 5)));
@@ -854,6 +888,9 @@ async function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // On Windows and Linux closing the app's window quits it (unless it runs in the
+    // background): the floating strip must not keep the app alive on its own.
+    if (process.platform !== 'darwin' && !shouldKeepCoreRunning({ isQuitting, runInBackground: corePreferences.runInBackground })) adventureWindow?.close();
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1220,6 +1257,43 @@ ipcMain.handle('orkestrai:clipboard-has-image', (event) => {
   return !clipboard.readImage().isEmpty();
 });
 
+// The Adventure strip: the app's own windows turn it on or off; the strip
+// itself says where the pointer may click and asks the app to open a screen.
+const ADVENTURE_ROUTES = /^\/(terminal|chat|canvas|adventure\/camp)(\?[^#\s]*)?$/;
+ipcMain.handle('orkestrai:adventure-strip', (event, enabled) => {
+  if (!adventureWindow || !mainWindow || event.sender !== mainWindow.webContents) return false;
+  if (enabled) adventureWindow.open();
+  else adventureWindow.close();
+  return adventureWindow.isOpen();
+});
+
+ipcMain.on('orkestrai:adventure-interactive', (event, interactive) => {
+  adventureWindow?.setInteractive(interactive, event.sender);
+});
+
+// The strip's own size and width settings decide its window's height and width.
+ipcMain.on('orkestrai:adventure-layout', (event, layout) => {
+  adventureWindow?.setLayout(layout && typeof layout === 'object' ? { width: layout.width, height: Number(layout.height) } : null, event.sender);
+});
+
+// Back to the Dock, from the strip or from the app's settings.
+ipcMain.on('orkestrai:adventure-reset', (event) => {
+  if (!adventureWindow) return;
+  if (!adventureWindow.isSender(event.sender) && (!mainWindow || event.sender !== mainWindow.webContents)) return;
+  adventureWindow.resetPosition();
+});
+
+ipcMain.on('orkestrai:adventure-open', async (event, route) => {
+  if (!adventureWindow?.isSender(event.sender) || typeof route !== 'string' || !ADVENTURE_ROUTES.test(route)) return;
+  if (!mainWindow) await createWindow();
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (process.platform === 'darwin') app.dock.show();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('orkestrai:navigate', route);
+});
+
 ipcMain.handle('orkestrai:collaboration-invite-consume', () => {
   const invite = pendingCollaborationInvite;
   pendingCollaborationInvite = null;
@@ -1374,9 +1448,9 @@ async function recoverStartup(error) {
       onError: (failure) => console.error('Startup recovery action failed:', failure),
       retry: async () => {
         try {
+          createSplash();
           await ensureServer();
           await refreshCorePreferences();
-          createSplash();
           await createWindow();
         } catch (failure) {
           await stopServer();
@@ -1452,15 +1526,26 @@ if (!gotLock) {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('orkestrai:portal-state', { workspaceId, nodeId, state });
       },
     });
+    adventureWindow = createAdventureWindowController({
+      BrowserWindow, screen: electronScreen, diagnostics,
+      userDataPath: app.getPath('userData'),
+      preloadPath: path.join(__dirname, 'preload.cjs'),
+      urlFor: (route) => (serverPort === null ? null : `http://127.0.0.1:${serverPort}${route}`),
+    });
     buildApplicationMenu();
     createTray();
     // Update discovery and the native recovery dialog do not depend on HTTP,
     // migrations, or a working renderer.
     void setupAutoUpdater().catch((error) => sendUpdate(updateErrorPayload(error)));
     const initialInvite = findCollaborationInvite(process.argv);
+    const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+    // An interactive launch shows the splash before waiting for the server, so a long database
+    // preparation is announced on screen instead of leaving the owner with nothing.
+    if (isInteractiveLaunch({ backgroundLaunch: isBackgroundCoreLaunch(process.argv), loginLaunch, invite: initialInvite })) createSplash();
     await ensureServer();
     await refreshCorePreferences();
-    const loginLaunch = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+    // The strip floats on its own: it comes back at launch even when the app starts in the background.
+    if (adventurePreferred) adventureWindow.open();
     const hiddenCoreLaunch = (isBackgroundCoreLaunch(process.argv) || loginLaunch) && corePreferences.runInBackground && !initialInvite;
     if (hiddenCoreLaunch) {
       if (process.platform === 'darwin') app.dock.hide();
@@ -1490,6 +1575,7 @@ if (!gotLock) {
   let quitCleanup;
   app.on('before-quit', (event) => {
     isQuitting = true;
+    adventureWindow?.close();
     if (quitReady) return;
     event.preventDefault();
     quitCleanup ??= Promise.allSettled([

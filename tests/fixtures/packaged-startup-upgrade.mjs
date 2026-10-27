@@ -15,9 +15,13 @@ const appRoot = resolve(process.argv[2]);
 const require = createRequire(join(appRoot, 'package.json'));
 const { Connection, Schema } = await import(pathToFileURL(require.resolve('@beeblock/svelar/database')).href);
 const { runStartupMigrations } = await import(pathToFileURL(join(appRoot, 'scripts/run-startup-migrations.mjs')).href);
-const { startupRecoveryCopy } = require(join(appRoot, 'build/desktop-messages/index.cjs'));
+const { startupPreparingCopy, startupRecoveryCopy } = require(join(appRoot, 'build/desktop-messages/index.cjs'));
+const { parseStartupPhase } = require(join(appRoot, 'electron/startup-recovery.cjs'));
 const signatureValidation = verifyForgeSignatureValidation(require('node-forge'));
-for (const locale of ['pt-BR', 'en', 'es']) assert.ok(startupRecoveryCopy(locale).detail.length > 20);
+for (const locale of ['pt-BR', 'en', 'es']) {
+  assert.ok(startupRecoveryCopy(locale).detail.length > 20);
+  assert.ok(startupPreparingCopy(locale).detail.length > 20);
+}
 
 const scratch = await mkdtemp(join(tmpdir(), 'orkestrai-packaged-startup-'));
 let child;
@@ -72,6 +76,9 @@ try {
   child = spawn(process.execPath, [join(appRoot, 'scripts/orkestrai-server.mjs')], { cwd: appRoot, env, stdio: ['ignore', 'pipe', 'pipe'] });
   child.on('error', (error) => { output += String(error); });
   for (const stream of [child.stdout, child.stderr]) stream.on('data', (chunk) => { output = (output + String(chunk)).slice(-16_384); });
+  // The steps the desktop waits through instead of stopping a slow preparation.
+  const phases = [];
+  child.stdout.on('data', (chunk) => { for (const line of String(chunk).split(/\r?\n/)) { const phase = parseStartupPhase(line); if (phase) phases.push(phase); } });
   const started = Date.now();
   let health;
   while (Date.now() - started < 45_000) {
@@ -83,6 +90,7 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert.equal(health?.data?.status, 'ok', `Packaged startup failed: ${output}`);
+  assert.deepEqual(phases, ['backup', 'migrating', 'prepared']);
   await stopChild();
   configure();
   assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);

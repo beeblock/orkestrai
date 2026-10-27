@@ -21,6 +21,8 @@
     setMenuLocale?: (locale: string) => Promise<string>;
     onMenuAction?: (callback: (action: string) => void) => () => void;
     setTitlebarTheme?: (theme: { background: string; foreground: string }) => Promise<boolean>;
+    setAdventureStrip?: (enabled: boolean) => Promise<boolean>;
+    onNavigate?: (callback: (route: string) => void) => () => void;
   };
 
   const desktopMenu = typeof window !== 'undefined'
@@ -41,12 +43,20 @@
   // The phone page runs behind the LAN gateway, which serves no settings or
   // desktop chrome: it sets its own language from the mobile session.
   const phoneShell = $derived(page.url.pathname === '/m' || page.url.pathname.startsWith('/m/'));
+  // The Adventure strip is its own transparent window above the dock: no app chrome.
+  const adventureShell = $derived(page.url.pathname === '/adventure');
   let localeReady = $state(false);
 
   $effect(() => {
-    if (phoneShell) return;
+    if (phoneShell || adventureShell) return;
     const theme = applyAppTheme(appSettingsStore.values);
     void desktopMenu?.setTitlebarTheme?.({ background: theme.tokens.sidebar, foreground: theme.tokens.textSoft });
+  });
+
+  // The main window owns the Adventure strip: it follows the saved setting.
+  $effect(() => {
+    if (phoneShell || adventureShell) return;
+    void desktopMenu?.setAdventureStrip?.(appSettingsStore.values.adventureStrip === 'true')?.catch(() => undefined);
   });
 
 
@@ -84,6 +94,9 @@
       }
     });
 
+    // A hero clicked in the Adventure strip opens its terminal or chat here.
+    const unsubscribeNavigate = adventureShell ? undefined : desktopMenu?.onNavigate?.((route) => void goto(route));
+
     const syncCsrfToken = (event: SubmitEvent) => {
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
@@ -105,6 +118,7 @@
     document.addEventListener('submit', syncCsrfToken, true);
     return () => {
       unsubscribeMenu?.();
+      unsubscribeNavigate?.();
       document.removeEventListener('submit', syncCsrfToken, true);
     };
   });
@@ -122,7 +136,7 @@
 <Tooltip.Provider>
   <!-- #key no locale: ao trocar de idioma, a arvore inteira remonta e todo
        m.*() reavalia — i18n reativo garantido por construcao. -->
-  {#if localeReady && phoneShell}
+  {#if localeReady && (phoneShell || adventureShell)}
     {#key localeState.current}
       {@render children()}
     {/key}
@@ -150,7 +164,7 @@
     default: { borderClass: '', progressClass: 'bg-[var(--app-text-muted)]' },
   }}
 />
-{#if !phoneShell}<UpdateNotifier />{/if}
+{#if !phoneShell && !adventureShell}<UpdateNotifier />{/if}
 
 <style>
   :global(body) {

@@ -80,6 +80,29 @@
         to { opacity: 1; transform: translateY(0); }
       }
 
+      .preparing {
+        display: none;
+        max-width: 340px;
+        margin-top: 4px;
+        text-align: center;
+        font-family: 'Inter', sans-serif;
+      }
+
+      body.is-preparing .preparing { display: grid; gap: 6px; }
+      body.is-preparing .tagline { display: none; }
+
+      .preparing b {
+        font-size: 13px;
+        font-weight: 600;
+        color: #e5e1ff;
+      }
+
+      .preparing span {
+        font-size: 12px;
+        line-height: 1.45;
+        color: rgba(229, 225, 255, 0.7);
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .logo, .wordmark, .tagline, .loader, .loader span { animation: none !important; }
       }
@@ -89,6 +112,15 @@
     <img class="logo" src="./resources/icon.svg" alt="" width="92" height="92" />
     <div class="wordmark">Orkestrai</div>
     <div class="tagline">Orchestrate everything. Achieve anything.</div>
+    <div class="preparing" role="status"><b></b><span></span></div>
     <div class="loader" aria-label="Loading..."><span></span><span></span><span></span></div>
+    <script>
+      // Called by the app while the database is backed up and updated (text from its catalogs).
+      window.showPreparing = (title, detail) => {
+        document.querySelector('.preparing b').textContent = title;
+        document.querySelector('.preparing span').textContent = detail;
+        document.body.classList.add('is-preparing');
+      };
+    </script>
   </body>
 </html>

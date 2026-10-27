@@ -109,6 +109,8 @@ Uso:
   orkestrai checklist read <no> | checklist add <no> <texto> | checklist check|uncheck <no> <itemId> | checklist edit <no> <itemId> <texto> | checklist remove <no> <itemId>
   orkestrai calendar read <no> | calendar add <no> --date AAAA-MM-DD [--time HH:MM] [--notes <texto>] <titulo> | calendar edit <no> <eventId> [--title <titulo>] [--date AAAA-MM-DD] [--time HH:MM|dia-todo] [--notes <texto>] | calendar remove <no> <eventId>
     <no> e o id ou o titulo exato do checklist/calendario no Canvas.
+  orkestrai adventure [status] [--json] | adventure equip-best | adventure act '<json>'
+    A Aventura do time: status mostra a guilda e o seu heroi; equip-best veste o melhor no seu heroi; act roda uma acao do acampamento ({"type":"raise-skill","heroId":"...","skillId":"..."}). Especialistas mexem so no proprio heroi; o lider tambem abre baus, usa o cubo, compra runas, viaja e equilibra a guilda.
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
   orkestrai image list | image read <nodeId> | image create [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <auto|instagram-square|instagram-portrait|instagram-story|tiktok|custom>] [--width <px> --height <px>] [--transparent] | image update <nodeId> [--title <titulo>] [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent|--opaque] | image connect <nodeId> <targetNodeId> [--order <n>] | image disconnect <nodeId> <targetNodeId> | image reference <nodeId> <path> [--title <titulo>] [--order <n>] | image run <nodeId> [--prompt <texto>] [--count <1-10>] [--preset <perfil>] [--width <px> --height <px>] [--transparent] [--output <pasta>] [--prefix <nome>] | image validate <nodeId> <runId> <outputPath> | image complete <nodeId> <runId> <outputPath...> | image fail <nodeId> <runId> [--error image_gen_tool_failed|image_gen_output_missing|image_gen_cancelled] | image cancel <nodeId> | image delete <nodeId>
   orkestrai design list | design read <nodeId> | design reference [${DESIGN_REFERENCE_TOPICS.join('|')}] | design audit <nodeId> | design template <nodeId> <product|marketing|mobile|design-system> --revision <n>
@@ -1214,6 +1216,35 @@ async function runCommand(argv, options, sink) {
         return 0;
       }
       throw new Error(`Acao de nota desconhecida: ${action}`);
+    }
+    case 'adventure': {
+      const [action = 'status', ...values] = rest;
+      const usage = 'Uso: orkestrai adventure [status] | adventure equip-best | adventure act \'<json>\'';
+      const read = () => bridge(config, 'GET', `/api/agent-room/bridge/adventure${selfAgent ? `?from=${encodeURIComponent(selfAgent)}` : ''}`);
+      let data;
+      if (action === 'status') data = await read();
+      else if (action === 'equip-best' || action === 'act') {
+        if (!selfAgent) throw new Error('A Aventura precisa da identidade do agente (ORKESTRAI_NODE_ID ou --from).');
+        let payload;
+        if (action === 'equip-best') {
+          const view = await read();
+          if (!view.you) throw new Error('Voce ainda nao tem um heroi na guilda.');
+          payload = { type: 'auto-equip', heroId: view.you.heroId };
+        } else {
+          try { payload = JSON.parse(values.join(' ')); } catch { throw new Error(usage); }
+        }
+        const done = await bridge(config, 'POST', '/api/agent-room/bridge/adventure/actions', { action: payload, from: selfAgent });
+        if (flags.json) { out(JSON.stringify(done, null, 2)); return 0; }
+        data = done.view;
+        out(`Feito: ${payload.type}${done.result !== null && done.result !== undefined ? ` — ${JSON.stringify(done.result)}` : ''}`);
+      } else throw new Error(usage);
+      if (flags.json && action === 'status') { out(JSON.stringify(data, null, 2)); return 0; }
+      out(`Aventura — ${data.position.difficulty} ${data.position.act}-${data.position.stage} · ouro ${data.gold} · baus ${Object.values(data.chests).reduce((sum, count) => sum + count, 0)} · mochila ${data.inventory.items}/${data.inventory.capacity}`);
+      for (const hero of data.heroes) {
+        out(`  ${hero.yours ? '*' : ' '} ${hero.name} — ${hero.classId} nv ${hero.level}${hero.paragon ? ` P${hero.paragon}` : ''} · poder ${hero.power}${hero.agent ? ` · ${hero.agent}` : ' · descansando'}${hero.freeSkillPoints ? ` · ${hero.freeSkillPoints} pontos livres` : ''}`);
+      }
+      if (data.you) out(`  Seu heroi (${data.you.heroId}): ${data.you.gear.length} pecas · ativas ${data.you.actives.join(', ') || '-'}`);
+      return 0;
     }
     case 'checklist': {
       const [action, node, ...values] = rest;

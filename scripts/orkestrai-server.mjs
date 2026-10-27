@@ -147,6 +147,15 @@ markPrivateChildEnv(
 );
 
 const releaseBackgroundStartup = holdBackgroundStartup();
+
+// The desktop waits 30 s for a healthy server, longer while it hears that
+// the database is being backed up, migrated or compacted. The line is flushed
+// before the step starts: those steps block the event loop.
+let preparing = false;
+function announceStartup(phase) {
+  preparing = phase !== 'prepared';
+  return new Promise((resolveWrite) => process.stdout.write(`[orkestrai:startup] ${JSON.stringify({ phase })}\n`, () => resolveWrite()));
+}
 const { handler } = await import('../build/handler.js');
 
 // Migrações no boot: em userData novo (primeira execucao empacotada) o banco
@@ -161,14 +170,15 @@ const { handler } = await import('../build/handler.js');
     const mod = await import(pathToFileURL(resolve(migrationsDir, file)).href);
     migrations.push({ name: file.replace(/\.ts$/, ''), migration: new mod.default() });
   }
-  await runStartupMigrations(migrations, { databasePath: dbFile, existingDatabase });
+  await runStartupMigrations(migrations, { databasePath: dbFile, existingDatabase, onPhase: announceStartup });
   try {
     const stats = await statfs(dirname(dbFile)).catch(() => null);
-    const result = await compactStartupDatabase({ freeDiskBytes: stats ? Number(stats.bavail) * Number(stats.bsize) : null });
+    const result = await compactStartupDatabase({ freeDiskBytes: stats ? Number(stats.bavail) * Number(stats.bsize) : null, onPhase: announceStartup });
     if (result.compacted) console.log(`[database] Compacted ${Math.round(result.reclaimedBytes / 1024 / 1024)} MB of free pages.`);
   } catch (error) {
     console.warn(`[database] Startup compaction skipped: ${error instanceof Error ? error.message : error}`);
   }
+  if (preparing) await announceStartup('prepared');
 }
 releaseBackgroundStartup();
 

@@ -36,6 +36,9 @@ import { AgentSecretRef } from '../../domain/models/AgentSecretRef.js';
 import { AgentIntegrationEvent } from '../../domain/models/AgentIntegrationEvent.js';
 import { AgentWorkspaceTool } from '../../domain/models/AgentWorkspaceTool.js';
 import { AgentWorkspaceToolRun } from '../../domain/models/AgentWorkspaceToolRun.js';
+import { AgentAdventure } from '../../domain/models/AgentAdventure.js';
+import { AgentAdventureHero } from '../../domain/models/AgentAdventureHero.js';
+import { AgentAdventureItem } from '../../domain/models/AgentAdventureItem.js';
 import { desktopSecretService } from '../secrets/DesktopSecretService.js';
 import { controlCenterRepository } from './ControlCenterRepository.js';
 import { reviewCenterRepository } from './ReviewCenterRepository.js';
@@ -315,6 +318,9 @@ export class WorkspaceRepository {
       }
       await AgentRoutine.query().where('workspace_id', id).delete();
       await AgentAutomationIntegration.query().where('workspace_id', id).delete();
+      await AgentAdventureItem.query().where('workspace_id', id).delete();
+      await AgentAdventureHero.query().where('workspace_id', id).delete();
+      await AgentAdventure.query().where('workspace_id', id).delete();
       return (await AgentWorkspace.query().where('id', id).delete()) > 0;
     });
     return deleted;

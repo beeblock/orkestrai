@@ -9,8 +9,9 @@
   import TitlebarPills from './TitlebarPills.svelte';
   import { workspaceContext } from './workspace-context.svelte.js';
   import { runCanvasAction } from './canvas-actions.js';
+  import { appSettingsStore, updateAppSettings } from './app-settings.svelte.js';
 
-  type DesktopBridge = { platform?: string; runMenuCommand?: (action: string) => Promise<unknown> };
+  type DesktopBridge = { platform?: string; runMenuCommand?: (action: string) => Promise<unknown>; setAdventureStrip?: (enabled: boolean) => Promise<boolean> };
   const desktop = (window as unknown as { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
   const platform = desktop?.platform ?? null;
   const windows = platform === 'win32';
@@ -19,6 +20,10 @@
 
   function run(action: string) {
     void desktop?.runMenuCommand?.(action);
+  }
+
+  function toggleAdventure(enabled: boolean) {
+    void updateAppSettings({ adventureStrip: String(enabled) }).catch(() => undefined);
   }
 
   function openSearch() {
@@ -129,6 +134,11 @@
         <DropdownMenu.Item onclick={() => void goto(workspaceContext.workspaceId ? `/skills?workspace=${encodeURIComponent(workspaceContext.workspaceId)}` : '/skills')}><Blocks size={14} />{m['skills.title']()}</DropdownMenu.Item>
         <DropdownMenu.Item onclick={() => void goto('/remote')}><MonitorUp size={14} />{m['remote.open']()}</DropdownMenu.Item>
         <DropdownMenu.Item onclick={() => void goto('/settings')}><Settings size={14} />{m['desktop.settings']()}</DropdownMenu.Item>
+        {#if desktop?.setAdventureStrip}
+          <DropdownMenu.CheckboxItem checked={appSettingsStore.values.adventureStrip === 'true'} onCheckedChange={toggleAdventure} data-testid="topbar-adventure">
+            {m['adventure.toggle']()}
+          </DropdownMenu.CheckboxItem>
+        {/if}
         <DropdownMenu.Separator />
         <DropdownMenu.Item onclick={() => runCanvasAction('import-workspace', workspaceContext.workspaceId)}><Upload size={14} />{m['canvas.import_ws']()}</DropdownMenu.Item>
         {#if workspaceContext.workspaceId}

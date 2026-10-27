@@ -3,7 +3,11 @@ import { basename, dirname, join } from 'node:path';
 import { Connection, Migrator, Schema } from '@beeblock/svelar/database';
 import Database from 'better-sqlite3';
 
-export async function runStartupMigrations(migrations, { databasePath, existingDatabase = false } = {}) {
+/**
+ * `onPhase` hears each slow step before it starts ('backup', 'migrating'),
+ * so the desktop can tell a long preparation from a stuck server.
+ */
+export async function runStartupMigrations(migrations, { databasePath, existingDatabase = false, onPhase } = {}) {
   // Desktop SQLite supports transactional DDL. Keep Svelar's migrator/history
   // and other driver behavior; only the SQLite boot batch gets an atomic guard.
   if (Connection.getDriver() !== 'sqlite') return new Migrator().run(migrations);
@@ -14,6 +18,7 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
 
   if (existingDatabase) {
     if (!databasePath) throw new Error('A database backup path is required before startup migrations.');
+    await onPhase?.('backup');
     const client = await Connection.rawClient();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     // VACUUM INTO writes a consistent snapshot including committed WAL pages,
@@ -39,6 +44,7 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
 
   // Table/column/index changes and their migration records commit together.
   // A failed statement or interrupted process cannot leave another half-batch.
+  await onPhase?.('migrating');
   return Connection.transaction(() => new Migrator().run(migrations));
 }
 
@@ -47,7 +53,7 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
  * 1.9 GB with 84% free pages) and truncates the WAL. Runs at boot, before the
  * server accepts requests, only when it is worth it and the disk has room.
  */
-export async function compactStartupDatabase({ minFreeBytes = 256 * 1024 * 1024, minFreeRatio = 0.25, freeDiskBytes = null } = {}) {
+export async function compactStartupDatabase({ minFreeBytes = 256 * 1024 * 1024, minFreeRatio = 0.25, freeDiskBytes = null, onPhase } = {}) {
   if (Connection.getDriver() !== 'sqlite') return { compacted: false };
   const client = await Connection.rawClient();
   client.pragma('journal_size_limit = 67108864');
@@ -59,6 +65,7 @@ export async function compactStartupDatabase({ minFreeBytes = 256 * 1024 * 1024,
   let compacted = false;
   if (reclaimable >= minFreeBytes && freePages / Math.max(1, pageCount) >= minFreeRatio
     && (freeDiskBytes === null || freeDiskBytes > liveBytes * 2)) {
+    await onPhase?.('compacting');
     client.exec('VACUUM');
     compacted = true;
   }

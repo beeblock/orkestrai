@@ -1,0 +1,21 @@
+[
+  {
+    "declaredFrom": "Alpha QA engineer",
+    "status": 403,
+    "error": "leader-only",
+    "hasTerminalToken": false
+  },
+  {
+    "declaredFrom": "Alpha Technical leader",
+    "status": 200,
+    "error": null,
+    "hasTerminalToken": false
+  },
+  {
+    "readStatus": 200,
+    "inventory": {
+      "items": 8,
+      "capacity": 40
+    }
+  }
+]

@@ -369,6 +369,49 @@ kbd:not([data-slot]) {
   color-scheme: dark;
 }
 
+/*
+ * Adventure: rarity and highlight colors used as text. The bright tones that
+ * ring items and light the battle read on dark surfaces; light themes get
+ * deeper inks of the same hues (at least 4.5:1 on every surface).
+ */
+:root {
+  --adventure-ink-common: #c9c4ba;
+  --adventure-ink-uncommon: #62d26f;
+  --adventure-ink-rare: #4f9dff;
+  --adventure-ink-epic: #b46cff;
+  --adventure-ink-legendary: #ff9b30;
+  --adventure-ink-immortal: #ff4f4f;
+  --adventure-ink-arcana: #38e2d9;
+  --adventure-ink-mythic: #ff70d6;
+  --adventure-ink-cosmic: #fff1a6;
+  --adventure-ink-unique: #ffc27a;
+  --adventure-ink-set: #7af0b8;
+  --adventure-ink-affix: #8fb8ff;
+  --adventure-ink-paragon: #ffd877;
+  --adventure-ink-boss: #ffb3a8;
+  --adventure-ink-active: #8fd8ff;
+  --adventure-ink-aura: #b6f07a;
+}
+
+:root.light {
+  --adventure-ink-common: #5f5a52;
+  --adventure-ink-uncommon: #1d7330;
+  --adventure-ink-rare: #1c5bbd;
+  --adventure-ink-epic: #7433c2;
+  --adventure-ink-legendary: #9c4f00;
+  --adventure-ink-immortal: #b02424;
+  --adventure-ink-arcana: #0a716b;
+  --adventure-ink-mythic: #a8257a;
+  --adventure-ink-cosmic: #7d6200;
+  --adventure-ink-unique: #9c4f00;
+  --adventure-ink-set: #146b45;
+  --adventure-ink-affix: #1f56a8;
+  --adventure-ink-paragon: #7d6200;
+  --adventure-ink-boss: #a3301f;
+  --adventure-ink-active: #135f8a;
+  --adventure-ink-aura: #3d6b0d;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

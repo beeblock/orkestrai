@@ -1,0 +1,84 @@
+{
+  "reports": [
+    {
+      "body": {
+        "reportId": "3e55a4ea-f9d4-46e6-882a-6558a7da93f5",
+        "elapsedMs": 5000,
+        "xp": {
+          "01a17a92-5712-760d-a331-e84be04008f4": 7,
+          "01a17a92-5712-75a3-8238-e009d73b09f0": 7
+        },
+        "gold": 2,
+        "kills": {
+          "glitch-slime": 2
+        },
+        "chests": [],
+        "bosses": [],
+        "stages": [],
+        "position": {
+          "difficulty": "normal",
+          "act": 1,
+          "stage": 2
+        },
+        "wave": 1
+      },
+      "status": 200,
+      "gold": 779,
+      "kills": 97
+    },
+    {
+      "body": {
+        "reportId": "3e55a4ea-f9d4-46e6-882a-6558a7da93f5",
+        "elapsedMs": 5000,
+        "xp": {
+          "01a17a92-5712-760d-a331-e84be04008f4": 7,
+          "01a17a92-5712-75a3-8238-e009d73b09f0": 7
+        },
+        "gold": 2,
+        "kills": {
+          "glitch-slime": 2
+        },
+        "chests": [],
+        "bosses": [],
+        "stages": [],
+        "position": {
+          "difficulty": "normal",
+          "act": 1,
+          "stage": 2
+        },
+        "wave": 1
+      },
+      "status": 200,
+      "gold": 779,
+      "kills": 97
+    },
+    {
+      "body": {
+        "reportId": "ee212b90-df2d-4e55-b8d9-47eb1ba14af3",
+        "elapsedMs": 5000,
+        "xp": {
+          "01a17a92-5712-760d-a331-e84be04008f4": 12,
+          "01a17a92-5712-75a3-8238-e009d73b09f0": 12
+        },
+        "gold": 4,
+        "kills": {
+          "glitch-slime": 2,
+          "bug-beetle": 1
+        },
+        "chests": [],
+        "bosses": [],
+        "stages": [],
+        "position": {
+          "difficulty": "normal",
+          "act": 1,
+          "stage": 2
+        },
+        "wave": 2
+      },
+      "status": 200,
+      "gold": 783,
+      "kills": 100
+    }
+  ],
+  "dropped": true
+}
