@@ -26,6 +26,7 @@
 
   type Desktop = {
     setAdventureInteractive?: (interactive: boolean) => void;
+    onAdventurePointer?: (callback: (point: { x: number; y: number } | null) => void) => () => void;
     openInMainWindow?: (path: string) => void;
     setAdventureLayout?: (layout: { width: 'full' | 'compact'; height: number }) => void;
     resetAdventurePosition?: () => void;
@@ -47,6 +48,7 @@
   const desktop = (typeof window !== 'undefined' ? (window as unknown as { orkestraiDesktop?: Desktop }).orkestraiDesktop : undefined);
 
   type StageApi = {
+    hoverAt: (point: { x: number; y: number } | null) => void;
     quest: (title: string | null) => void;
     drain: () => Battle;
     configure: (rules: Partial<SimRules>, travelTo?: StagePosition) => void;
@@ -271,6 +273,15 @@
     if (over !== pointerOverUi) { pointerOverUi = over; syncInteractive(); }
   }
 
+  // Windows can lose Electron's mouse forwarder; Linux never provides it.
+  // A desktop cursor sample performs the same hit test without synthesizing
+  // clicks, focusing this window, or asking the OS for desktop-control access.
+  function onDesktopPointer(point: { x: number; y: number } | null) {
+    pointerOverUi = point !== null && Boolean(document.elementFromPoint(point.x, point.y)?.closest('[data-adventure-interactive]'));
+    stage?.hoverAt(point);
+    syncInteractive();
+  }
+
   $effect(() => {
     const id = workspaceId;
     if (!id) return;
@@ -338,6 +349,7 @@
     const soundTimer = setInterval(readSettings, 30_000);
     const stopSettings = onAdventureSettings(readSettings);
     const stopPlacement = desktop?.onAdventurePlacement?.((placement) => (moved = placement.moved));
+    const stopPointer = desktop?.onAdventurePointer?.(onDesktopPointer);
     // The party follows the workspace opened in the app.
     const onStorage = (event: StorageEvent) => {
       if (event.key !== 'orkestrai.activeWorkspaceId' || !event.newValue || event.newValue === workspaceId) return;
@@ -374,6 +386,7 @@
       clearInterval(soundTimer);
       stopSettings();
       stopPlacement?.();
+      stopPointer?.();
       if (reconnect) clearTimeout(reconnect);
       socket?.close();
       window.removeEventListener('storage', onStorage);

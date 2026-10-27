@@ -750,24 +750,34 @@
     }
   }
 
-  function pointer(event: PointerEvent) {
+  /** Share native cursor samples and DOM movement without manufacturing a click. */
+  export function hoverAt(point: { x: number; y: number } | null): HitBox | null {
     const rect = canvas?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect || !point || point.x < rect.left || point.x >= rect.right || point.y < rect.top || point.y >= rect.bottom) {
+      leave();
+      return null;
+    }
     if (hudMode === 'hover') {
       peek = true;
       if (peekTimer) clearTimeout(peekTimer);
       peekTimer = setTimeout(() => (peek = false), 2_500);
     }
     // Hit boxes live in the world's coordinates; the pointer comes in CSS pixels.
-    const x = (event.clientX - rect.left) / scale;
-    const y = (event.clientY - rect.top) / scale;
+    const x = (point.x - rect.left) / scale;
+    const y = (point.y - rect.top) / scale;
     const hit = [...hitBoxes].reverse().find((box) => x >= box.left && x <= box.left + box.width && y >= box.top && y <= box.top + box.height);
     const id = hit?.id ?? null;
     if (id !== hovered) {
       hovered = id;
       onHover?.(id);
     }
-    if (event.type === 'pointerdown' && hit) {
+    return hit ?? null;
+  }
+
+  function pointer(event: PointerEvent) {
+    const hit = hoverAt({ x: event.clientX, y: event.clientY });
+    const rect = canvas?.getBoundingClientRect();
+    if (event.type === 'pointerdown' && hit && rect) {
       onSelect?.(hit.id, { left: hit.left * scale + rect.left, top: hit.top * scale + rect.top, width: hit.width * scale, height: hit.height * scale });
     }
   }

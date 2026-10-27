@@ -1271,6 +1271,14 @@ ipcMain.on('orkestrai:adventure-interactive', (event, interactive) => {
   adventureWindow?.setInteractive(interactive, event.sender);
 });
 
+ipcMain.on('orkestrai:adventure-pointer-ready', (event) => {
+  adventureWindow?.pointerReady(event.sender);
+});
+
+ipcMain.on('orkestrai:adventure-pointer-ack', (event, id) => {
+  adventureWindow?.acknowledgePointer(id, event.sender);
+});
+
 // The strip's own size and width settings decide its window's height and width.
 ipcMain.on('orkestrai:adventure-layout', (event, layout) => {
   adventureWindow?.setLayout(layout && typeof layout === 'object' ? { width: layout.width, height: Number(layout.height) } : null, event.sender);
@@ -1527,6 +1535,7 @@ if (!gotLock) {
       },
     });
     adventureWindow = createAdventureWindowController({
+      ozonePlatform: app.commandLine.getSwitchValue('ozone-platform'),
       BrowserWindow, screen: electronScreen, diagnostics,
       userDataPath: app.getPath('userData'),
       preloadPath: path.join(__dirname, 'preload.cjs'),

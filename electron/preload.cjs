@@ -38,6 +38,22 @@ contextBridge.exposeInMainWorld('orkestraiDesktop', {
   setAdventureStrip: (enabled) => ipcRenderer.invoke('orkestrai:adventure-strip', Boolean(enabled)),
   /** Na faixa: o ponteiro esta sobre algo clicavel (heroi, HUD, cartao). */
   setAdventureInteractive: (interactive) => ipcRenderer.send('orkestrai:adventure-interactive', Boolean(interactive)),
+  /** Cursor local da faixa mesmo quando o sistema nao encaminha mousemove. */
+  onAdventurePointer: (callback) => {
+    const listener = (_event, sample) => {
+      if (!sample || !Number.isSafeInteger(sample.id) || sample.id <= 0) return;
+      const point = sample.point;
+      try {
+        if (point === null) callback(null);
+        else if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) callback({ x: point.x, y: point.y });
+      } finally {
+        ipcRenderer.send('orkestrai:adventure-pointer-ack', sample.id);
+      }
+    };
+    ipcRenderer.on('orkestrai:adventure-pointer', listener);
+    ipcRenderer.send('orkestrai:adventure-pointer-ready');
+    return () => ipcRenderer.removeListener('orkestrai:adventure-pointer', listener);
+  },
   /** Na faixa: abre uma tela do app na janela principal. */
   openInMainWindow: (route) => ipcRenderer.send('orkestrai:adventure-open', String(route)),
   /** Na faixa: largura (cheia ou compacta) e altura da janela, pelo tamanho escolhido. */

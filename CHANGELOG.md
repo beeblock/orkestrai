@@ -7,6 +7,12 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.46.1 - 2026-10-27
+
+### Fixed
+
+- Restore clicks on Adventure heroes and the HUD on Windows and Linux X11/XWayland when native mouse forwarding is unavailable. Cursor sampling runs only while the strip is visible and waits for the renderer to handle each position before sending another. macOS keeps its existing input path. Native Wayland does not expose the global cursor API required by the desktop strip; the Camp remains accessible in the main app.
+
 ## 0.46.0 - 2026-10-26
 
 ### Added
