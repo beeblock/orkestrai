@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 type Point = { x: number; y: number } | null;
-type Probe = { sample: (point: Point) => void; interactive: boolean; moves: number; opened: string[]; subscribed: boolean };
+type Probe = { sample: (point: Point) => void; interactive: boolean; moves: number; blockMoves: boolean; opened: string[]; subscribed: boolean };
 
 for (const hud of ['always', 'hover'] as const) {
   test(`Adventure receives hero and ${hud} HUD input without forwarded DOM movement`, async ({ page, request }) => {
@@ -23,7 +23,15 @@ for (const hud of ['always', 'hover'] as const) {
       });
       expect(nodeResponse.ok()).toBe(true);
       await page.addInitScript(() => {
-        const probe: Probe = { sample: () => {}, interactive: false, moves: 0, opened: [], subscribed: false };
+        const probe: Probe = { sample: () => {}, interactive: false, moves: 0, blockMoves: true, opened: [], subscribed: false };
+        // Chromium on Linux can emit an initial pointermove during layout.
+        // Model an ignored native window by preventing movement from reaching
+        // the app, rather than assuming the browser creates no such events.
+        for (const name of ['pointermove', 'mousemove']) {
+          window.addEventListener(name, (event) => {
+            if (probe.blockMoves) event.stopImmediatePropagation();
+          }, { capture: true });
+        }
         window.addEventListener('pointermove', () => probe.moves++);
         Object.assign(window, {
           __adventureInput: probe,
@@ -43,6 +51,8 @@ for (const hud of ['always', 'hover'] as const) {
       const stage = page.getByTestId('adventure-stage');
       await expect(stage).toHaveAttribute('data-hud', hud);
       await expect.poll(() => page.evaluate(() => (window as unknown as { __adventureInput: Probe }).__adventureInput.subscribed)).toBe(true);
+      // Exercise the gate even on platforms that emit no initial movement.
+      await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 0, clientY: 0 })));
 
       // Cursor IPC is the only movement source here. It must reveal a
       // hover-only HUD without any pointermove reaching this ignored page.
@@ -83,6 +93,7 @@ for (const hud of ['always', 'hover'] as const) {
       await expect.poll(findHero).not.toBeNull();
       const point = (await findHero())!;
       expect(await page.evaluate(() => (window as unknown as { __adventureInput: Probe }).__adventureInput.moves)).toBe(0);
+      await page.evaluate(() => { (window as unknown as { __adventureInput: Probe }).__adventureInput.blockMoves = false; });
       await page.mouse.click(point.x, point.y);
       await expect(page.getByRole('dialog')).toBeVisible();
       await page.keyboard.press('Escape');
