@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.46.0 - 2026-10-26
+
 ### Added
 
 - Add the Adventure: a transparent strip above the macOS Dock or the Windows/Linux taskbar where the open workspace's agents fight as a pixel-art party. The leader is the Maestro; teammates get one of five classes from their role (Artificer, Sorceress, Knight, Ranger, Cleric) and can be reassigned per hero. Clicks pass through the strip except on heroes and the HUD.
@@ -34,7 +36,7 @@ pt-BR, English, and Spanish translations.
 - Generate Adventure battle report identifiers with browser Web Crypto so the desktop production build does not import Node-only cryptography into the renderer.
 - Send Adventure battle results in sealed reports that keep their identity across retries: a report whose answer was lost is sent again unchanged and the server, which remembers recent report ids, never pays it twice, even with another report arriving in between. Battle fought while the server is away is split into reports the server accepts and is paid in full within the time that really passed; refusals are told apart from a busy or absent server, and after eight hours without the server the party camps instead of piling up results.
 - Craft Adventure off hands for the class picked at the cube, like main hands, instead of rolling one of the guild's classes.
-- Fix the Adventure camp and strip layouts: a camp opened from a link for another workspace, hero or tab now follows it and never reads or changes the previous workspace's save; the camp has a Back button to the screen it was opened from; the hero card on the strip stays inside the transparent window at every size, beside the hero when there is no room above; the armory no longer covers the hero's stats in narrow windows; and rarity, unique, set, Paragon and boss text uses deeper inks on light themes (at least 4.5:1).
+- Fix the Adventure camp and strip layouts: a camp opened from a link for another workspace, hero or tab now follows it and never reads or changes the previous workspace's save; the camp has a Back button to the screen it was opened from; the hero card on the strip stays inside the transparent window at every size, beside the hero when there is no room above; the armory no longer covers the hero's stats in narrow windows; and rarity, unique, set, Paragon and boss text uses deeper inks on light themes.
 - Keep the desktop app from stopping its server while a large database is being backed up, migrated or compacted at startup: the server announces each slow step before it starts, the app waits for it (up to 30 minutes, then 30 more seconds for the server to answer) instead of giving up after 30 seconds, and the splash says the data is being prepared. A server that exits still fails at once, and one that never answers after preparing still reaches the recovery dialog.
 - Load Adventure art without placeholder shapes: sheet frames ship inside the app code and sheet images are fingerprinted assets cached for good, so each sheet takes one request the first time and none after; the strip and the camp start loading the art they need before the save arrives, and heroes, monsters, portraits and icons fade in instead of showing colored blocks while they load.
 - Bind Adventure actions taken through the bridge to the live terminal that makes the call: the session's agent token decides who acts and whether it leads, a declared `from` that is someone else is refused, and the hero-scope check runs inside the same transaction as the action.
