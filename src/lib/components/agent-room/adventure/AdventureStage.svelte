@@ -20,7 +20,9 @@
     type SimRules,
     type Supporter,
   } from '$lib/modules/agent-room/domain/adventure/simulation.js';
-  import { biomeOf, regionLevel, WAVES_PER_STAGE, type StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
+  import { biomeOf, regionLevel, WAVES_PER_STAGE, type Difficulty, type StagePosition } from '$lib/modules/agent-room/domain/adventure/world.js';
+  import { adventureCatalog } from '$lib/i18n/adventure/index.js';
+  import { localeState } from '$lib/i18n/locale.svelte.js';
   import { animationFrame, drawFrame, loadAtlas, type Atlas } from './atlas.js';
   import { playAttack, playSound, playSpell, setMusic, type MusicMood } from './adventure-audio.js';
   import { heroLevelText } from './adventure-text.js';
@@ -205,6 +207,10 @@
     return (m as unknown as Record<string, () => string>)[`adventure.biome_${id.replace(/-/g, '_')}`]?.() ?? id;
   }
 
+  function difficultyLabel(difficulty: Difficulty): string {
+    return adventureCatalog(localeState.current).difficulties[difficulty];
+  }
+
   function stageLabel(target: StagePosition): string {
     return `${target.act}-${target.stage}`;
   }
@@ -337,6 +343,11 @@
           effects.push({ kind: 'portal', x: world.frontX + 120, y: 0, t: 0, life: 2_400 });
           announce(event.actClear ? m['adventure.chapter_clear']({ place: biomeName(biomeOf(event.position).id) }) : m['adventure.stage_clear']({ stage: stageLabel(event.position) }), 'gold');
           break;
+        case 'difficulty-open': {
+          const difficulty = difficultyLabel(event.difficulty);
+          announce(event.travelling ? m['adventure.difficulty_onward']({ difficulty }) : m['adventure.difficulty_open']({ difficulty }), 'gold');
+          break;
+        }
         case 'stage-fail':
           announce(m['adventure.stage_failed']({ stage: stageLabel(event.position) }), 'danger');
           playSound('fail');

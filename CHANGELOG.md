@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+
+- An Adventure party that beats the last boss of a difficulty with Advance after a clear on now heads to Act 1 of the next difficulty instead of fighting that boss again forever. The strip announces the opened difficulty, also when the option is off, and Torment's last boss remains the end of the road.
+
 ## 0.46.1 - 2026-10-27
 
 ### Fixed

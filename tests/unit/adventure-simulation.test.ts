@@ -76,6 +76,22 @@ describe('adventure battle', () => {
     expect(drainReport(state).stages.length).toBeGreaterThan(0);
   });
 
+  it('heads into Nightmare after the last Normal boss when auto-advance is on', () => {
+    const state = createAdventure({ position: positionAt('normal', 49), rules: { cleared: 49 } }, 50);
+    const events = run(state, party(['knight', 'ranger', 'cleric'], 60, 'epic'), 240_000);
+    expect(events.filter((event) => event.type === 'difficulty-open')).toEqual([{ type: 'difficulty-open', difficulty: 'nightmare', travelling: true }]);
+    expect(state.position.difficulty).toBe('nightmare');
+    expect(drainReport(state).stages[0]).toMatchObject({ difficulty: 'normal', act: 5, stage: 10, result: 'clear' });
+  });
+
+  it('announces Nightmare once and keeps farming the last boss when auto-advance is off', () => {
+    const state = createAdventure({ position: positionAt('normal', 49), rules: { autoAdvance: false, cleared: 48 } }, 51);
+    const events = run(state, party(['knight', 'ranger', 'cleric'], 60, 'epic'), 240_000);
+    expect(events.filter((event) => event.type === 'stage-clear').length).toBeGreaterThan(1);
+    expect(events.filter((event) => event.type === 'difficulty-open')).toEqual([{ type: 'difficulty-open', difficulty: 'nightmare', travelling: false }]);
+    expect(state.position).toEqual(positionAt('normal', 49));
+  });
+
   it('casts the actives the heroes learned', () => {
     const state = createAdventure({}, 4);
     const events = run(state, party(['sorceress', 'cleric', 'maestro'], 10, 'rare'), 60_000);

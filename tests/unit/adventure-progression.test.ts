@@ -15,7 +15,7 @@ import {
 import { openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
 import { canBuyRune, formationSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import { SKILL_TREES, autoAllocate, canRaise, pointsSpent, sanitizeRanks } from '$lib/modules/agent-room/domain/adventure/skills.js';
-import { NO_CLEARS, addXp, positionAt, regionLevel, stageUnlocked, xpToNext, difficultyUnlocked, MAX_HERO_LEVEL } from '$lib/modules/agent-room/domain/adventure/world.js';
+import { NO_CLEARS, addXp, advancePosition, positionAt, regionLevel, stageUnlocked, xpToNext, difficultyUnlocked, MAX_HERO_LEVEL } from '$lib/modules/agent-room/domain/adventure/world.js';
 
 function seeded(seed = 7) {
   let state = seed >>> 0;
@@ -61,6 +61,13 @@ describe('adventure world', () => {
     expect(stageUnlocked(NO_CLEARS, positionAt('normal', 1))).toBe(false);
     expect(difficultyUnlocked({ ...NO_CLEARS, normal: 48 }, 'nightmare')).toBe(false);
     expect(difficultyUnlocked({ ...NO_CLEARS, normal: 49 }, 'nightmare')).toBe(true);
+  });
+
+  it('advances stage by stage, then past the last boss into the next difficulty, and stops after Torment', () => {
+    expect(advancePosition(positionAt('normal', 8))).toEqual(positionAt('normal', 9));
+    expect(advancePosition(positionAt('normal', 49))).toEqual(positionAt('nightmare', 0));
+    expect(advancePosition(positionAt('hell', 49))).toEqual(positionAt('torment', 0));
+    expect(advancePosition(positionAt('torment', 49))).toBeNull();
   });
 
   it('levels heroes up to 100 on a growing curve', () => {
@@ -246,6 +253,19 @@ describe('adventure engine', () => {
     // The same report twice is applied once.
     expect(applyReport(save, { reportId: 'r1', elapsedMs: 1000, position: positionAt('normal', 1), wave: 0, xp: {}, gold: 999, kills: {}, chests: [], bosses: [], stages: [] }, ctx).duplicate).toBe(true);
     expect(save.account.gold).toBe(50);
+  });
+
+  it('follows an advancing party past the last Normal boss into Nightmare', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.cleared.normal = 48;
+    save.account.position = positionAt('normal', 49);
+    applyReport(save, {
+      reportId: 'end-of-normal', elapsedMs: 60_000, position: positionAt('nightmare', 0), wave: 0, xp: {}, gold: 0, kills: {}, chests: [], bosses: [],
+      stages: [{ difficulty: 'normal', act: 5, stage: 10, result: 'clear' }],
+    }, ctx);
+    expect(save.account.cleared.normal).toBe(49);
+    expect(save.account.position).toEqual(positionAt('nightmare', 0));
   });
 
   it('opens chests into the inventory and charges a soulstone for repeat red chests', () => {

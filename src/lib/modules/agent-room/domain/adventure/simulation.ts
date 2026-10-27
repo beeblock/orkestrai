@@ -6,10 +6,10 @@ import { armorMitigation, type CombatProfile } from './stats.js';
 import {
   START_POSITION,
   WAVES_PER_STAGE,
+  advancePosition,
   biomeOf,
   isActBossStage,
   monsterStats,
-  nextPosition,
   power,
   previousPosition,
   regionLevel,
@@ -174,6 +174,8 @@ export type AdventureEvent =
   | { type: 'chest'; tier: ChestTier; x: number }
   | { type: 'wave'; wave: number; boss: boolean; elite: boolean }
   | { type: 'stage-clear'; position: StagePosition; actClear: boolean }
+  /** The last boss of a difficulty fell: the next one is open, and an advancing party heads there. */
+  | { type: 'difficulty-open'; difficulty: Difficulty; travelling: boolean }
   | { type: 'stage-fail'; position: StagePosition }
   | { type: 'quest'; title: string | null }
   | { type: 'join'; heroId: string }
@@ -853,10 +855,15 @@ function finishWave(state: AdventureState): void {
   if (state.wave < WAVES_PER_STAGE) return;
   const position = { ...state.position };
   const actClear = isActBossStage(position);
+  const firstClear = stageIndex(position) > state.rules.cleared;
   state.pending.stages.push({ ...position, result: 'clear' });
   state.rules.cleared = Math.max(state.rules.cleared, stageIndex(position));
   state.events.push({ type: 'stage-clear', position, actClear });
-  const next = nextPosition(position);
+  const next = advancePosition(position);
+  const travelling = state.rules.autoAdvance && next !== null;
+  if (next && next.difficulty !== position.difficulty && (travelling || firstClear)) {
+    state.events.push({ type: 'difficulty-open', difficulty: next.difficulty, travelling });
+  }
   if (state.rules.autoAdvance && next) state.position = next;
   state.wave = 0;
   for (const hero of state.heroes) if (fighting(hero)) setPose(hero, 'victory');
