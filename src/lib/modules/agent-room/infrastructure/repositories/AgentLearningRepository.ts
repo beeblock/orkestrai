@@ -4,11 +4,11 @@ import type { AgentLesson } from '../../domain/agent-learning.js';
 
 const project = (model: AgentLearningEntry): AgentLesson => JSON.parse(String(model.getAttribute('document_json')));
 export class AgentLearningRepository {
-  async list(workspaceId: string, nodeId?: string, status?: AgentLesson['status']): Promise<AgentLesson[]> {
+  async list(workspaceId: string, nodeId?: string, status?: AgentLesson['status'], limit = 1000): Promise<AgentLesson[]> {
     const query = AgentLearningEntry.query().where('workspace_id', workspaceId);
     if (nodeId) query.where('node_id', nodeId);
     if (status) query.where('status', status);
-    return (await query.orderBy('updated_at', 'desc').limit(1000).get()).map(project);
+    return (await query.orderBy('updated_at', 'desc').limit(Math.max(1, Math.min(1000, limit))).get()).map(project);
   }
   async workspacesWith(status: AgentLesson['status']): Promise<string[]> {
     const rows = await AgentLearningEntry.query().where('status', status).select('workspace_id').get();

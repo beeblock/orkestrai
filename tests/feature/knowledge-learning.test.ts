@@ -21,6 +21,8 @@ import { attentionService } from '$lib/modules/agent-room/application/services/A
 import { attentionRepository } from '$lib/modules/agent-room/infrastructure/repositories/AttentionRepository.js';
 import { agentLearningRepository } from '$lib/modules/agent-room/infrastructure/repositories/AgentLearningRepository.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { workspaceMemoryService } from '$lib/modules/agent-room/application/services/WorkspaceMemoryService.js';
+import { WorkspaceMemoryController } from '$lib/modules/agent-room/interface/http/controllers/WorkspaceMemoryController.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
 import { scannedPdf } from '../helpers/scanned-pdf.js';
 import { createHash } from 'node:crypto';
@@ -191,6 +193,106 @@ describe('Second Brain and durable agent learning', () => {
     const actor = { type: 'agent' as const, nodeId: node.id };
     return { ws, node, taskId, input, actor };
   }
+  it('indexes active lessons with their source task, updating the graph after archive and respecting workspace scope', async () => {
+    const { ws, node, input, actor, taskId } = await agentTask();
+    const lesson = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string; revision: number };
+    const graph = await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 });
+    expect(graph.items).toContainEqual(expect.objectContaining({ id: `learning:${lesson.id}`, kind: 'memory', nodeId: node.id }));
+    expect(graph.links).toContainEqual({ source: `learning:${lesson.id}`, target: `task:${taskId}`, kind: 'source' });
+    expect((await knowledgeService.read(ws.id, `learning:${lesson.id}`)).document.passages.map(p => p.text).join('\n')).toContain(input.correction);
+    const other = await workspace();
+    expect((await knowledgeService.search(other.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toEqual([]);
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'decide', nodeId: node.id, id: lesson.id, revision: lesson.revision, status: 'archived' }, { type: 'user' }));
+    expect((await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toEqual([]);
+  });
+
+  it('keeps review-pending and disabled learning out of the shared graph', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'review' }, { type: 'user' }));
+    const lesson = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor)) as { id: string; revision: number };
+    expect((await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toEqual([]);
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'decide', nodeId: node.id, id: lesson.id, revision: lesson.revision, status: 'active' }, { type: 'user' }));
+    expect((await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toHaveLength(1);
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'off' }, { type: 'user' }));
+    expect((await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toEqual([]);
+  });
+
+  it('does not return an in-flight learning snapshot after learning is disabled', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    const lesson = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor));
+    if (!('id' in lesson)) throw new Error('Expected a saved lesson');
+    let release!: () => void;
+    let entered!: () => void;
+    const paused = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const save = knowledgeRepository.save.bind(knowledgeRepository);
+    vi.spyOn(knowledgeRepository, 'save').mockImplementation(async (workspaceId, document) => {
+      if (document.id === `learning:${lesson.id}`) { entered(); await gate; }
+      return save(workspaceId, document);
+    });
+    const first = knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 });
+    await paused;
+    const concurrent = knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 });
+    try {
+      await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'off' }, { type: 'user' }));
+    } finally { release(); }
+    expect((await first).items).toEqual([]);
+    expect((await concurrent).items).toEqual([]);
+    expect((await knowledgeRepository.list(ws.id)).some(document => document.id === `learning:${lesson.id}`)).toBe(false);
+  });
+
+  it('does not inject agent memory instructions into a plain shell terminal', async () => {
+    const ws = await workspace();
+    const shell = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', payload: { command: '/bin/cat' } });
+    expect(await agentLearningService.context(ws.id, shell.id, 'deployment')).toBe('');
+  });
+
+  it('excludes credentials from legacy active lessons before graph indexing or automatic context', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    const created = await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor));
+    if (!('id' in created)) throw new Error('Expected a saved lesson');
+    const lesson = (await agentLearningRepository.list(ws.id, node.id, 'active'))[0];
+    await agentLearningRepository.update({ ...lesson, correction: 'DNS secret=NEVER_SHARE_THIS', revision: lesson.revision + 1 }, lesson.revision);
+    expect((await knowledgeService.search(ws.id, { query: 'DNS', kind: 'memory', limit: 20 })).items).toEqual([]);
+    expect(await agentLearningService.context(ws.id, node.id, 'DNS')).not.toContain('NEVER_SHARE_THIS');
+  });
+
+  it('recalls current sourced facts without leaking credentials, foreign workspaces or disabled context', async () => {
+    const { ws, node } = await agentTask();
+    const fact = await workspaceMemoryService.create(ws.id, { title: 'DNS deployment decision', content: 'Use the existing DNS provider for deployment.', kind: 'decision', confidence: 100, pinned: false, tags: ['dns'], createdByNodeId: node.id, sources: [{ type: 'user', label: 'Owner decision' }] });
+    await workspaceMemoryService.create(ws.id, { title: 'DNS credential', content: 'password=do-not-send', kind: 'fact', confidence: 100, pinned: true, tags: [], sources: [{ type: 'user', label: 'Private credential' }] });
+    const other = await workspace();
+    await workspaceMemoryService.create(other.id, { title: 'DNS foreign decision', content: 'FOREIGN_WORKSPACE_DATA', kind: 'decision', confidence: 100, pinned: true, tags: [], sources: [{ type: 'user', label: 'Other owner' }] });
+    const context = await agentLearningService.context(ws.id, node.id, 'DNS deployment');
+    expect(context).toContain(fact.content);
+    expect(context).toContain(`memory:${fact.id}`);
+    expect(context).not.toContain('do-not-send');
+    expect(context).not.toContain('FOREIGN_WORKSPACE_DATA');
+    expect(context).toContain('memory_add');
+    await agentLearningService.execute(new AgentLearningCommandDto(ws.id, { command: 'configure', nodeId: node.id, mode: 'off' }, { type: 'user' }));
+    expect(await agentLearningService.context(ws.id, node.id, 'DNS')).toBe('');
+  });
+
+  it('filters profile facts and lessons before limiting and reports learning changes without content', async () => {
+    const { ws, node, input, actor } = await agentTask();
+    const other = await workspaceRepository.createNode({ workspaceId: ws.id, type: 'terminal', title: 'Other profile', payload: { provider: 'codex' } });
+    const fact = await workspaceMemoryService.create(ws.id, { title: 'Own memory', content: 'Own sourced content', kind: 'fact', confidence: 100, pinned: false, tags: [], createdByNodeId: node.id, sources: [{ type: 'user', label: 'Owner' }] });
+    await workspaceMemoryService.create(ws.id, { title: 'Other memory', content: 'Other sourced content', kind: 'fact', confidence: 100, pinned: true, tags: [], createdByNodeId: other.id, sources: [{ type: 'user', label: 'Owner' }] });
+    const url = new URL(`http://localhost/api?nodeId=${node.id}&limit=1`);
+    const response = await new WorkspaceMemoryController().index({ params: { id: ws.id }, url } as never);
+    expect((await response.json()).data.map((entry: { id: string }) => entry.id)).toEqual([fact.id]);
+    const runtime = globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void };
+    const previous = runtime.__orkestraiBroadcast, events = vi.fn(); runtime.__orkestraiBroadcast = events;
+    try {
+      await agentLearningService.execute(new AgentLearningCommandDto(ws.id, input, actor));
+      expect(events).toHaveBeenCalledWith({ type: 'memoryChanged', workspaceId: ws.id });
+      const learningUrl = new URL(`http://localhost/api?nodeId=${node.id}&status=active&limit=1`);
+      const active = await new AgentLearningController().index({ params: { id: ws.id }, url: learningUrl } as never);
+      const entries = (await active.json()).data.entries;
+      expect(entries).toHaveLength(1); expect(entries[0]).toMatchObject({ nodeId: node.id, status: 'active' });
+    } finally { runtime.__orkestraiBroadcast = previous; }
+  });
+
   it('records reflection once and retains reusable lessons across provider/title changes', async () => {
     const { ws, node, taskId, input, actor } = await agentTask();
     const first = await agentLearningService.capture(ws.id, node.id, taskId);

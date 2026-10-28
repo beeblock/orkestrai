@@ -17,6 +17,7 @@ import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { floorService } from './FloorService.js';
+import { agentLearningService } from './AgentLearningService.js';
 
 /**
  * Asynchronous per-agent inbox.
@@ -701,7 +702,15 @@ export class AgentInboxService {
       chars += envelope.content.length;
     }
     const titles = await this.titles(workspaceId);
-    const prompt = this.compose(batch, titles);
+    let contextTimer: ReturnType<typeof setTimeout> | undefined;
+    const ownerBatch = batch.every(envelope => envelope.kind === 'owner' && !['telegram', 'slack'].includes(String(envelope.metadata.via)));
+    const learningContext = ownerBatch
+      ? await Promise.race([
+        agentLearningService.context(workspaceId, nodeId, batch.map(envelope => envelope.content).join('\n').slice(0, 4000)).catch(() => ''),
+        new Promise<string>(resolve => { contextTimer = setTimeout(() => resolve(''), 400); }),
+      ]).finally(() => clearTimeout(contextTimer))
+      : '';
+    const prompt = [this.compose(batch, titles), learningContext].filter(Boolean).join('\n\n');
     const batchId = uuidv7();
     const since = Date.now();
     for (const [index, envelope] of batch.entries()) {

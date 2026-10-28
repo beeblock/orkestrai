@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentAttentionItem } from '../../src/lib/modules/agent-room/domain/types.js';
@@ -27,6 +27,41 @@ async function keepTerminalExitNotice(page: Page, workspaceId: string, nodeId: s
 }
 
 test.describe('Chat', () => {
+  test('profile remembers approved lessons and sourced facts live, and distinguishes load errors from empty memory', async ({ page, request }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-profile-memory-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Profile memory flow', workingDir: dir } })).json()).data;
+    const root = `/api/agent-room/workspaces/${workspace.id}`;
+    try {
+      const node = (await (await request.post(`${root}/nodes`, { data: { type: 'terminal', title: 'Memory Lead', payload: { provider: 'claude', maestro: true, args: [] } } })).json()).data;
+      const taskResponse = await request.post(`${root}/tasks`, { data: { title: 'Validate DNS deployment', assigneeNodeId: node.id, status: 'done' } });
+      expect(taskResponse.ok()).toBe(true);
+      const task = (await taskResponse.json()).data;
+      const response = await request.post(`${root}/learning`, { data: { command: 'reflect', nodeId: node.id, taskId: task.id, title: 'Check DNS before deployment', trigger: 'Before deployment of an existing service', mistake: 'Assumed the DNS record existed', correction: 'Verify the DNS record before starting deployment.', evidence: 'The DNS lookup failed before the record was added and passed afterwards.' } });
+      expect(response.ok()).toBe(true);
+      const lesson = (await response.json()).data;
+      const fact = await request.post(`${root}/memory`, { data: { title: 'Existing deployment provider', content: 'Reuse the existing deployment provider.', kind: 'decision', createdByNodeId: node.id, sources: [{ type: 'task', sourceId: task.id, label: 'Validated task' }] } });
+      expect(fact.ok()).toBe(true);
+      await page.goto(`/chat?workspace=${workspace.id}`);
+      const profile = page.locator('aside.profile');
+      await expect(profile).toBeVisible();
+      await expect(profile).toContainText('Verify the DNS record before starting deployment.');
+      await expect(profile).toContainText('Reuse the existing deployment provider.');
+      expect((await (await request.get(`${root}/knowledge?q=DNS&kind=memory`)).json()).data.items).toContainEqual(expect.objectContaining({ id: `learning:${lesson.id}` }));
+      const archived = await request.post(`${root}/learning`, { data: { command: 'decide', nodeId: node.id, id: lesson.id, revision: lesson.revision, status: 'archived' } });
+      expect(archived.ok()).toBe(true);
+      await expect(profile.getByText('Verify the DNS record before starting deployment.', { exact: true })).toHaveCount(0);
+      await page.route(`**${root}/learning?*`, route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary read failure' }) }));
+      const created = await request.post(`${root}/memory`, { data: { title: 'Second validated decision', content: 'Updated project decision arrives live.', kind: 'fact', createdByNodeId: node.id, sources: [{ type: 'user', label: 'Owner' }] } });
+      expect(created.ok()).toBe(true);
+      await expect(profile.getByRole('alert')).toHaveText('Não foi possível carregar memórias e aprendizados.');
+      await expect(profile.getByText('Nenhuma memória com fontes ou lição ativa deste agente ainda.')).toHaveCount(0);
+      await page.unroute(`**${root}/learning?*`);
+      await profile.getByRole('button', { name: 'Tentar novamente', exact: true }).click();
+      await expect(profile).toContainText('Updated project decision arrives live.');
+      await expect(profile.getByRole('alert')).toHaveCount(0);
+    } finally { await request.delete(root); await rm(dir, { recursive: true, force: true }); }
+  });
+
   test('owner talks to the team and answers a question an agent asked', async ({ page, request }) => {
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-chat-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: `E2E chat ${Date.now()}`, workingDir: dir } })).json()).data;

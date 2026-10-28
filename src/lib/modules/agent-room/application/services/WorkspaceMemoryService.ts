@@ -7,12 +7,14 @@ import { AgentMessageEnvelope } from '../../domain/models/AgentMessageEnvelope.j
 import { AgentReview } from '../../domain/models/AgentReview.js';
 import { workspaceMemoryRepository } from '../../infrastructure/repositories/WorkspaceMemoryRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { knowledgeService } from './KnowledgeService.js';
 
 function normalize(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
 }
 
 function broadcast(workspaceId: string): void {
+  knowledgeService.invalidate(workspaceId);
   const send = (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast;
   send?.({ type: 'memoryChanged', workspaceId });
 }
@@ -24,9 +26,9 @@ export class WorkspaceMemoryConflictError extends Error {
 }
 
 export class WorkspaceMemoryService {
-  async list(workspaceId: string, options: { query?: string; includeHistory?: boolean; limit?: number } = {}): Promise<WorkspaceMemoryEntry[]> {
+  async list(workspaceId: string, options: { query?: string; includeHistory?: boolean; limit?: number; createdByNodeId?: string } = {}): Promise<WorkspaceMemoryEntry[]> {
     if (!await workspaceRepository.getWorkspace(workspaceId)) throw new Error('Workspace not found.');
-    const entries = await workspaceMemoryRepository.list(workspaceId, options.includeHistory);
+    const entries = await workspaceMemoryRepository.list(workspaceId, options.includeHistory, options.createdByNodeId);
     const query = normalize(options.query?.trim() ?? '');
     const filtered = !query ? entries : entries.filter((entry) => normalize([
       entry.title, entry.content, entry.kind, ...entry.tags,

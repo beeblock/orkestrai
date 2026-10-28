@@ -48,9 +48,10 @@ function mapSource(model: AgentMemorySource): WorkspaceMemorySource {
 }
 
 export class WorkspaceMemoryRepository {
-  async list(workspaceId: string, includeHistory = false): Promise<WorkspaceMemoryEntry[]> {
+  async list(workspaceId: string, includeHistory = false, createdByNodeId?: string): Promise<WorkspaceMemoryEntry[]> {
     const query = AgentMemoryEntry.query().where('workspace_id', workspaceId);
     if (!includeHistory) query.where('status', 'active');
+    if (createdByNodeId) query.where('created_by_node_id', createdByNodeId);
     const rows = await query.orderBy('pinned', 'desc').orderBy('updated_at', 'desc').get();
     return this.project(rows);
   }

@@ -11,6 +11,8 @@
   import { agentTone, elapsedParts, modelFromArgs } from '../agent-identity.js';
   import { agentActionLabel, agentStateLabel, elapsedLabel } from '../agent-status-labels.js';
   import { routineCadence, routineNextRun } from './routine-labels.js';
+  import { subscribeKnowledge } from '../knowledge-live.js';
+  import type { AgentLesson } from '$lib/modules/agent-room/domain/agent-learning.js';
   import { providerIcons } from '$lib/modules/agent-room/domain/provider-icons.js';
   import type { Routine, TerminalNodePayload, WorkspaceMemoryEntry } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
@@ -54,7 +56,11 @@
     }
   }
 
-  let memory = $state<WorkspaceMemoryEntry[]>([]);
+  type ProfileMemory = { id: string; title: string; content: string; updatedAt: string; lesson: boolean };
+  let memory = $state<ProfileMemory[]>([]);
+  let memoryLoading = $state(true);
+  let memoryError = $state(false);
+  let retryMemory = () => {};
   let routines = $state<Routine[]>([]);
 
   const status = $derived(agentStatus.agents[nodeId] ?? null);
@@ -70,21 +76,49 @@
     const id = nodeId;
     const workspace = workspaceId;
     const controller = new AbortController();
+    let generation = 0;
+    let refresh: ReturnType<typeof setTimeout> | undefined;
     memory = [];
+    memoryLoading = true;
+    memoryError = false;
     routines = [];
-    void fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspace)}/memory?limit=200`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((body: { data?: WorkspaceMemoryEntry[] } | null) => {
-        memory = (body?.data ?? []).filter((entry) => entry.createdByNodeId === id && entry.status === 'active').slice(0, 8);
-      })
-      .catch(() => {});
+    const root = `/api/agent-room/workspaces/${encodeURIComponent(workspace)}`;
+    async function loadMemory() {
+      const ticket = ++generation;
+      try {
+        const responses = await Promise.all([
+          fetch(`${root}/memory?limit=8&nodeId=${encodeURIComponent(id)}`, { signal: controller.signal }),
+          fetch(`${root}/learning?status=active&limit=8&nodeId=${encodeURIComponent(id)}`, { signal: controller.signal }),
+        ]);
+        if (responses.some(response => !response.ok)) throw new Error('memory_load_failed');
+        const [facts, lessons] = await Promise.all(responses.map(response => response.json())) as [
+          { data: WorkspaceMemoryEntry[] },
+          { data: { agents: Array<{ id: string; mode: string }>; entries: AgentLesson[] } },
+        ];
+        if (controller.signal.aborted || ticket !== generation) return;
+        const learning = lessons.data.agents.find(agent => agent.id === id)?.mode === 'off' ? [] : lessons.data.entries;
+        memory = [
+          ...facts.data.filter(entry => entry.createdByNodeId === id && entry.status === 'active').map(entry => ({ id: `memory:${entry.id}`, title: entry.title, content: entry.content, updatedAt: entry.updatedAt, lesson: false })),
+          ...learning.filter(entry => entry.nodeId === id && entry.status === 'active').map(entry => ({ id: `learning:${entry.id}`, title: entry.title, content: entry.correction, updatedAt: entry.updatedAt, lesson: true })),
+        ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(0, 8);
+        memoryError = false;
+      } catch {
+        if (!controller.signal.aborted && ticket === generation) memoryError = true;
+      } finally {
+        if (!controller.signal.aborted && ticket === generation) memoryLoading = false;
+      }
+    }
+    const scheduleMemory = () => { clearTimeout(refresh); refresh = setTimeout(() => void loadMemory(), 180); };
+    retryMemory = () => { memoryLoading = true; void loadMemory(); };
+    const unsubscribe = subscribeKnowledge(workspace, scheduleMemory, () => {}, ['memoryChanged']);
+    void loadMemory();
     void fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspace)}/routines`, { signal: controller.signal })
       .then((response) => response.ok ? response.json() : null)
       .then((body: { data?: Routine[] } | null) => {
-        routines = (body?.data ?? []).filter((routine) => routine.targetNodeId === id);
+        if (!controller.signal.aborted) routines = (body?.data ?? []).filter((routine) => routine.targetNodeId === id);
       })
       .catch(() => {});
-    return () => controller.abort();
+    return () => { controller.abort(); clearTimeout(refresh); unsubscribe(); retryMemory = () => {}; };
   });
 </script>
 
@@ -146,9 +180,14 @@
   <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} />
   <section>
     <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>
-    {#if memory.length}
+    {#if memoryLoading}
+      <p class="empty" role="status">{m['chat.profile_memory_loading']()}</p>
+    {:else if memoryError}
+      <p class="empty" role="alert">{m['chat.profile_memory_error']()}</p>
+      <Button size="sm" variant="outline" onclick={() => retryMemory()}>{m['chat.profile_memory_retry']()}</Button>
+    {:else if memory.length}
       <ul>
-        {#each memory as entry (entry.id)}<li title={entry.content}><b>{entry.title}</b><span>{entry.content}</span></li>{/each}
+        {#each memory as entry (entry.id)}<li title={entry.content}><b>{entry.title}</b>{#if entry.lesson}<span>{m['learning.active']()}</span>{/if}<span>{entry.content}</span></li>{/each}
       </ul>
     {:else}
       <p class="empty">{m['chat.profile_memory_empty']()}</p>

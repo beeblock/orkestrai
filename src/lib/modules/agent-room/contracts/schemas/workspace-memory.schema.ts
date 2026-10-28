@@ -1,5 +1,12 @@
 import { z } from 'zod/v3';
 
+export const listWorkspaceMemorySchema = z.object({
+  query: z.string().max(500).default(''),
+  history: z.enum(['0', '1']).default('0'),
+  nodeId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+});
+
 export const workspaceMemoryKindSchema = z.enum(['decision', 'fact', 'preference', 'constraint', 'reference', 'lesson']);
 export const workspaceMemorySourceTypeSchema = z.enum(['user', 'note', 'task', 'message', 'file', 'url', 'git', 'review', 'council', 'agent']);
 

@@ -5,6 +5,7 @@ import { bridgeService } from '../../../application/services/BridgeService.js';
 import { ptySessionManager } from '../../../infrastructure/pty/PtySessionManager.ts';
 import { AgentLearningCommandDto } from '../../../application/dto/AgentLearningCommandDto.js';
 import { AgentLearningCommandRequest } from '../requests/AgentLearningCommandRequest.js';
+import { listAgentLearningSchema } from '../../../contracts/schemas/agent-learning.schema.js';
 
 export class AgentLearningController extends Controller {
   async index(event: RequestEvent) {
@@ -15,8 +16,8 @@ export class AgentLearningController extends Controller {
         const limit = z.coerce.number().int().min(1).max(50).parse(event.url.searchParams.get('limit') ?? 20);
         return this.json({ data: await agentLearningService.recall(context.workspaceId, context.actor.nodeId, query, limit) });
       }
-      const nodeId = event.url.searchParams.get('nodeId') || undefined;
-      return this.json({ data: await agentLearningService.list(context.workspaceId, nodeId) });
+      const query = listAgentLearningSchema.parse({ nodeId: event.url.searchParams.get('nodeId') || undefined, status: event.url.searchParams.get('status') || undefined, limit: event.url.searchParams.get('limit') ?? undefined });
+      return this.json({ data: await agentLearningService.list(context.workspaceId, query.nodeId, query) });
     } catch (error) { return this.failure(error); }
   }
   async store(event: RequestEvent) {

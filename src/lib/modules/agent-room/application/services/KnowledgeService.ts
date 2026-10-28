@@ -10,6 +10,8 @@ import { AgentFloor } from '../../domain/models/AgentFloor.js';
 import { knowledgeRepository } from '../../infrastructure/repositories/KnowledgeRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { workspaceMemoryRepository } from '../../infrastructure/repositories/WorkspaceMemoryRepository.js';
+import { agentLearningRepository } from '../../infrastructure/repositories/AgentLearningRepository.js';
+import { agentLearningMode, learningContainsSensitiveContent } from '../../domain/agent-learning.js';
 import { extractKnowledgeDocument, KNOWLEDGE_EXTRACTOR_VERSION } from '../../infrastructure/knowledge/DocumentExtractor.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
@@ -21,10 +23,15 @@ import type { KnowledgeQuery } from '../../contracts/schemas/knowledge.schema.js
 
 export const MAX_KNOWLEDGE_FILE_BYTES = 25 * 1024 * 1024;
 const locks = new Map<string, Promise<unknown>>();
+const snapshotStates = new Map<string, { generation: number; workGeneration: number }>();
 const digest = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const broadcast = (workspaceId: string) => (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast?.({ type: 'workspaceChanged', workspaceId });
 
 export class KnowledgeService {
+  invalidate(workspaceId: string): void {
+    const state = snapshotStates.get(workspaceId);
+    if (state) state.generation += 1;
+  }
   async watch(workspaceId: string) {
     const workspace = await this.workspace(workspaceId);
     const paths: string[] = [];
@@ -108,12 +115,24 @@ export class KnowledgeService {
 
   private async snapshot(workspaceId: string, force = false): Promise<{ documents: KnowledgeDocument[]; links: KnowledgeLink[]; truncated: boolean }> {
     const running = locks.get(workspaceId);
-    if (running && !force) return running as Promise<{ documents: KnowledgeDocument[]; links: KnowledgeLink[]; truncated: boolean }>;
+    const state = snapshotStates.get(workspaceId) ?? { generation: 0, workGeneration: 0 };
+    snapshotStates.set(workspaceId, state);
+    if (running && !force && state.workGeneration === state.generation) {
+      const generation = state.generation;
+      const result = await running as { documents: KnowledgeDocument[]; links: KnowledgeLink[]; truncated: boolean };
+      return generation === state.generation ? result : this.snapshot(workspaceId);
+    }
+    const generation = state.generation;
     const previous = running ?? Promise.resolve();
     const work = previous.catch(() => undefined).then(() => this.synchronize(workspaceId, force));
     locks.set(workspaceId, work);
-    try { return await work; }
-    finally { if (locks.get(workspaceId) === work) locks.delete(workspaceId); }
+    state.workGeneration = generation;
+    try {
+      const result = await work;
+      return generation === state.generation ? result : this.snapshot(workspaceId);
+    } finally {
+      if (locks.get(workspaceId) === work) { locks.delete(workspaceId); snapshotStates.delete(workspaceId); }
+    }
   }
 
   private async synchronize(workspaceId: string, force: boolean) {
@@ -183,6 +202,16 @@ export class KnowledgeService {
       const id = `memory:${memory.id}`;
       await put({ id, kind: 'memory', title: memory.title, nodeId: null, path: null, tags: memory.tags, status: 'ready', hash: digest(memory.content), fingerprint: digest(memory.content), passages: textPassages(memory.content), truncated: knowledgeTextTruncated(memory.content) });
       for (const source of memory.sources) if (source.sourceId) links.push({ source: id, target: `${source.type === 'task' ? 'task' : 'node'}:${source.sourceId}`, kind: 'source' });
+    }
+    const agents = new Map(nodes.filter(node => node.type === 'terminal').map(node => [node.id, node]));
+    for (const lesson of await agentLearningRepository.list(workspaceId, undefined, 'active')) {
+      const agent = agents.get(lesson.nodeId);
+      if (!agent || agentLearningMode(agent.payload) === 'off' || !lesson.correction || !lesson.evidence) continue;
+      const content = [lesson.title, lesson.trigger, lesson.mistake, lesson.correction, lesson.evidence, JSON.stringify({ evidenceLevel: lesson.evidenceLevel, taskId: lesson.taskId, revision: lesson.revision })].join('\n');
+      if (learningContainsSensitiveContent(content)) continue;
+      const id = `learning:${lesson.id}`;
+      await put({ id, kind: 'memory', title: lesson.title, nodeId: lesson.nodeId, path: null, tags: ['learning'], status: 'ready', hash: digest(content), fingerprint: digest(JSON.stringify([lesson.revision, lesson.sourceHash, lesson.evidenceLevel, content])), passages: textPassages(content), truncated: knowledgeTextTruncated(content) });
+      links.push({ source: id, target: `task:${lesson.taskId}`, kind: 'source' });
     }
     const ids = new Set(documents.map(doc => doc.id));
     for (const edge of edges) links.push({ source: `node:${edge.sourceNodeId}`, target: `node:${edge.targetNodeId}`, kind: 'canvas' });

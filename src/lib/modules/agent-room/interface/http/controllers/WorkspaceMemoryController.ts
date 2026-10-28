@@ -6,14 +6,17 @@ import { archiveWorkspaceMemoryAction } from '../../../application/actions/Archi
 import { workspaceMemoryService, WorkspaceMemoryConflictError } from '../../../application/services/WorkspaceMemoryService.js';
 import { SaveWorkspaceMemoryRequest } from '../requests/SaveWorkspaceMemoryRequest.js';
 import { ReviseWorkspaceMemoryRequest } from '../requests/ReviseWorkspaceMemoryRequest.js';
+import { listWorkspaceMemorySchema } from '../../../contracts/schemas/workspace-memory.schema.js';
 
 export class WorkspaceMemoryController extends Controller {
   async index(event: RequestEvent) {
     try {
+      const query = listWorkspaceMemorySchema.parse({ query: event.url.searchParams.get('q') ?? '', history: event.url.searchParams.get('history') ?? undefined, nodeId: event.url.searchParams.get('nodeId') || undefined, limit: event.url.searchParams.get('limit') ?? undefined });
       return this.json({ data: await workspaceMemoryService.list(event.params.id, {
-        query: event.url.searchParams.get('q') ?? '',
-        includeHistory: event.url.searchParams.get('history') === '1',
-        limit: Number(event.url.searchParams.get('limit') ?? 200),
+        query: query.query,
+        includeHistory: query.history === '1',
+        limit: query.limit,
+        createdByNodeId: query.nodeId,
       }) });
     } catch (error) {
       return this.failure(error, 'Could not load workspace memory.');

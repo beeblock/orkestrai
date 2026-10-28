@@ -8,6 +8,7 @@ import { taskBoardService } from '$lib/modules/agent-room/application/services/T
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
+import { agentLearningService } from '$lib/modules/agent-room/application/services/AgentLearningService.js';
 import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -73,6 +74,40 @@ describe('Agent inbox', () => {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
     agentInboxService.reset();
     vi.restoreAllMocks();
+  });
+
+  it('includes canonical memory context in an owner message without an extra agent turn', async () => {
+    const { workspace, nodes } = await team();
+    const context = vi.spyOn(agentLearningService, 'context').mockResolvedValue('SOURCED_MEMORY_CONTEXT');
+    await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'Use the existing deployment decision.' });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].message).toContain('SOURCED_MEMORY_CONTEXT');
+    expect(context).toHaveBeenCalledWith(workspace.id, nodes.Lider, expect.stringContaining('existing deployment decision'));
+  });
+
+  it.each(['failed', 'stalled'])('delivers owner messages even when optional memory lookup is %s', async (failure) => {
+    const { workspace, nodes } = await team();
+    const lookup = vi.spyOn(agentLearningService, 'context');
+    if (failure === 'failed') lookup.mockRejectedValue(new Error('Temporary memory read failure'));
+    else lookup.mockImplementation(() => new Promise(() => {}));
+    const started = Date.now();
+    await channelService.postOwner(workspace.id, `dm:${nodes.Lider}`, { body: 'Please reply now.' });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].message).toContain('Please reply now.');
+    expect(Date.now() - started).toBeLessThan(4000);
+  });
+
+  it.each(['telegram', 'slack'])('does not attach internal owner memory to %s input', async (via) => {
+    const { workspace, nodes } = await team();
+    const context = vi.spyOn(agentLearningService, 'context').mockResolvedValue('INTERNAL_OWNER_MEMORY');
+    await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: nodes.Lider, kind: 'owner', content: 'External chat message', metadata: { via } });
+    await agentInboxService.drain(workspace.id, nodes.Lider);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].message).toContain('External chat message');
+    expect(prompts[0].message).not.toContain('INTERNAL_OWNER_MEMORY');
+    expect(context).not.toHaveBeenCalled();
   });
 
   it('delivers to an idle agent and returns the answer from its transcript', async () => {
