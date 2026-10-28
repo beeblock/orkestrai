@@ -14,6 +14,9 @@ pt-BR, English, and Spanish translations.
 ### Fixed
 
 - Recover queued agent messages after completed Claude scheduled turns even when the original prompt is outside the bounded transcript tail. Timestamped provider requests release stale delivery barriers while newer work and unsubmitted drafts remain protected.
+- A soulstone from a harder difficulty now also opens Adventure act boss chests from easier difficulties. A chest spends a soulstone of its own difficulty first, then one of the nearest harder difficulty.
+- Red chests are stored apart from the other chests, up to the same limit, so chests waiting for a soulstone no longer fill the storage and make new white, blue, quest and first boss chests disappear. A boss's first chest, which opens free, is always kept, and the strip warns when chest storage is full instead of discarding chests silently.
+- Opening red chests in the Camp skips those still waiting for a soulstone instead of stopping at the first one.
 
 ## 0.46.2 - 2026-10-27
 

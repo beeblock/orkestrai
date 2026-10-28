@@ -6,14 +6,15 @@ import { craft, synthesisRarity } from '$lib/modules/agent-room/domain/adventure
 import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
   AdventureError, applyReport, autoOpenChests, balanceGuild, buyRune, craftItem, settleLoot, updateSettings, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
-  synthesizeItems, bindRoster, heroOfAgent, setHeroClass, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
+  synthesizeItems, bindRoster, heroOfAgent, setHeroClass, soulstoneFor, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
 import {
   RARITIES, RARITY_RULES, canEquip, gemQualityFor, itemBaseKey, itemIcon, itemStats, materialKey, materialStats, parseMaterialKey, rollItem,
   type Item, type Rarity, type Slot,
 } from '$lib/modules/agent-room/domain/adventure/items.js';
-import { openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
+import { BASE_CHEST_CAPACITY, openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
 import { canBuyRune, formationSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
+import type { ChestDrop } from '$lib/modules/agent-room/domain/adventure/simulation.js';
 import { SKILL_TREES, autoAllocate, canRaise, pointsSpent, sanitizeRanks } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { NO_CLEARS, addXp, advancePosition, positionAt, regionLevel, stageUnlocked, xpToNext, difficultyUnlocked, MAX_HERO_LEVEL } from '$lib/modules/agent-room/domain/adventure/world.js';
 
@@ -283,6 +284,59 @@ describe('adventure engine', () => {
     save.account.soulstones.normal = 1;
     const [second] = openChests(save, ctx, { ids: ['c2'] });
     expect(save.account.soulstones.normal).toBe(second.soulstones);
+  });
+
+  it('opens a boss chest with a soulstone of its difficulty first, else of the nearest harder one', () => {
+    expect(soulstoneFor({ normal: 1, nightmare: 1, hell: 0, torment: 0 }, 'normal')).toBe('normal');
+    expect(soulstoneFor({ normal: 0, nightmare: 0, hell: 2, torment: 1 }, 'normal')).toBe('hell');
+    expect(soulstoneFor({ normal: 3, nightmare: 0, hell: 0, torment: 0 }, 'nightmare')).toBeNull();
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.firstBossClears = ['normal:5'];
+    save.account.chests = [{ id: 'repeat', tier: 'red', level: 50, difficulty: 'normal', act: 5 }];
+    save.account.soulstones = { normal: 0, nightmare: 1, hell: 1, torment: 0 };
+    const [opened] = openChests(save, ctx, { ids: ['repeat'] });
+    // A soulstone found inside belongs to the chest's own difficulty.
+    expect(save.account.soulstones).toEqual({ normal: opened.soulstones, nightmare: 0, hell: 1, torment: 0 });
+  });
+
+  it('skips red chests waiting for a soulstone when opening a tier, and refuses when none can open', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.firstBossClears = ['normal:5'];
+    save.account.chests = [
+      { id: 'waiting', tier: 'red', level: 50, difficulty: 'normal', act: 5 },
+      { id: 'first', tier: 'red', level: 75, difficulty: 'nightmare', act: 5 },
+    ];
+    expect(openChests(save, ctx, { tier: 'red' }).map((opened) => opened.chestId)).toEqual(['first']);
+    save.account.soulstones = { normal: 0, nightmare: 0, hell: 0, torment: 0 };
+    expect(() => openChests(save, ctx, { tier: 'red' })).toThrow('soulstone');
+    expect(save.account.chests.map((chest) => chest.id)).toEqual(['waiting']);
+  });
+
+  it('keeps red chests apart, always keeps a boss\'s first chest and counts chests lost to a full storage', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.firstBossClears = ['normal:5'];
+    save.account.chests = [
+      ...Array.from({ length: BASE_CHEST_CAPACITY }, (_, index) => ({ id: `waiting-${index}`, tier: 'red' as const, level: 50, difficulty: 'normal' as const, act: 5 })),
+      ...Array.from({ length: BASE_CHEST_CAPACITY - 1 }, (_, index) => ({ id: `white-${index}`, tier: 'white' as const, level: 50, difficulty: 'normal' as const, act: 5 })),
+    ];
+    const report = (reportId: string, chests: ChestDrop[]) => applyReport(save, {
+      reportId, elapsedMs: 60_000, position: positionAt('nightmare', 49), wave: 0, xp: {}, gold: 0, kills: { 'bug-beetle': 10 }, chests, bosses: [], stages: [],
+    }, ctx);
+    // Red chests waiting for a soulstone leave the other chests their room.
+    report('blue-fits', [{ tier: 'blue', level: 50, difficulty: 'normal', act: 5 }, { tier: 'red', level: 50, difficulty: 'normal', act: 5 }]);
+    expect(save.account.chests.filter((chest) => chest.tier === 'blue')).toHaveLength(1);
+    expect(save.account.lostChests).toBe(1);
+    report('first-boss', [
+      { tier: 'white', level: 75, difficulty: 'nightmare', act: 5 },
+      { tier: 'red', level: 75, difficulty: 'nightmare', act: 5 },
+      { tier: 'red', level: 75, difficulty: 'nightmare', act: 5 },
+    ]);
+    expect(save.account.chests.filter((chest) => chest.tier === 'red' && chest.difficulty === 'nightmare')).toHaveLength(1);
+    expect(save.account.chests.filter((chest) => chest.tier !== 'red')).toHaveLength(BASE_CHEST_CAPACITY);
+    expect(save.account.lostChests).toBe(3);
   });
 
   it('equips, swaps and refuses gear a hero cannot use', () => {

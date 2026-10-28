@@ -785,7 +785,7 @@ export const ADVENTURE_ES: AdventureCatalog = {
     "locked-stage": "Esa etapa aún no está disponible.",
     "pet": "Esa mascota aún no está domada.",
     "no-chest": "No hay cofres para abrir.",
-    "soulstone": "A partir del segundo, cada cofre de jefe de acto requiere una piedra de alma de la misma dificultad.",
+    "soulstone": "A partir del segundo, cada cofre de jefe de acto requiere una piedra de alma de la misma dificultad o de una más difícil.",
     "elixir": "No tienes elixir de ese tipo.",
     "fusion-max": "Las gemas imperiales ya tienen la mejor talla.",
     "fusion-gems": "La fusión requiere tres gemas del mismo tipo y calidad.",

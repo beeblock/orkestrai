@@ -5732,6 +5732,7 @@
   "adventure.stage_clear": "Stage {stage} cleared",
   "adventure.difficulty_onward": "{difficulty} unlocked! The party sets out for Act 1",
   "adventure.difficulty_open": "{difficulty} unlocked: travel there from the Camp map",
+  "adventure.chests_lost": "Chest storage is full: new chests are lost until you open some in the Camp",
   "adventure.level_up": "Party level {level}!",
   "adventure.quest": "Quest complete!",
   "adventure.quest_named": "Quest complete: {title}",

@@ -166,7 +166,7 @@
       {#if snapshot}
         <dl class="treasury" aria-label={m['adventure.camp_wallet']()}>
           <div class="camp-chip gold" title={m['adventure.gold']()}><ItemIcon atlasId="icons-misc" frame={6} size={22} /><dt class="sr-only">{m['adventure.gold']()}</dt><dd>{formatNumber(snapshot.account.gold)}</dd></div>
-          <div class="camp-chip" title={m['adventure.camp_chests']()}><ItemIcon atlasId="icons-misc" frame={0} size={22} /><dt class="sr-only">{m['adventure.camp_chests']()}</dt><dd>{snapshot.account.chests.length}/{snapshot.limits.chests}</dd></div>
+          <div class="camp-chip" title={m['adventure.camp_chests']()}><ItemIcon atlasId="icons-misc" frame={0} size={22} /><dt class="sr-only">{m['adventure.camp_chests']()}</dt><dd>{snapshot.account.chests.filter((chest) => chest.tier !== 'red').length}/{snapshot.limits.chests}</dd></div>
           <div class="camp-chip" title={m['adventure.camp_soulstones']()}><ItemIcon atlasId="icons-misc" frame={4} size={22} /><dt class="sr-only">{m['adventure.camp_soulstones']()}</dt><dd>{Object.values(snapshot.account.soulstones).reduce((sum, count) => sum + count, 0)}</dd></div>
           <div class="camp-chip" title={m['adventure.camp_coins']()}><ItemIcon atlasId="icons-misc" frame={5} size={22} /><dt class="sr-only">{m['adventure.camp_coins']()}</dt><dd>{snapshot.account.coins}</dd></div>
           <div class="camp-chip" title={m['adventure.camp_region']()}><ItemIcon atlasId="icons-misc" frame={8} size={22} /><dt class="sr-only">{m['adventure.camp_region']()}</dt><dd>{catalog.difficulties[snapshot.account.position.difficulty]} · {snapshot.account.position.act}-{snapshot.account.position.stage}</dd></div>
