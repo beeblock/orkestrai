@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.47.0 - 2026-10-28
+
 ### Added
 
 - Connect active agent lessons to the sourced knowledge graph and the Conversation profile. Owner messages and task briefs receive bounded relevant workspace memories and lessons; a slow or unavailable memory lookup never blocks direct-message delivery. Pending/rejected lessons, disabled learning, credentials and provider-private conversation files stay outside this automatic flow. The profile updates live and distinguishes loading failures from an empty memory.

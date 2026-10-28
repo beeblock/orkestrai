@@ -152,7 +152,10 @@ it now or on a trigger.
 ### Keep a Second Brain the whole team can search
 
 Import documents, follow every connection in the knowledge graph, and explore it
-in 3D. Agents search the same cited passages through the bridge.
+in 3D. Agents search the same cited passages through the bridge. Active lessons
+also link to their source tasks in the graph and appear in each agent’s
+Conversation profile; owner messages and task briefs recall bounded relevant
+workspace facts and lessons automatically.
 
 <p align="center"><img src="docs/media/readme/knowledge.webp" alt="Importing documents into the Second Brain and exploring the knowledge graph in 3D" width="880"></p>
 
@@ -221,7 +224,7 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
 
 - **Adventure above the Dock:** turn on Settings → Adventure and the open workspace's agents become a pixel-art party in a transparent strip above the macOS Dock or the Windows/Linux taskbar. The leader is the Maestro and teammates get a class from their role. Heroes belong to the workspace's guild and outlive agents: a dismissed agent's hero rests until the next agent of its class takes it over. While any agent works, the whole formation fights software-bug monsters across five acts and four difficulties; every hero levels to 100 and then through endless Paragon levels, spends skill points in its class tree (every active skill has its own animated effect, from meteors to heals on allies) and fills a thirteen-slot armory from the chests monsters drop (nine rarities, three variants per base, affixes, sockets, uniques with their own powers and six class sets), and its outfit changes with that gear. The Camp inspects and manages heroes, inventory, chests, the Orchestrion Cube, runes, pets and the map. Finished Kanban cards pay quest chests, and work done while the strip is closed still counts. The strip stays on the desktop with Orkestrai minimized, can be dragged anywhere by its grip and comes in full or compact width, three sizes, full or minimal scenery and an always-on or on-hover panel.
 - **Native Second Brain:** drop PDF, Markdown, XLSX, CSV and other files onto Canvas as document nodes. Search cited passages alongside notes, tasks and sourced memory; follow tags, backlinks and a knowledge graph in Canvas or Focus. Scanned and mixed PDFs receive offline English, Portuguese and Spanish OCR with bundled models, page citations and recognition confidence. Originals stay intact. Extraction is bounded (25 MB, 200 PDF pages, two minutes); partial/failed pages are explicit, and critical OCR values must be checked against the original.
-- **Durable agent learning:** named agents retain evidence-linked procedural lessons across sessions and provider changes. Choose automatic, review-first or off, inspect revision history, and activate, reject or archive lessons. New tasks recall bounded relevant lessons through the same CLI/MCP contracts, without modifying security grants or training model weights. See the Second Brain guide and interactive tour in How to use.
+- **Durable agent learning:** named agents retain evidence-linked procedural lessons across sessions and provider changes. Choose automatic, review-first or off, inspect revision history, and activate, reject or archive lessons. Owner messages and task briefs recall bounded relevant facts and lessons through the same CLI/MCP contracts; active lessons also appear in the knowledge graph and the Conversation profile, without modifying security grants or training model weights. See the Second Brain guide and interactive tour in How to use.
 
 - **Continuous desktop companions:** monitor an approved conversation, group
   incoming messages and let its Canvas agent reply with a consistent persona.
