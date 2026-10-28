@@ -1675,6 +1675,24 @@
       });
   }
 
+  // Nodes are created before edges when loading a graph. Hydrate header links
+  // from that same snapshot once, without subscribing to drag/viewport frames.
+  function hydrateLoadedConnections() {
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const connections = new Map<string, ReturnType<typeof connectionsFor>>();
+    for (const edge of edges) {
+      for (const [id, targetId, direction] of [[edge.source, edge.target, 'out'], [edge.target, edge.source, 'in']] as const) {
+        const other = byId.get(targetId);
+        if (!other) continue;
+        const links = connections.get(id) ?? [];
+        links.push({ edgeId: edge.id, targetId, direction, targetTitle: String(other.data.title ?? other.type ?? m['canvas.fallback_node']()),
+          targetType: String(other.type ?? m['canvas.fallback_node']()), targetPayload: (other.data.payload ?? {}) as Record<string, unknown> });
+        connections.set(id, links);
+      }
+    }
+    nodes = nodes.map(node => ({ ...node, data: { ...node.data, connections: connections.get(node.id) ?? [] } }));
+  }
+
   async function removeConnection(edgeId: string) {
     snapshot();
     selectedEdgeId = null;
@@ -1722,6 +1740,7 @@
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = cached.edges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+      hydrateLoadedConnections();
     }
     try {
       const resumedWorkspace = changingWorkspace
@@ -1762,6 +1781,7 @@
         .map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+      hydrateLoadedConnections();
       writeWorkspaceViewCache({ workspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
       repairGroupFrames();
       settleFloorAgentsOnGround(canvasNodes);
@@ -1800,6 +1820,7 @@
       nodes = canvasNodes.filter((node) => shownOnFloor(node, visibleFloorId)).map(toFlowNode);
       const visibleIds = new Set(nodes.map((node) => node.id));
       edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+      hydrateLoadedConnections();
       settleFloorAgentsOnGround(canvasNodes);
     }
   }

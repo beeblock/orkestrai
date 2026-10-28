@@ -1,10 +1,91 @@
 import { expect, test } from '@playwright/test';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { selectCanvasTool } from './helpers';
+import { PNG } from 'pngjs';
 
 test.describe('canvas revamp tools', () => {
+  test('keeps note Markdown and connection counts readable on every paper in both themes', async ({ page, request }, info) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    const original = (await (await request.get('/api/agent-room/settings')).json()).data;
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-note-contrast-'));
+    const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Note contrast matrix', workingDir: dir, codeIntelligenceMode: 'manual' } })).json()).data;
+    const base = `/api/agent-room/workspaces/${workspace.id}`;
+    const samples: Array<{ theme: string; paper: string; state: string; target: string; ratio: number }> = [];
+    const luminance = (rgb: number[]) => rgb.slice(0, 3).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+    try {
+      const note = (await (await request.post(`${base}/nodes`, { data: { type: 'note', title: 'Readable note', x: 80, y: 80, width: 620, height: 520, payload: { color: 'neutral', formatted: true, font: 'sans', content: '**Readable emphasis**\n\n~~Readable deletion~~\n\n[Readable link](https://example.com)\n\n[`Inline code link`](https://example.com)\n\n> **Readable quote**\n\n| Header | Value |\n| --- | --- |\n| Cell | Text |' } } })).json()).data;
+      const other = (await (await request.post(`${base}/nodes`, { data: { type: 'note', title: 'Linked note', x: 800, y: 80, width: 300, height: 200, payload: { content: 'Reference' } } })).json()).data;
+      expect((await request.post(`${base}/edges`, { data: { sourceNodeId: note.id, targetNodeId: other.id } })).ok()).toBe(true);
+      const root = page.locator(`.svelte-flow__node[data-id="${note.id}"] .canvas-note`);
+      const badge = root.locator('.connections-badge');
+      async function measure(theme: string, paper: string, state: string, headerOnly = false) {
+        const targets = await root.evaluate((element, headerOnly) => {
+          const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+          const context = canvas.getContext('2d')!;
+          const selector = headerOnly ? '.connections-badge, .connections-badge svg' : '.md strong, .md del, .md a, .md th, .connections-badge, .connections-badge svg';
+          return [...element.querySelectorAll<HTMLElement>(selector)].map((target, index) => {
+            context.clearRect(0, 0, 1, 1);
+            const style = getComputedStyle(target);
+            context.fillStyle = target.tagName.toLowerCase() === 'svg' ? style.stroke : style.color;
+            context.fillRect(0, 0, 1, 1);
+            const foreground = Array.from(context.getImageData(0, 0, 1, 1).data);
+            const badge = target.closest('.connections-badge');
+            const background = badge ?? target.querySelector('code') ?? target.closest('th') ?? target.closest('p') ?? target;
+            const box = background.getBoundingClientRect();
+            let opacity = 1;
+            for (let parent: Element | null = target; parent; parent = parent.parentElement) opacity *= Number(getComputedStyle(parent).opacity);
+            return { target: `${target.tagName.toLowerCase()}-${index}`, foreground, opacity, x: box.right - 3, y: box.top + box.height / 2 };
+          });
+        }, headerOnly);
+        const image = PNG.sync.read(await page.screenshot());
+        for (const target of targets) {
+          const x = Math.round(target.x), y = Math.round(target.y);
+          expect(x >= 0 && x < image.width && y >= 0 && y < image.height).toBe(true);
+          const offset = (y * image.width + x) * 4;
+          const background = [...image.data.subarray(offset, offset + 3)];
+          const alpha = target.foreground[3] / 255 * target.opacity;
+          const foreground = target.foreground.slice(0, 3).map((value, index) => alpha * value + (1 - alpha) * background[index]);
+          const values = [luminance(foreground), luminance(background)].sort((a, b) => a - b);
+          samples.push({ theme, paper, state, target: target.target, ratio: (values[1] + .05) / (values[0] + .05) });
+        }
+      }
+      for (const theme of ['orkestrai-dark', 'orkestrai-light']) {
+        expect((await request.put('/api/agent-room/settings', { data: { ...original, uiLanguage: 'en', appTheme: theme } })).ok()).toBe(true);
+        await page.goto(`/canvas?workspace=${workspace.id}`);
+        await expect(page.locator('html')).toHaveAttribute('data-app-theme', theme);
+        await expect(root.locator('.md strong').first()).toBeVisible();
+        await page.addStyleTag({ content: '.canvas-note, .canvas-note * { transition-duration: 0s !important; }' });
+        for (const [index, paper] of ['yellow', 'peach', 'red', 'purple', 'blue', 'green', 'lime', 'neutral', 'glass'].entries()) {
+          await root.locator('.color-trigger').click();
+          const swatch = page.locator('[data-state="open"] .swatch-grid button').nth(index);
+          await swatch.click();
+          await expect(swatch).toHaveAttribute('aria-checked', 'true');
+          await page.keyboard.press('Escape');
+          await page.mouse.move(10, 10);
+          await expect(badge).toBeVisible();
+          await measure(theme, paper, 'normal');
+          await badge.hover();
+          await measure(theme, paper, 'hover', true);
+          await badge.click();
+          await expect(badge).toHaveAttribute('data-state', 'open');
+          await measure(theme, paper, 'open', true);
+          await page.keyboard.press('Escape');
+          if (index === 0 || paper === 'glass') await page.screenshot({ path: info.outputPath(`note-${theme}-${paper}.png`) });
+        }
+      }
+      await writeFile(info.outputPath('note-contrast.json'), JSON.stringify(samples, null, 2));
+      await info.attach('Rendered note contrast', { path: info.outputPath('note-contrast.json'), contentType: 'application/json' });
+      expect(samples.length).toBeGreaterThan(100);
+      expect(samples.filter(sample => sample.ratio < 4.5), 'All note text and linked-count icons need readable contrast.').toEqual([]);
+    } finally {
+      await request.put('/api/agent-room/settings', { data: original });
+      await request.delete(base); await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test('draws with the pen, shows an agent as a conversation and reuses a score', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const dir = await mkdtemp(join(tmpdir(), 'orkestrai-tools-'));

@@ -186,14 +186,14 @@
   }
 
   .md :global(th) {
-    background: var(--app-surface-raised);
+    background: var(--md-th-bg, var(--app-surface-raised));
     font-weight: 600;
-    color: var(--app-text);
+    color: var(--md-heading, var(--app-text));
   }
 
   .md :global(hr) {
     border: none;
-    border-top: 1px solid var(--app-border);
+    border-top: 1px solid var(--md-border, var(--app-border));
     margin: 10px 0;
   }
 
@@ -203,11 +203,11 @@
   }
 
   .md :global(strong) {
-    color: var(--app-text);
+    color: var(--md-strong, var(--app-text));
     font-weight: 600;
   }
 
   .md :global(del) {
-    color: var(--app-text-muted);
+    color: var(--md-muted, var(--app-text-muted));
   }
 </style>

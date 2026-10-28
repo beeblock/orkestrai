@@ -18,7 +18,7 @@
 
   /*
    * Sticky paper: each note is a sheet in one of these colors with dark ink,
-   * readable on light and dark themes alike. "glass" keeps the dark card.
+   * readable on light and dark themes alike. "glass" follows the app theme.
    * Legacy ids (yellow, blue, green, purple, red, neutral) map to papers.
    */
   const NOTE_COLORS: Record<string, { color: string; ink: string; label: string }> = {
@@ -30,7 +30,7 @@
     green: { color: '#a9dfc0', ink: '#0d2a1b', label: m['note.color_green']() },
     lime: { color: '#d3e48f', ink: '#212a07', label: m['note.color_lime']() },
     neutral: { color: '#e8e2d5', ink: '#26221b', label: m['note.color_neutral']() },
-    glass: { color: '#1b1a17', ink: '#efebe4', label: m['note.color_glass']() },
+    glass: { color: 'var(--app-surface)', ink: 'var(--app-text)', label: m['note.color_glass']() },
   };
   const NOTE_FONTS = { hand: 'var(--font-hand)', sans: 'inherit', mono: 'var(--font-mono)' } as const;
   const NOTE_SIZES = { hand: { s: 17, m: 21, l: 27 }, sans: { s: 12, m: 13.5, l: 16 }, mono: { s: 11.5, m: 12.5, l: 14.5 } } as const;
@@ -480,6 +480,25 @@
     color: var(--ink);
   }
 
+  :global(.node-shell.note-paper .connections-badge),
+  :global(.node-shell.note-paper .stack-toggle) {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+  }
+
+  :global(.node-shell.note-paper .connections-badge:hover),
+  :global(.node-shell.note-paper .connections-badge[data-state='open']),
+  :global(.node-shell.note-paper .stack-toggle:hover),
+  :global(.node-shell.note-paper .stack-toggle.open) {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+
+  :global(.node-shell.note-paper .connections-badge:focus-visible) {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
   :global(.node-shell.note-paper .overview-label) {
     background: var(--paper);
     color: var(--ink);
@@ -623,10 +642,13 @@
     --md-size: var(--note-size);
     --md-text: var(--ink);
     --md-heading: var(--ink);
+    --md-strong: var(--ink);
+    --md-muted: var(--ink);
     --md-link: var(--note-link);
     --md-link-hover: var(--ink);
     --md-code-bg: color-mix(in srgb, var(--ink) 9%, transparent);
     --md-pre-bg: color-mix(in srgb, var(--ink) 7%, transparent);
+    --md-th-bg: color-mix(in srgb, var(--ink) 9%, transparent);
     --md-border: color-mix(in srgb, var(--ink) 22%, transparent);
     --md-quote-accent: color-mix(in srgb, var(--ink) 45%, transparent);
     --md-quote-bg: color-mix(in srgb, var(--ink) 6%, transparent);
@@ -640,7 +662,7 @@
   }
 
   :global(.node-shell.note-paper) {
-    --note-link: color-mix(in srgb, #8a4f00 80%, var(--ink));
+    --note-link: color-mix(in srgb, #8a4f00 40%, var(--ink));
   }
 
   :global(.node-shell.note-glass) {
