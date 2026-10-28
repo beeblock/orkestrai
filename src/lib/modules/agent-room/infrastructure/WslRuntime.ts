@@ -313,6 +313,7 @@ export function buildWslLaunch(input: {
   /** Names resolved from a server-side Provider Profile. Values stay in the
       child environment; WSLENV forwards only these explicit names. */
   forwardEnvToWsl?: string[];
+  unsetEnvKeys?: string[];
 }): { command: string; args: string[]; cwd: string; env: Record<string, string> } {
   const { runtime } = input;
   const linuxRoot = runtime.linuxWorkingDir.replace(/\/$/, '') || '/';
@@ -357,7 +358,10 @@ export function buildWslLaunch(input: {
       '--exec',
       '/bin/bash',
       '-lic',
-      'export PATH="$ORKESTRAI_WORKSPACE_BIN:$PATH"; exec "$@"',
+      [
+        ...(input.unsetEnvKeys ?? []).filter(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).map(name => `unset ${name};`),
+        'export PATH="$ORKESTRAI_WORKSPACE_BIN:$PATH"; exec "$@"',
+      ].join(' '),
       'orkestrai-runtime',
       command,
       ...input.args.map((argument) => guestArgument(runtime, argument, input.workspaceRoot)),

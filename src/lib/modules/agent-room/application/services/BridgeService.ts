@@ -826,10 +826,12 @@ export class BridgeService {
       const floor = await floorService.get(node.floorId).catch(() => null);
       if (floor?.path) cwd = floor.path;
     }
-    const match = await findReplyToPrompt(payload.provider, cwd, preferredSessionId, prompt, since, {
-      homeDir: session?.transcriptHome ?? undefined,
-      posixCwd: session?.runtimeKey.startsWith('wsl:') ?? false,
-    });
+    const offlineContext = session ? null : await agentInboxService.transcriptFor(workspaceId, nodeId);
+    const match = await findReplyToPrompt(payload.provider, offlineContext?.cwd ?? cwd, preferredSessionId, prompt, since, session ? {
+      ...ptySessionManager.transcriptStorageRoots(session.id),
+      homeDir: session.transcriptHome ?? undefined,
+      posixCwd: session.runtimeKey.startsWith('wsl:'),
+    } : offlineContext?.options);
     if (!match || match.sessionId === payload.agentSessionId) return match;
     agentSessionTracker.bind(ptySessionId, match.sessionId);
     ptySessionManager.bindAgentSession(ptySessionId, match.sessionId);
@@ -1592,6 +1594,10 @@ O time só rende quando cada agente trabalha em paralelo, sem esperar autorizaç
 - Especialista: feche o ciclo da sua tarefa — implemente, valide e conclua com \`orkestrai task done <id>\`. Em um andar, o trabalho pendente é commitado automaticamente ao concluir. Não peça "GO" ao líder a cada etapa; peça decisão só para o que é irreversível, arriscado ou fora do escopo.
 - Builds, suítes E2E, empacotamento e outras cargas pesadas: rode com \`orkestrai heavy -- <comando>\`. A fila da máquina libera a vez sozinha, por CPU, memória e disco. Nunca negocie "janelas exclusivas", "slots", "freezes" ou hashes por mensagem.
 - Líder: delegue pacotes completos (resultado esperado, critérios de aceite, limites e validação) e integre com \`orkestrai floor land <id>\` assim que revisar a evidência. Funciona mesmo com alterações locais na main: aplica só o delta do andar, registra um commit só com esses arquivos e retira o andar; se houver conflito, não altera nada e lista os arquivos. Entregar = integrado e commitado na main: não espere o dono para commitar, integrar, revisar visualmente ou liberar disco. Acompanhe o fluxo com \`orkestrai stats\`.
+
+## Account continuity
+
+Use \`orkestrai agent-profile [agent] --profile <name-or-id> --task <id>\` (MCP \`agent_profile_switch\` with profile and taskId) for a task-authorized account change. Use \`--default-profile\` (MCP profile:null) for the default account. An active terminal token proves the actor: specialists change themselves; the leader may change teammates. Claude preserves the exact saved conversation and its task; another provider may start a new conversation. Never override an owner account restriction or pause, automatically churn accounts, or switch a working teammate just to optimize usage. A divergent destination transcript is an explicit conflict; do not overwrite it. Credentials remain in their own profiles.
 
 ## Second Brain and agent learning
 

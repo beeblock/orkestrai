@@ -77,6 +77,20 @@ describe('PTY WebSocket protocol', () => {
     vi.unstubAllEnvs();
   });
 
+  it('rejects a reconnect using a stale account without stopping the replacement terminal', async () => {
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', workspaceId: 'w', nodeId: 'n', provider: 'claude', profileId: 'b' });
+    const globals = globalThis as { __orkestraiValidateNodeProfile?: (...args: unknown[]) => Promise<boolean> };
+    globals.__orkestraiValidateNodeProfile = async () => false;
+    const socket = new FakeSocket(); handlePtyConnection(socket as never);
+    const create = vi.spyOn(ptySessionManager, 'create');
+    try {
+      socket.emit('message', JSON.stringify({ type: 'create', command: '/bin/cat', cwd: '/tmp', workspaceId: 'w', nodeId: 'n', provider: 'claude', profileId: 'a' }));
+      await vi.waitFor(() => expect(socket.frames).toContainEqual(expect.objectContaining({ type: 'error', code: 'AGENT_PROFILE_CHANGED' })));
+      expect(create).not.toHaveBeenCalled();
+      expect(ptySessionManager.get(session.id)?.exited).toBe(false);
+    } finally { delete globals.__orkestraiValidateNodeProfile; socket.emit('close'); ptySessionManager.kill(session.id); }
+  });
+
   it('classifica attach de sessao inexistente com codigo estavel', () => {
     const socket = new FakeSocket();
     handlePtyConnection(socket as never);

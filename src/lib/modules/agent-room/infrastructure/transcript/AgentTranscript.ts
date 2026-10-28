@@ -1,3 +1,4 @@
+import type { AgentStorageRoots } from './AgentStorageRoots.js';
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -37,7 +38,7 @@ export type MatchedTranscriptPrompt = {
   sessionId: string;
 };
 
-export type TranscriptLookupOptions = {
+export type TranscriptLookupOptions = AgentStorageRoots & {
   /** Host-visible provider home, such as \\wsl.localhost\Ubuntu\home\user. */
   homeDir?: string;
   /** WSL transcripts store Linux cwd values even when read through a UNC path. */
@@ -755,11 +756,11 @@ function realCwd(cwd: string, posixCwd = false): string {
 
 function claudeTranscriptPath(cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): string {
   const slug = realCwd(cwd, options.posixCwd).replace(/[^a-zA-Z0-9]/g, '-');
-  return join(options.homeDir ?? homedir(), '.claude', 'projects', slug, `${sessionId}.jsonl`);
+  return join(options.claudeConfigDir ?? join(options.homeDir ?? homedir(), '.claude'), 'projects', slug, `${sessionId}.jsonl`);
 }
 
 function findCodexTranscript(sessionId: string, options: TranscriptLookupOptions = {}): string | null {
-  const root = join(options.homeDir ?? homedir(), '.codex', 'sessions');
+  const root = join(options.codexHome ?? join(options.homeDir ?? homedir(), '.codex'), 'sessions');
   if (!existsSync(root)) return null;
   const walk = (dir: string, depth: number): string | null => {
     if (depth > 4) return null;
@@ -1086,7 +1087,7 @@ function candidateTranscriptPaths(storage: string | undefined, cwd: string, sinc
   }
   if (storage === 'codex-rollout-jsonl') {
     const targetCwd = realCwd(cwd, options.posixCwd);
-    return recentFiles(join(options.homeDir ?? homedir(), '.codex', 'sessions'), since, 4, (name, path) => (
+    return recentFiles(join(options.codexHome ?? join(options.homeDir ?? homedir(), '.codex'), 'sessions'), since, 4, (name, path) => (
       name.startsWith('rollout-') && name.endsWith('.jsonl') && codexTranscriptCwd(path, options) === targetCwd
     ));
   }
@@ -1107,8 +1108,8 @@ function candidateSessionIds(
 ): string[] {
   const ids: string[] = [];
   const exclude = new Set<string>(preferredSessionId ? [preferredSessionId] : []);
-  const tracker = options.homeDir || options.posixCwd
-    ? new AgentSessionTracker(options.homeDir ?? homedir(), options.posixCwd ? posix.normalize : null)
+  const tracker = options.homeDir || options.posixCwd || options.claudeConfigDir || options.codexHome
+    ? new AgentSessionTracker(options.homeDir ?? homedir(), options.posixCwd ? posix.normalize : null, options)
     : agentSessionTracker;
   for (let index = 0; index < 12; index += 1) {
     const id = tracker.findLatestAgentSessionId(storage, cwd, exclude);
@@ -1296,8 +1297,8 @@ async function conversationTail(
   const actualCwd = await transcriptCwd(cwd, options.posixCwd);
   const home = options.homeDir ?? homedir();
   const root = storage === 'claude-project-jsonl'
-    ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
-    : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
+    ? join(options.claudeConfigDir ?? join(home, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
+    : storage === 'codex-rollout-jsonl' ? join(options.codexHome ?? join(home, '.codex'), 'sessions')
       : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
   const path = storage === 'claude-project-jsonl' ? join(root, `${sessionId}.jsonl`)
     : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
@@ -1409,8 +1410,8 @@ async function findFileTurn(
   const actualCwd = await transcriptCwd(cwd, options.posixCwd);
   const home = options.homeDir ?? homedir();
   const root = storage === 'claude-project-jsonl'
-    ? join(home, '.claude', 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
-    : storage === 'codex-rollout-jsonl' ? join(home, '.codex', 'sessions')
+    ? join(options.claudeConfigDir ?? join(home, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
+    : storage === 'codex-rollout-jsonl' ? join(options.codexHome ?? join(home, '.codex'), 'sessions')
       : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
   const read = async (path: string, sessionId: string) => {
     const revision = await transcriptRevision(path, since);
@@ -1610,17 +1611,17 @@ export async function findReplyToPrompt(
  * Ultima resposta do agente pelo transcrito da CLI (null = indisponivel —
  * quem chama cai na raspagem de tela como fallback).
  */
-export async function lastReplyText(provider: string, cwd: string, sessionId: string): Promise<string | null> {
+export async function lastReplyText(provider: string, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): Promise<string | null> {
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
     if (storage === 'claude-project-jsonl') {
-      const path = claudeTranscriptPath(cwd, sessionId);
+      const path = claudeTranscriptPath(cwd, sessionId, options);
       if (!existsSync(path)) return null;
       const jsonl = readTail(path);
       return jsonl ? parseClaudeTranscriptReply(jsonl) : null;
     }
     if (storage === 'codex-rollout-jsonl') {
-      const path = findCodexTranscript(sessionId);
+      const path = findCodexTranscript(sessionId, options);
       if (!path) return null;
       const jsonl = readTail(path);
       return jsonl ? parseCodexTranscriptReply(jsonl) : null;

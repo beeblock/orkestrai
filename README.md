@@ -827,7 +827,12 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   data. New agents inherit their same-CLI leader's account in Canvas, teams,
   presets and CLI/MCP recruitment. Explicit selections take priority; use
   `recruit --default-profile` (MCP: `defaultProfile: true`) to deliberately use
-  the default account. Existing agents keep their accounts.
+  the default account. Existing agents keep their accounts. Switching one Claude
+  agent between your own profiles now retains its exact saved conversation, tool
+  results and tasks. Credentials and unrelated sessions are never copied. Native
+  and WSL reads follow the selected profile; conflicting destination history
+  aborts the change. CLI/MCP: `agent-profile --profile <name> --task <id>` /
+  `agent_profile_switch` (specialists: self; authenticated leaders: teammates).
 - **Personal agent toolbar:** choose any service from one compact Agents menu
   and pin up to four ready favorites globally across workspaces and restarts.
 - **Replaceable providers:** switch a team member from Claude to Codex, Kimi, or

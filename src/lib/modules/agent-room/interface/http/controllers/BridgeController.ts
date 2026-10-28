@@ -1,3 +1,7 @@
+import { ChangeTerminalProviderDto } from '../../../application/dto/WorkspaceDtos.js';
+import { SwitchAgentProfileRequest } from '../requests/SwitchAgentProfileRequest.js';
+import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { providerProfileService } from '$lib/modules/agent-room/application/services/ProviderProfileService.js';
 import { adventureService } from '../../../application/services/AdventureService.js';
 import { AdventureError } from '../../../domain/adventure/engine.js';
 import { bridgeAdventureActionSchema } from '../../../contracts/schemas/adventure.schema.js';
@@ -1650,6 +1654,30 @@ export class BridgeController extends Controller {
     } catch (error) {
       return this.errorResponse(error, 'Falha ao atualizar o estado do agente.');
     }
+  }
+
+  async switchAgentProfile(event: any) {
+    try {
+      const input = await SwitchAgentProfileRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const actor = await this.resolveAgentActor(workspace.id, input.from);
+      const authenticated = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!authenticated || authenticated !== actor) return this.json({ error: 'Account changes require the active agent terminal identity.' }, 403);
+      const target = input.agent ? await this.resolveAgentActor(workspace.id, input.agent) : actor;
+      const origin = await workspaceRepository.getNode(actor);
+      if (target !== actor && !(origin?.payload as { maestro?: boolean } | undefined)?.maestro) return this.json({ error: 'A specialist can change only its own account.' }, 403);
+      const task = (await taskBoardService.list(workspace.id)).find(item => item.id === input.taskId);
+      if (!task || task.assigneeNodeId !== actor || ['todo', 'done'].includes(task.status)) return this.json({ error: 'Account changes require an active assigned task.' }, 403);
+      if (!(await autonomyPolicyService.runWindow(workspace.id, 'agent_profile_change')).allowed) return this.json({ error: 'Workspace execution is paused.' }, 403);
+      const node = await workspaceRepository.getNode(target);
+      const payload = node?.payload as { provider?: string; agentSessionId?: string } | undefined;
+      if (!payload?.provider) throw new Error('The target has no provider.');
+      const profile = input.profile ? await providerProfileService.resolveByIdOrName(payload.provider, input.profile) : null;
+      if (input.profile && !profile) throw new Error('Profile not found for this provider.');
+      const changed = await workspaceService.changeTerminalProvider(ChangeTerminalProviderDto.from(workspace.id, target, { provider: payload.provider, profileId: profile?.id ?? null }));
+      return this.json({ data: { nodeId: target, provider: payload.provider, profileId: profile?.id ?? null,
+        conversationPreserved: Boolean(payload.agentSessionId && (changed?.payload as { agentSessionId?: string } | undefined)?.agentSessionId === payload.agentSessionId) } });
+    } catch (error) { return this.errorResponse(error, 'Account change failed.'); }
   }
 
   async recruit(event: any) {

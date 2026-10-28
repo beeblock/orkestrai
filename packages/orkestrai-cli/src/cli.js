@@ -134,6 +134,7 @@ Uso:
   orkestrai close-question <perguntaId> <resposta ou motivo>
   orkestrai escalate-question <perguntaId> <por que so o dono decide>
   orkestrai status <starting|working|waiting_input|waiting_permission|blocked|idle|done|error|disconnected> [acao] [--task <id>]
+  orkestrai agent-profile [agente] --profile <nome-ou-id> | --default-profile --task <id> [--json]
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome> | --default-profile] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
   orkestrai connect <de> <para> --from <maestro>
@@ -1830,6 +1831,17 @@ async function runCommand(argv, options, sink) {
         return 0;
       }
       throw new Error('Uso: orkestrai design <list|read|audit|template|apply|import-code|generate> ...');
+    }
+    case 'agent-profile': {
+      const [target] = rest;
+      if (!flags.from || !flags.task || (!flags.profile && !flags['default-profile']) || (flags.profile && flags['default-profile'])) {
+        throw new Error('Usage: orkestrai agent-profile [agent] --profile <name-or-id>|--default-profile --task <id>');
+      }
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/agent-profile', {
+        from: flags.from, agent: target, profile: flags['default-profile'] ? null : flags.profile, taskId: flags.task,
+      });
+      out(JSON.stringify(data, null, 2));
+      return 0;
     }
     case 'recruit': {
       const [title] = rest;

@@ -8,6 +8,24 @@ import { PtySessionManager, type PtyOutputMark } from '$lib/modules/agent-room/i
  */
 describe('PtySessionManager', () => {
   afterEach(() => vi.unstubAllEnvs());
+  it('removes inherited account tokens before spawning a named profile, preserving unrelated environment', () => {
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'account-a-fixture');
+    let childEnv: Record<string, string> = {};
+    const fakePty = { write() {}, resize() {}, kill() {}, pid: 1,
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }) };
+    const manager = new PtySessionManager(((_command, _args, options) => {
+      childEnv = options.env as Record<string, string>; return fakePty;
+    }) as unknown as typeof spawn);
+    const session = manager.create({ command: '/bin/cat', cwd: '/tmp', profileId: 'b',
+      env: { CLAUDE_CONFIG_DIR: '/tmp/profile-b', ANTHROPIC_API_KEY: 'account-a-fixture', KEEP_ME: 'yes' },
+      unsetEnvKeys: ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'] });
+    try {
+      expect(childEnv).toMatchObject({ CLAUDE_CONFIG_DIR: '/tmp/profile-b', KEEP_ME: 'yes' });
+      expect(childEnv).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN');
+      expect(childEnv).not.toHaveProperty('ANTHROPIC_API_KEY');
+    } finally { manager.kill(session.id); }
+  });
+
   it.each(['\x1b[1;1R', '\x1b[I', '\x1b[O', '\x1b[<0;10;20M', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\', '\x1bOA'])('does not mistake fragmented terminal controls for a human draft: %j', async control => {
     vi.useFakeTimers();
     const writes: string[] = [];

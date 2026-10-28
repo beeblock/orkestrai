@@ -88,7 +88,7 @@ export class TerminalMirrorService {
     const turnStarted = await latestTurnStartedAt(context.provider, context.cwd, context.agentSessionId, context.options);
     if (turnStarted === null || turnStarted < at) return false;
     if (!(await latestTurnComplete(context.provider, context.cwd, context.agentSessionId, context.options))) return false;
-    const text = await lastReplyText(context.provider, context.cwd, context.agentSessionId);
+    const text = await lastReplyText(context.provider, context.cwd, context.agentSessionId, context.options);
     if (!text?.trim()) return false;
     await channelService.recordTerminalReply(workspaceId, nodeId, text, messageId);
     return true;

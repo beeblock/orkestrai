@@ -22,12 +22,15 @@
 import { existsSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
+import { homedir } from 'node:os';
+import { profileTransitions } from './ProfileTransitions.ts';
+import { agentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import type { WebSocket } from 'ws';
 import { ptySessionManager } from './PtySessionManager.ts';
 import { agentSessionTracker, agentSessionTrackerForRuntime, type AgentSessionTracker } from './AgentSessionTracker.ts';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { executionRuntimeKey } from '../../domain/runtime.ts';
-import { preflightWslLaunch, WslLaunchError, type WslTrackingContext } from '../WslRuntime.ts';
+import { preflightWslLaunch, wslHostPath, WslLaunchError, type WslTrackingContext } from '../WslRuntime.ts';
 import {
   codexMcpLaunchForRuntime,
   codexMcpOverrideArgs,
@@ -70,6 +73,8 @@ const wsGlobal = globalThis as unknown as {
   __orkestraiWsClients?: Set<WebSocket>;
   __orkestraiWsSubscriptions?: WeakMap<WebSocket, { events: Set<string>; workspaceId?: string }>;
   __orkestraiBroadcast?: (payload: Record<string, unknown>) => void;
+  __orkestraiProfileAuthenticationKeys?: (providerId: string) => string[];
+  __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
 };
@@ -186,6 +191,15 @@ export function handlePtyConnection(socket: WebSocket): void {
             }
           }
 
+          if (message.workspaceId && message.nodeId && message.provider) {
+            await profileTransitions().get(message.nodeId)?.catch(() => {});
+            if (wsGlobal.__orkestraiValidateNodeProfile && !(await wsGlobal.__orkestraiValidateNodeProfile(
+              message.workspaceId, message.nodeId, message.provider, message.profileId ?? null))) {
+              send({ type: 'error', code: 'AGENT_PROFILE_CHANGED', message: 'AGENT_PROFILE_CHANGED' });
+              break;
+            }
+          }
+
           const conversationArgs = Array.isArray(message.conversationArgs) ? message.conversationArgs.map(String) : [];
           const resumedSessionId = typeof message.agentSessionId === 'string' && conversationArgs.includes(message.agentSessionId)
             ? message.agentSessionId
@@ -199,6 +213,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             let existing = live.find(
               (session) => session.command === expectedCommand
                 && (session.provider ?? null) === expectedProvider
+                && (session.profileId ?? null) === (message.profileId ?? null)
                 && session.runtimeKey === expectedRuntime,
             );
             const expectedAgentSessionId = resumedSessionId;
@@ -210,7 +225,8 @@ export function handlePtyConnection(socket: WebSocket): void {
                 send({ type: 'error', code: 'AGENT_SESSION_IN_USE', message: 'This conversation already belongs to another active agent. Its terminal was preserved.' });
                 return true;
               }
-              existing = conversationSessions.find(session => session.command === expectedCommand);
+              existing = conversationSessions.find(session => session.command === expectedCommand
+                && (session.profileId ?? null) === (message.profileId ?? null));
               if (existing && !ptySessionManager.claimNode(existing.id, message.workspaceId, message.nodeId)) {
                 send({ type: 'error', code: 'AGENT_SESSION_IN_USE', message: 'This conversation already belongs to another active agent. Its terminal was preserved.' });
                 return true;
@@ -244,14 +260,6 @@ export function handlePtyConnection(socket: WebSocket): void {
                 workspaceRoot: typeof message.workspaceRoot === 'string' ? message.workspaceRoot : undefined,
               })
             : null;
-          const tracker = wslContext && message.runtime?.kind === 'wsl'
-            ? agentSessionTrackerForRuntime(
-                `${message.runtime.distribution}:${wslContext.homeHostPath}`,
-                wslContext.homeHostPath,
-                (cwd) => posix.normalize(cwd),
-              )
-            : agentSessionTracker;
-          if (resumedSessionId) tracker.claim(resumedSessionId);
           const runtime = message.runtime ?? { kind: 'native' as const };
           const messageArgs = Array.isArray(message.args) ? message.args.map(String) : [];
           const providerArgs = message.provider === 'codex'
@@ -271,6 +279,25 @@ export function handlePtyConnection(socket: WebSocket): void {
             profileEnv = await resolveProfileEnv(message.profileId, message.provider, {
               runtimeHome: wslContext?.linuxHomePath,
             });
+          }
+
+          const roots = agentStorageRoots({ ...(runtime.kind === 'native' ? process.env : {}), ...message.env, ...profileEnv },
+            wslContext?.linuxWorkingDir ?? resolvedCwd, runtime.kind === 'wsl' ? path => wslHostPath(runtime.distribution, path) : null);
+          const tracker = wslContext || Object.keys(roots).length
+            ? agentSessionTrackerForRuntime(runtime.kind === 'wsl' ? `${runtime.distribution}:${wslContext!.homeHostPath}` : 'native',
+                wslContext?.homeHostPath ?? homedir(), runtime.kind === 'wsl' ? posix.normalize : null, roots)
+            : agentSessionTracker;
+          if (resumedSessionId) tracker.claim(resumedSessionId);
+
+          // Profile lookup/preflight yields. A stale reconnect must never retire
+          // the replacement process that another account change just started.
+          if (message.workspaceId && message.nodeId && message.provider) {
+            const valid = !wsGlobal.__orkestraiValidateNodeProfile || await wsGlobal.__orkestraiValidateNodeProfile(
+              message.workspaceId, message.nodeId, message.provider, message.profileId ?? null);
+            if (!valid || profileTransitions().has(message.nodeId)) {
+              send({ type: 'error', code: 'AGENT_PROFILE_CHANGED', message: 'AGENT_PROFILE_CHANGED' });
+              break;
+            }
           }
 
           // A concurrent renderer may have created the PTY while preflight or
@@ -304,11 +331,13 @@ export function handlePtyConnection(socket: WebSocket): void {
               ...(bridgeAgentToken ? { ORKESTRAI_AGENT_TOKEN: bridgeAgentToken } : {}),
             },
             forwardEnvToWsl: Object.keys(profileEnv),
+            unsetEnvKeys: message.profileId && message.provider ? wsGlobal.__orkestraiProfileAuthenticationKeys?.(message.provider).filter(key => !Object.hasOwn(profileEnv, key)) : [],
             label: typeof message.label === 'string' ? message.label : null,
             workspace: typeof message.workspace === 'string' ? message.workspace : null,
             workspaceId: typeof message.workspaceId === 'string' ? message.workspaceId : null,
             nodeId: typeof message.nodeId === 'string' ? message.nodeId : null,
             provider: typeof message.provider === 'string' ? message.provider : null,
+            profileId: message.profileId ?? null,
             runtime: message.runtime,
             workspaceRoot: typeof message.workspaceRoot === 'string' ? message.workspaceRoot : undefined,
             transcriptHome: wslContext?.homeHostPath,

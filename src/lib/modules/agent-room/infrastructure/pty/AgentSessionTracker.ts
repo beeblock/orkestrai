@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import type { AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 
 type ReadonlySqliteDatabase = {
   prepare(sql: string): { all(...params: unknown[]): unknown[] };
@@ -53,10 +54,12 @@ export class AgentSessionTracker {
       nao podem receber o mesmo session-id. */
   private claimed = new Set<string>();
   private readonly homeDir: string;
+  private readonly storageRoots: AgentStorageRoots;
   private readonly cwdNormalizer: ((cwd: string) => string) | null;
 
-  constructor(homeDir = homedir(), cwdNormalizer: ((cwd: string) => string) | null = null) {
+  constructor(homeDir = homedir(), cwdNormalizer: ((cwd: string) => string) | null = null, storageRoots: AgentStorageRoots = {}) {
     this.homeDir = homeDir;
+    this.storageRoots = storageRoots;
     this.cwdNormalizer = cwdNormalizer;
   }
 
@@ -104,7 +107,7 @@ export class AgentSessionTracker {
     if (storage !== 'claude-project-jsonl') return null;
     try {
       const slug = this.realCwd(cwd).replace(/[^a-zA-Z0-9]/g, '-');
-      const transcript = join(this.homeDir, '.claude', 'projects', slug, `${agentSessionId}.jsonl`);
+      const transcript = join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', slug, `${agentSessionId}.jsonl`);
       if (!existsSync(transcript)) return false;
       const stat = statSync(transcript);
       return stat.isFile() && this.isResumableClaudeTranscript(transcript, agentSessionId, stat.size);
@@ -249,7 +252,7 @@ export class AgentSessionTracker {
   // -Users-x no macOS). So ':' '/' '\' nao basta: cobre '.', '_', espaco etc.
   private findClaudeSession(cwd: string, since: number, exclude: Set<string>, strategy: 'oldest' | 'newest'): string | null {
     const slug = this.realCwd(cwd).replace(/[^a-zA-Z0-9]/g, '-');
-    const dir = join(this.homeDir, '.claude', 'projects', slug);
+    const dir = join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', slug);
     const pick = strategy === 'oldest' ? this.oldestFile : this.newestFile;
     const found = pick.call(this, dir, since, (name) => {
       const agentSessionId = name.replace(/\.jsonl$/, '');
@@ -291,7 +294,7 @@ export class AgentSessionTracker {
 
   // ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
   private findCodexSession(cwd: string, since: number, exclude: Set<string>, strategy: 'oldest' | 'newest'): string | null {
-    const root = join(this.homeDir, '.codex', 'sessions');
+    const root = join(this.storageRoots.codexHome ?? join(this.homeDir, '.codex'), 'sessions');
     const targetCwd = this.realCwd(cwd);
     const uuidOf = (name: string) =>
       name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/)?.[1] ?? null;
@@ -634,11 +637,12 @@ const trackerGlobal = globalThis as typeof globalThis & {
 
 export const agentSessionTracker = trackerGlobal.__orkestraiAgentSessionTracker ??= new AgentSessionTracker();
 
-export function agentSessionTrackerForRuntime(key: string, homeDir: string, normalizeCwd: (cwd: string) => string): AgentSessionTracker {
+export function agentSessionTrackerForRuntime(key: string, homeDir: string, normalizeCwd: ((cwd: string) => string) | null, storageRoots: AgentStorageRoots = {}): AgentSessionTracker {
+  if (Object.keys(storageRoots).length) key += `:${JSON.stringify(storageRoots)}`;
   const trackers = trackerGlobal.__orkestraiRuntimeSessionTrackers ??= new Map();
   const existing = trackers.get(key);
   if (existing) return existing;
-  const tracker = new AgentSessionTracker(homeDir, normalizeCwd);
+  const tracker = new AgentSessionTracker(homeDir, normalizeCwd, storageRoots);
   trackers.set(key, tracker);
   return tracker;
 }

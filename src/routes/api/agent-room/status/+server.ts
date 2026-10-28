@@ -32,6 +32,7 @@ export const GET: RequestHandler = async ({ url }) => {
         id: adapter.id,
         displayName: adapter.displayName,
         supportsResume: adapter.supportsResume,
+        supportsProfileSessionTransfer: adapter.supportsProfileSessionTransfer ?? false,
         efforts: adapter.efforts,
         sessionStorage: adapter.sessionStorage,
         setup: adapter.setup,

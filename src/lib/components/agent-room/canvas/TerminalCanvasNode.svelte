@@ -294,6 +294,7 @@
   const agentRuntimeSleeping = $derived(Boolean(currentProvider && agentRuntimeMode === 'on_demand' && !data.payload.sessionId && !forceRespawn));
   const currentProfileId = $derived((data.payload as TerminalNodePayload).profileId ?? null);
   const availableProviders = $derived(runtimeProviders.length ? runtimeProviders : (data.providers ?? []));
+  const keepsProfileContext = $derived(availableProviders.find((provider: AgentProviderInfo) => provider.id === currentProvider)?.supportsProfileSessionTransfer ?? false);
   const currentProviderStrategy = $derived(availableProviders.find((provider: AgentProviderInfo) => provider.id === currentProvider)?.profileStrategy ?? null);
   const runtimeOverride = $derived((data.payload as TerminalNodePayload).executionRuntime ?? null);
   const runtimeTitle = $derived(
@@ -322,8 +323,14 @@
     try {
       forceRespawn = false;
       await data.onProviderChange?.(id, provider, profileId, profileLabel);
-    } catch {
-      providerError = m['term.provider_switch_error']();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '';
+      providerError = detail.includes('PROFILE_SESSION_OWNER_DRAFT') ? m['term.profile_context_draft']()
+        : detail.includes('PROFILE_SESSION_CONFLICT') ? m['term.profile_context_conflict']()
+        : detail.includes('PROFILE_SAVED_CONVERSATION_UNAVAILABLE') ? m['term.profile_context_unavailable']()
+          : detail.includes('PROFILE_SESSION_NO_SPACE') ? m['term.profile_context_space']()
+            : detail.includes('PROFILE_SESSION_UNSAFE_PATH') ? m['term.profile_context_unsafe']()
+              : detail.includes('PROFILE_') ? m['term.profile_context_error']() : m['term.provider_switch_error']();
       setTimeout(() => (providerError = ''), 6_000);
     } finally {
       switchingProvider = false;
@@ -788,7 +795,10 @@
               <UserRound size={14} />
               {m['term.profile_switch']()}
             </DropdownMenu.SubTrigger>
-            <DropdownMenu.SubContent sideOffset={6} class="w-52">
+            <DropdownMenu.SubContent sideOffset={6} class="w-64">
+              <DropdownMenu.Label class="whitespace-normal text-ui-xs font-normal text-[var(--app-text-muted)]">
+                {keepsProfileContext ? m['term.profile_keeps_context']() : m['term.profile_starts_fresh']()}
+              </DropdownMenu.Label>
               <DropdownMenu.RadioGroup
                 value={currentProfileId ?? '__default__'}
                 onValueChange={(value: string) => changeProfile(value === '__default__' ? null : value)}

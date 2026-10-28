@@ -1,3 +1,4 @@
+import { getAgentAdapter } from '$lib/modules/agent-room/application/adapters/registry.js';
 import { mobileAccessService } from '$lib/modules/agent-room/application/services/MobileAccessService.js';
 /**
  * SvelteKit Server Hooks — Svelar middleware pipeline
@@ -33,8 +34,17 @@ const globalRef = globalThis as unknown as {
   __orkestraiRoutineScheduler?: boolean;
   __orkestraiAgentRuntimeSupervisor?: boolean;
   __orkestraiComputerObserver?: boolean;
+  __orkestraiProfileAuthenticationKeys?: (providerId: string) => string[];
+  __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
+};
+globalRef.__orkestraiProfileAuthenticationKeys = provider => getAgentAdapter(provider).profileAuthenticationEnvKeys ?? [];
+globalRef.__orkestraiValidateNodeProfile = async (workspaceId, nodeId, provider, profileId) => {
+  const node = await workspaceRepository.getNode(nodeId);
+  const payload = node?.payload as { provider?: string; profileId?: string | null } | undefined;
+  return node?.workspaceId === workspaceId && node.type === 'terminal'
+    && payload?.provider === provider && (payload.profileId ?? null) === profileId;
 };
 globalRef.__orkestraiResolveProviderProfileEnv = (profileId, providerId, options) =>
   providerProfileService.resolveEnv(profileId, providerId, options);

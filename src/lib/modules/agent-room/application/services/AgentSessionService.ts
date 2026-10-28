@@ -1,4 +1,7 @@
+import { profileTransitions } from '../../infrastructure/pty/ProfileTransitions.js';
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
 import { join, posix } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infrastructure/pty/AgentSessionTracker.js';
@@ -70,6 +73,7 @@ export class AgentSessionService {
   }
 
   async ensure(workspaceId: string, nodeId: string, options: { requireResume?: boolean } = {}): Promise<EnsuredAgentSession> {
+    await profileTransitions().get(nodeId)?.catch(() => {});
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
     if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
@@ -84,6 +88,7 @@ export class AgentSessionService {
     const compatibleLiveSession = liveNodeSessions.find(
       (session) => session.command === payload.command
         && (session.provider ?? null) === (payload.provider ?? null)
+        && (session.profileId ?? null) === (payload.profileId ?? null)
         && session.runtimeKey === executionRuntimeKey(runtime),
     );
     if (compatibleLiveSession) {
@@ -105,7 +110,8 @@ export class AgentSessionService {
       || (session.nodeId && session.nodeId !== target.id))) {
       throw new Error('AGENT_SESSION_IN_USE');
     }
-    const conversationSession = conversationSessions.find(session => session.command === payload.command) ?? null;
+    const conversationSession = conversationSessions.find(session => session.command === payload.command
+      && (session.profileId ?? null) === (payload.profileId ?? null)) ?? null;
     if (conversationSession) {
       if (!ptySessionManager.claimNode(conversationSession.id, workspaceId, target.id)) {
         throw new Error('AGENT_SESSION_IN_USE');
@@ -123,7 +129,10 @@ export class AgentSessionService {
     if (liveNodeSessions.length) ptySessionManager.killNode(workspaceId, target.id);
 
     const existing = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
-    if (existing && !existing.exited && ptySessionManager.claimNode(existing.id, workspaceId, target.id)) {
+    if (existing && !existing.exited && ((existing.provider ?? null) === (payload.provider ?? null)
+      || (!existing.provider && !hasAgentAdapter(payload.provider ?? '')))
+      && (existing.profileId ?? null) === (payload.profileId ?? null) && existing.runtimeKey === executionRuntimeKey(runtime)
+      && ptySessionManager.claimNode(existing.id, workspaceId, target.id)) {
       return { nodeId: target.id, sessionId: existing.id, state: 'existing' };
     }
     const command = payload.command;
@@ -140,17 +149,16 @@ export class AgentSessionService {
     const wslContext = runtime.kind === 'wsl'
       ? await preflightWslLaunch({ runtime, command, hostCwd: cwd, workspaceRoot: workspace.workingDir })
       : null;
-    const tracker = wslContext && runtime.kind === 'wsl'
-      ? agentSessionTrackerForRuntime(
-          `${runtime.distribution}:${wslContext.homeHostPath}`,
-          wslContext.homeHostPath,
-          (candidate) => posix.normalize(candidate),
-        )
-      : agentSessionTracker;
     const trackingCwd = wslContext?.linuxWorkingDir ?? cwd;
     const profileEnv = payload.profileId && payload.provider
       ? await providerProfileService.resolveEnv(payload.profileId, payload.provider, { runtimeHome: wslContext?.linuxHomePath })
       : {};
+    const roots = agentStorageRoots({ ...(runtime.kind === 'native' ? process.env : {}), ...payload.env, ...profileEnv }, trackingCwd,
+      runtime.kind === 'wsl' ? path => wslHostPath(runtime.distribution, path) : null);
+    const tracker = wslContext || Object.keys(roots).length
+      ? agentSessionTrackerForRuntime(runtime.kind === 'wsl' ? `${runtime.distribution}:${wslContext!.homeHostPath}` : 'native',
+          wslContext?.homeHostPath ?? homedir(), runtime.kind === 'wsl' ? posix.normalize : null, roots)
+      : agentSessionTracker;
     const codexHome = profileEnv.CODEX_HOME ?? payload.env?.CODEX_HOME ?? (runtime.kind === 'native' ? process.env.CODEX_HOME : undefined);
     const selected = await restoreAgentLaunchSelection(payload as Record<string, unknown>, trackingCwd,
       { homeDir: wslContext?.homeHostPath, posixCwd: runtime.kind === 'wsl',
@@ -190,6 +198,14 @@ export class AgentSessionService {
       : join(workspace.workingDir, '.orkestrai', 'workspace.json');
     const bridgeAgentToken = randomUUID();
     const autonomyPolicy = await autonomyPolicyService.get(workspaceId);
+    const latestNode = await workspaceRepository.getNode(target.id);
+    if (!latestNode || latestNode.workspaceId !== workspaceId) throw new Error('AGENT_NOT_FOUND');
+    const latestPayload = latestNode.payload as AgentNodePayload;
+    const transition = profileTransitions().get(target.id);
+    if (transition || latestPayload.provider !== payload.provider || (latestPayload.profileId ?? null) !== (payload.profileId ?? null)) {
+      await transition?.catch(() => {});
+      return this.ensure(workspaceId, nodeId, options);
+    }
     // Preflight/profile/policy I/O yields to other wake requests and the WS
     // launcher. Check ownership again with no await before the actual spawn.
     const appearedConversations = payload.provider && activeAgentSessionId
@@ -202,6 +218,7 @@ export class AgentSessionService {
     }
     const appearedNodeSession = ptySessionManager.listLiveForNode(workspaceId, target.id).some(session =>
       session.command === payload.command && (session.provider ?? null) === (payload.provider ?? null)
+        && (session.profileId ?? null) === (payload.profileId ?? null)
       && session.runtimeKey === executionRuntimeKey(runtime));
     if (appearedNodeSession || appearedConversations.some(session => session.command === payload.command)) {
       return this.ensure(workspaceId, nodeId, options);
@@ -222,6 +239,7 @@ export class AgentSessionService {
       workspaceId,
       nodeId: target.id,
       provider: payload.provider ?? null,
+      profileId: payload.profileId ?? null,
       env: {
         ...(payload.env ?? {}),
         ...profileEnv,
@@ -232,6 +250,7 @@ export class AgentSessionService {
         ORKESTRAI_POLICY_ENVELOPE: autonomyPolicyService.envelope(autonomyPolicy),
       },
       forwardEnvToWsl: [...Object.keys(profileEnv), 'ORKESTRAI_POLICY_ENVELOPE'],
+      unsetEnvKeys: payload.profileId ? adapter?.profileAuthenticationEnvKeys?.filter(key => !Object.hasOwn(profileEnv, key)) : [],
       runtime,
       workspaceRoot: workspace.workingDir,
       transcriptHome: wslContext?.homeHostPath,

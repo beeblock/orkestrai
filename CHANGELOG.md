@@ -7,6 +7,12 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.48.0 - 2026-10-28
+
+### Added
+
+- Switch a Claude agent between your own account profiles while retaining its exact saved conversation, tool results, role and tasks. Only that conversation is copied; credentials stay in each account. Native and WSL transcript reads follow the selected profile. Conflicting destination histories and unsafe paths are rejected before the old terminal is stopped.
+
 ## 0.47.0 - 2026-10-28
 
 ### Added

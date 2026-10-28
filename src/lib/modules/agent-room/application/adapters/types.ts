@@ -64,6 +64,10 @@ export interface AgentAdapter {
   efforts?: string[];
   /** Layout persistido pela CLI, usado para descobrir o id exato da sessao. */
   sessionStorage?: AgentSessionStorage;
+  /** Copy only this conversation when switching between this provider’s own profiles. */
+  supportsProfileSessionTransfer?: boolean;
+  /** Inherited authentication must not override an explicitly selected account. */
+  profileAuthenticationEnvKeys?: string[];
   /** Guia oficial e instaladores exibidos pela Central de Providers. */
   setup: AgentProviderSetup;
   /** Mecanismo oficial de multi-conta dessa CLI (ou 'unsupported'). */

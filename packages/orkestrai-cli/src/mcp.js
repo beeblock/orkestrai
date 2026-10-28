@@ -380,6 +380,7 @@ const TOOLS = [
   { name: 'notify', description: 'Notificacao nativa de atencao ou conclusao do projeto. task_done ja notifica tarefas.', inputSchema: { type: 'object', properties: { message: { type: 'string' }, kind: { type: 'string', enum: ['info', 'attention', 'project', 'task'] }, title: { type: 'string' } }, required: ['message'] } },
   { name: 'status', description: 'Registra o estado semantico e a acao atual deste agente no Control Center.', inputSchema: { type: 'object', properties: { state: { type: 'string', enum: ['starting', 'working', 'waiting_input', 'waiting_permission', 'blocked', 'idle', 'done', 'error', 'disconnected'] }, action: { type: 'string' }, taskId: { type: 'string' } }, required: ['state'] } },
   { name: 'port', description: 'Devolve uma porta livre para subir servidores.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'agent_profile_switch', description: 'Switch this agent’s account, or another agent as leader, for an active assigned task. Claude keeps the exact saved conversation; divergent destination history is rejected. Never use this to override an owner account restriction.', inputSchema: { type: 'object', properties: { agent: { type: 'string' }, profile: { type: ['string', 'null'], description: 'Profile name/id, or null for the default account.' }, taskId: { type: 'string' } }, required: ['profile', 'taskId'] } },
   { name: 'recruit', description: '(maestro) Recruta agente novo no canvas. Para composição visual, prefira effort medium ou high; xhigh aumenta muito a latência de payloads estruturados.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, provider: { type: 'string', description: 'Id de um provider registrado no Orkestrai.' }, profile: { type: 'string', description: 'Nome ou id de um perfil desse provider. Omitido: herda o perfil do líder da mesma CLI.' }, defaultProfile: { type: 'boolean', description: 'Usa explicitamente a conta padrão da CLI, em vez de herdar a do líder. Não combine com profile.' }, model: { type: 'string' }, effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] }, role: { type: 'string' }, floorId: { type: 'string', description: 'Andar ativo onde o agente deve trabalhar.' } }, required: ['title'] } },
   { name: 'dismiss', description: '(maestro) Dispensa um agente.', inputSchema: { type: 'object', properties: { agent: { type: 'string' } }, required: ['agent'] } },
 ];
@@ -1263,6 +1264,11 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     }
     case 'port':
       return { port: await findFreePort() };
+    case 'agent_profile_switch': {
+      if (!selfAgent) throw new Error('An active agent terminal identity is required.');
+      const profileArgs = /** @type {{agent?: string, profile: string | null, taskId: string}} */ (args);
+      return bridge('POST', '/api/agent-room/bridge/agent-profile', { from: selfAgent, agent: profileArgs.agent, profile: profileArgs.profile, taskId: profileArgs.taskId });
+    }
     case 'recruit': {
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente) — recruit so funciona dentro do terminal do maestro.');
       if (args.profile && args.defaultProfile) throw new Error('Choose either profile or defaultProfile.');

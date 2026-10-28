@@ -14,6 +14,19 @@ import {
 } from '$lib/modules/agent-room/domain/runtime.js';
 
 describe('WSL workspace runtime', () => {
+  it('unsets inherited account credentials after the WSL login shell without embedding values', () => {
+    const launch = buildWslLaunch({ runtime: { kind: 'wsl', distribution: 'Ubuntu', linuxWorkingDir: '/work' }, command: 'claude', args: [], hostCwd: '/work',
+      hostEnv: { CLAUDE_CONFIG_DIR: '/home/test/account-b' }, forwardEnvToWsl: ['CLAUDE_CONFIG_DIR'],
+      unsetEnvKeys: ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN', 'INVALID; touch /tmp/injected'] });
+    const script = launch.args[launch.args.indexOf('-lic') + 1];
+    expect(script).toContain('unset ANTHROPIC_API_KEY;');
+    expect(script).toContain('unset CLAUDE_CODE_OAUTH_TOKEN;');
+    expect(script.indexOf('unset')).toBeLessThan(script.indexOf('exec'));
+    expect(script).not.toContain('INVALID');
+    expect(launch.env.WSLENV).toContain('CLAUDE_CONFIG_DIR');
+    expect(script).not.toContain('/home/test/account-b');
+  });
+
   it('identifies the project host root separately from WSL and never substitutes terminal cwd', () => {
     const native = { id: 'project', name: 'Project', workingDir: '/projects/current', runtimeKind: 'native' as const, wslDistribution: null, wslWorkingDir: null };
     expect(workspaceProjectContext(native)).toEqual(native);

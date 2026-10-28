@@ -11,10 +11,10 @@ import { isPortFree, run } from '../../packages/orkestrai-cli/src/cli.js';
  * Testa a CLI `orkestrai` contra um servidor HTTP falso que emula a bridge.
  */
 describe('orkestrai CLI', () => {
-  let server;
-  let apiUrl;
-  let cwd;
-  const requests = [];
+  let server: ReturnType<typeof createServer>;
+  let apiUrl: string;
+  let cwd: string;
+  const requests: Array<{ method: string | undefined; url: string | undefined; body: any; auth: string | undefined; agentToken: string | string[] | undefined }> = [];
 
   beforeAll(async () => {
     server = createServer((req, res) => {
@@ -778,6 +778,16 @@ describe('orkestrai CLI', () => {
     expect(request.body.floorId).toBe('floor-1');
     expect(request.body.model).toBe('opus');
     expect(request.body.effort).toBe('high');
+  });
+
+  it('switches a named account with task identity and supports an explicit default profile', async () => {
+    await run(['agent-profile', 'Worker', '--profile', 'Work', '--task', 'task-1'], { env: { ORKESTRAI_NODE_ID: 'n1', ORKESTRAI_AGENT_TOKEN: 'terminal-test' }, cwd, out: () => undefined });
+    expect(requests.at(-1)).toMatchObject({ url: '/api/agent-room/bridge/agent-profile', agentToken: 'terminal-test', body: { from: 'n1', agent: 'Worker', profile: 'Work', taskId: 'task-1' } });
+    await run(['agent-profile', '--default-profile', '--task', 'task-1'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out: () => undefined });
+    expect(requests.at(-1).body).toEqual({ from: 'n1', profile: null, taskId: 'task-1' });
+    const before = requests.length;
+    await expect(run(['agent-profile', '--profile', 'Work', '--default-profile', '--task', 'task-1'], { env: { ORKESTRAI_NODE_ID: 'n1' }, cwd, out: () => undefined })).rejects.toThrow('Usage:');
+    expect(requests).toHaveLength(before);
   });
 
   it('recruit rejeita --profile sem --provider antes de chamar a bridge', async () => {

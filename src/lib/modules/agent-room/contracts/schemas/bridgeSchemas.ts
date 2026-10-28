@@ -205,3 +205,13 @@ export const bridgeFloorLandSchema = z.object({
 
 export type BridgeFloorCreateInput = z.infer<typeof bridgeFloorCreateSchema>;
 export type BridgeFloorLandInput = z.infer<typeof bridgeFloorLandSchema>;
+
+/** Authenticated agent identity and task are required before changing an account. */
+export const bridgeProfileSwitchSchema = z.object({
+  token: z.string().trim().min(1).nullish(),
+  from: z.string().trim().min(1),
+  agent: z.string().trim().min(1).optional(),
+  profile: z.string().trim().min(1).nullable(),
+  taskId: z.string().uuid(),
+}).strict();
+export type BridgeProfileSwitchInput = z.infer<typeof bridgeProfileSwitchSchema>;

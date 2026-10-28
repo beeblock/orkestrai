@@ -18,6 +18,8 @@ export const claudeAdapter: AgentAdapter = {
   supportsResume: false,
   efforts: CLAUDE_EFFORTS,
   sessionStorage: 'claude-project-jsonl',
+  supportsProfileSessionTransfer: true,
+  profileAuthenticationEnvKeys: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'],
   profileStrategy: { kind: 'configDir', envVar: 'CLAUDE_CONFIG_DIR', defaultDir: '~/.claude' },
   setup: {
     docsUrl: 'https://code.claude.com/docs/en/setup',

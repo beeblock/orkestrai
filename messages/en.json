@@ -5996,5 +5996,14 @@
   "settings.adventure_position_desc": "Drag the strip by the grip at the left of its panel. At full width it moves up and down and to another display; compact, it goes anywhere on screen. It stays on the desktop even with Orkestrai minimized.",
   "settings.adventure_back_to_dock": "Back to the Dock",
   "adventure.drag_strip": "Drag to move the strip",
-  "adventure.back_to_dock": "Back to the Dock"
+  "adventure.back_to_dock": "Back to the Dock",
+  "term.profile_keeps_context": "Keeps the saved conversation when switching accounts.",
+  "term.profile_starts_fresh": "This provider starts another conversation when switching accounts.",
+  "term.profile_context_conflict": "The destination account has a different version of this conversation. Your current history was preserved.",
+  "term.profile_context_unavailable": "The saved conversation is unavailable. Your current account was kept.",
+  "term.profile_context_space": "There is not enough space to transfer the conversation safely. Your current account was kept.",
+  "term.profile_context_unsafe": "A conversation folder contains an unsupported link or file. Your current account was kept.",
+  "term.profile_context_error": "The conversation could not resume under the other account. Its previous history was preserved.",
+  "term.profile_changed_retry": "This agent’s account changed. Wait for the terminal to refresh.",
+  "term.profile_context_draft": "Send or save the terminal draft before switching accounts."
 }

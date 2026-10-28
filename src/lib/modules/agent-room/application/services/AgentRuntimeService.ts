@@ -370,6 +370,7 @@ export class AgentRuntimeService {
       session.provider ?? payload.provider!, session.transcriptCwd ?? session.cwd,
       session.agentSessionId ?? payload.agentSessionId ?? null,
       {
+        ...ptySessionManager.transcriptStorageRoots(session.id),
         homeDir: session.transcriptHome ?? undefined,
         posixCwd: session.runtimeKey.startsWith('wsl:'),
         processStartedAt: Date.parse(session.createdAt) || undefined,
@@ -466,6 +467,7 @@ export class AgentRuntimeService {
       session.provider ?? payload.provider, session.transcriptCwd ?? session.cwd,
       session.agentSessionId ?? payload.agentSessionId ?? null,
       {
+        ...ptySessionManager.transcriptStorageRoots(session.id),
         homeDir: session.transcriptHome ?? undefined,
         posixCwd: session.runtimeKey.startsWith('wsl:'),
         processStartedAt: Date.parse(session.createdAt) || undefined,

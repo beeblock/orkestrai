@@ -83,6 +83,7 @@ export class AgentTerminalDeliveryService {
         input.message,
         since,
         {
+          ...ptySessionManager.transcriptStorageRoots(session.id),
           homeDir: session.transcriptHome ?? undefined,
           posixCwd: session.runtimeKey.startsWith('wsl:'),
         },
@@ -96,7 +97,8 @@ export class AgentTerminalDeliveryService {
           && Date.now() - submission.boundaryCheckedAt >= 1500 && preferredSessionId) {
           submission.boundaryCheckedAt = Date.now();
           const boundary = await latestTurnBoundary(provider, session.transcriptCwd ?? session.cwd, preferredSessionId, {
-            homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
+            ...ptySessionManager.transcriptStorageRoots(session.id),
+          homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
           });
           if (boundary.ready === true && boundary.finishedAt !== null && boundary.finishedAt < pendingAt) {
             ptySessionManager.retryPendingAutomaticPaste(input.sessionId, pendingAt, boundary.finishedAt);

@@ -1,3 +1,4 @@
+import { agentInboxService } from '../../../application/services/AgentInboxService.js';
 import { Controller } from '@beeblock/svelar/routing';
 import { voiceService } from '$lib/modules/agent-room/application/services/VoiceService.js';
 import { settingsService } from '$lib/modules/agent-room/application/services/SettingsService.js';
@@ -88,8 +89,8 @@ export class VoiceController extends Controller {
       if (!node || node.workspaceId !== workspaceId) return this.json({ data: { text: null } });
       const payload = (node.payload ?? {}) as { provider?: string; agentSessionId?: string; cwd?: string };
       if (!payload.provider || !payload.agentSessionId) return this.json({ data: { text: null } });
-      const cwd = payload.cwd ?? (await workspaceService.get(workspaceId)).workingDir;
-      return this.json({ data: { text: await lastReplyText(payload.provider, cwd, payload.agentSessionId) } });
+      const context = await agentInboxService.transcriptFor(workspaceId, nodeId);
+      return this.json({ data: { text: await lastReplyText(payload.provider, context.cwd, context.agentSessionId ?? payload.agentSessionId, context.options) } });
     } catch {
       return this.json({ data: { text: null } });
     }

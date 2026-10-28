@@ -18,6 +18,10 @@ import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js'
 import { controlCenterService } from './ControlCenterService.js';
 import { floorService } from './FloorService.js';
 import { agentLearningService } from './AgentLearningService.js';
+import { providerProfileService } from './ProviderProfileService.js';
+import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
+import { resolveWslTrackingContext, terminalExecutionRuntime, wslHostPath } from '../../infrastructure/WslRuntime.js';
+import type { TerminalNodePayload } from '../../domain/types.js';
 
 /**
  * Asynchronous per-agent inbox.
@@ -991,7 +995,7 @@ export class AgentInboxService {
 
   private async transcriptContext(workspaceId: string, nodeId: string, session: PtySessionInfo | null): Promise<TranscriptContext> {
     const node = await workspaceRepository.getNode(nodeId);
-    const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
+    const payload = (node?.payload ?? {}) as TerminalNodePayload;
     if (!session) {
       // No live terminal: the saved conversation of the node, in its own folder.
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
@@ -1000,7 +1004,19 @@ export class AgentInboxService {
         const floor = await floorService.get(node.floorId).catch(() => null);
         if (floor?.path) cwd = floor.path;
       }
-      return { provider: payload.provider ?? null, cwd, agentSessionId: payload.agentSessionId ?? null, options: {} };
+      let options: TranscriptLookupOptions = {};
+      if (workspace && payload.provider) {
+        const runtime = terminalExecutionRuntime(workspace, payload);
+        const context = runtime.kind === 'wsl'
+          ? await resolveWslTrackingContext({ runtime, hostCwd: cwd, workspaceRoot: workspace.workingDir }) : null;
+        if (context) cwd = context.linuxWorkingDir;
+        const env = payload.profileId ? await providerProfileService.resolveEnv(payload.profileId, payload.provider,
+          { runtimeHome: context?.linuxHomePath }) : {};
+        options = { homeDir: context?.homeHostPath, posixCwd: runtime.kind === 'wsl',
+          ...agentStorageRoots({ ...(runtime.kind === 'native' ? process.env : {}), ...payload.env, ...env }, cwd,
+            runtime.kind === 'wsl' ? path => wslHostPath(runtime.distribution, path) : null) };
+      }
+      return { provider: payload.provider ?? null, cwd, agentSessionId: payload.agentSessionId ?? null, options };
     }
     let cwd = session.transcriptCwd ?? null;
     if (!cwd) {
@@ -1016,6 +1032,7 @@ export class AgentInboxService {
       cwd,
       agentSessionId: session.agentSessionId ?? agentSessionTracker.agentSessionIdForPty(session.id) ?? payload.agentSessionId ?? null,
       options: {
+        ...ptySessionManager.transcriptStorageRoots(session.id),
         homeDir: session.transcriptHome ?? undefined,
         posixCwd: session.runtimeKey.startsWith('wsl:'),
         processStartedAt: Date.parse(session.createdAt) || undefined,

@@ -5996,5 +5996,14 @@
   "settings.adventure_position_desc": "Arraste a faixa pela alça à esquerda do painel. Na largura de tela inteira ela sobe, desce e passa para outro monitor; compacta, vai para qualquer lugar da tela. Ela continua na área de trabalho mesmo com o Orkestrai minimizado.",
   "settings.adventure_back_to_dock": "Voltar para o Dock",
   "adventure.drag_strip": "Arraste para mover a faixa",
-  "adventure.back_to_dock": "Voltar para o Dock"
+  "adventure.back_to_dock": "Voltar para o Dock",
+  "term.profile_keeps_context": "Mantém a conversa salva ao trocar de conta.",
+  "term.profile_starts_fresh": "Este provider inicia outra conversa ao trocar de conta.",
+  "term.profile_context_conflict": "A conta de destino tem outra versão desta conversa. O histórico atual foi preservado.",
+  "term.profile_context_unavailable": "A conversa salva não está disponível. A conta atual foi mantida.",
+  "term.profile_context_space": "Falta espaço para transferir a conversa com segurança. A conta atual foi mantida.",
+  "term.profile_context_unsafe": "Uma pasta da conversa contém um link ou arquivo incompatível. A conta atual foi mantida.",
+  "term.profile_context_error": "Não foi possível retomar a conversa na outra conta. O histórico anterior foi preservado.",
+  "term.profile_changed_retry": "A conta deste agente mudou. Aguarde a atualização do terminal.",
+  "term.profile_context_draft": "Envie ou guarde o rascunho do terminal antes de trocar de conta."
 }

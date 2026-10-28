@@ -159,6 +159,7 @@
     if (code === 'WSL_COMMAND_NOT_FOUND') return m['term.wsl_command_missing']({ provider: provider ?? m['term.provider_fallback']() });
     if (code === 'WSL_SPAWN_FAILED') return m['term.wsl_start_failed']();
     if (code === 'WORKSPACE_SUSPENDED') return m['term.workspace_suspended']();
+    if (code === 'AGENT_PROFILE_CHANGED') return m['term.profile_changed_retry']();
     if (code === 'AGENT_SESSION_IN_USE') return m['term.conversation_in_use']();
     return String(fallback ?? m['term.ws_error']());
   }

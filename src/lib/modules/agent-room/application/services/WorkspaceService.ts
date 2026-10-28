@@ -1,6 +1,10 @@
 import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
-import { posix, resolve } from 'node:path';
+import { isAbsolute, posix, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
+import { profileSessionContinuityService } from './ProfileSessionContinuityService.js';
+import { profileTransitions } from '../../infrastructure/pty/ProfileTransitions.js';
 import { Connection } from '@beeblock/svelar/database';
 import type { CanvasNodePayload, TerminalNodePayload, Workspace, WorkspaceRepositoryRoot } from '../../domain/types.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
@@ -372,24 +376,24 @@ export class WorkspaceService {
           if (executionRuntime.kind === 'wsl') {
             const hostCwd = floor?.path ?? workspace.workingDir;
             const context = await resolveWslTrackingContext({ runtime: executionRuntime, hostCwd, workspaceRoot: workspace.workingDir });
-            tracker = agentSessionTrackerForRuntime(
-              `${executionRuntime.distribution}:${context.homeHostPath}`,
-              context.homeHostPath,
-              (candidate) => posix.normalize(candidate),
-            );
             trackingCwd = context.linuxWorkingDir;
             trackingHome = context.homeHostPath;
             linuxHome = context.linuxHomePath;
           }
+          const profileEnv = typeof payload.profileId === 'string'
+            ? await providerProfileService.resolveEnv(payload.profileId, provider, { runtimeHome: linuxHome }) : {};
+          const env = payload.env as Record<string, string> | undefined;
+          const roots = agentStorageRoots({ ...(executionRuntime.kind === 'native' ? process.env : {}), ...env, ...profileEnv }, trackingCwd,
+            executionRuntime.kind === 'wsl' ? path => wslHostPath(executionRuntime.distribution, path) : null);
+          if (trackingHome || Object.keys(roots).length) tracker = agentSessionTrackerForRuntime(
+            executionRuntime.kind === 'wsl' ? `${executionRuntime.distribution}:${trackingHome}` : 'native',
+            trackingHome ?? homedir(), executionRuntime.kind === 'wsl' ? posix.normalize : null, roots);
           resumable = tracker.isAgentSessionResumable(
             getAgentAdapter(provider).sessionStorage,
             trackingCwd,
             agentSessionId,
           );
           if (resumable !== false) {
-            const profileEnv = provider === 'codex' && typeof payload.profileId === 'string'
-              ? await providerProfileService.resolveEnv(payload.profileId, provider, { runtimeHome: linuxHome }) : {};
-            const env = payload.env as Record<string, string> | undefined;
             const codexHome = profileEnv.CODEX_HOME ?? env?.CODEX_HOME ?? (executionRuntime.kind === 'native' ? process.env.CODEX_HOME : undefined);
             const selected = await restoreAgentLaunchSelection(payload, trackingCwd, { homeDir: trackingHome, posixCwd: executionRuntime.kind === 'wsl',
               codexHome: codexHome && executionRuntime.kind === 'wsl' ? wslHostPath(executionRuntime.distribution, codexHome) : codexHome });
@@ -577,8 +581,42 @@ export class WorkspaceService {
     return { reloaded: true };
   }
 
-  /** Troca o provider preservando a identidade visual e organizacional do nó. */
+  /** Serialize account changes so two requests cannot branch the same conversation. */
   async changeTerminalProvider(dto: ChangeTerminalProviderDto) {
+    const locks = profileTransitions();
+    const previous = locks.get(dto.nodeId) ?? Promise.resolve();
+    const restart = { needed: false };
+    const next = previous.catch(() => {}).then(() => this.changeTerminalProviderOnce(dto, restart));
+    locks.set(dto.nodeId, next);
+    try {
+      const result = await next;
+      if (locks.get(dto.nodeId) === next) locks.delete(dto.nodeId);
+      if (restart.needed) {
+        const { agentSessionService } = await import('./AgentSessionService.js');
+        const resumed = await agentSessionService.ensure(dto.workspaceId, dto.nodeId, { requireResume: true });
+        // Use the existing recovery queue/deduplication, including in Chat where
+        // no canvas terminal is mounted to restart or nudge this agent.
+        const { taskBoardService } = await import('./TaskBoardService.js');
+        for (const task of (await taskBoardService.list(dto.workspaceId)).filter(task => task.assigneeNodeId === dto.nodeId && !['todo', 'done'].includes(task.status))) {
+          await taskBoardService.recoverBlockedTask({ workspaceId: dto.workspaceId, nodeId: dto.nodeId, taskId: task.id,
+            sessionId: resumed.sessionId, previousState: 'error', previousAction: 'Owner-authorized account change' });
+        }
+      }
+      return result;
+    } catch (error) {
+      if (locks.get(dto.nodeId) === next) locks.delete(dto.nodeId);
+      if ((error as { profileRestartRequired?: boolean }).profileRestartRequired) {
+        const { agentSessionService } = await import('./AgentSessionService.js');
+        await agentSessionService.ensure(dto.workspaceId, dto.nodeId, { requireResume: true }).catch(() => {
+          console.warn('[profile-change] The previous conversation is preserved; its process could not restart.');
+        });
+      }
+      throw error;
+    } finally { if (locks.get(dto.nodeId) === next) locks.delete(dto.nodeId); }
+  }
+
+  /** Troca o provider preservando a identidade visual e organizacional do nó. */
+  private async changeTerminalProviderOnce(dto: ChangeTerminalProviderDto, restart: { needed: boolean }) {
     const node = await workspaceRepository.getNode(dto.nodeId);
     if (!node || node.workspaceId !== dto.workspaceId || node.type !== 'terminal') {
       throw new Error('Terminal não encontrado neste workspace.');
@@ -589,34 +627,100 @@ export class WorkspaceService {
       terminalExecutionRuntime(workspace, node.payload as never),
       () => adapter.detect(),
     );
-    if (!detection.installed) throw new Error(`${adapter.displayName} não está disponível neste dispositivo.`);
+    const configured = node.payload as TerminalNodePayload;
+    const runtime = terminalExecutionRuntime(workspace, configured);
+    const customAvailable = configured.provider === adapter.id && runtime.kind === 'native' && typeof configured.command === 'string'
+      && isAbsolute(configured.command) && await access(configured.command, fsConstants.X_OK).then(() => true, () => false);
+    if (!detection.installed && !customAvailable) throw new Error(`${adapter.displayName} não está disponível neste dispositivo.`);
     // Validate now, but resolve the environment only at PTY spawn time. It may
     // contain credentials and therefore must never enter the persisted payload.
     if (dto.profileId) await providerProfileService.resolveEnv(dto.profileId, adapter.id);
 
     const current = { ...((node.payload ?? {}) as Record<string, unknown>) };
+    const sameProvider = current.provider === adapter.id;
+    if (sameProvider && (current.profileId ?? null) === (dto.profileId ?? null)) return node;
+    const storedSession = typeof current.sessionId === 'string' ? ptySessionManager.get(current.sessionId) : null;
+    if (storedSession && ((storedSession.workspaceId && storedSession.workspaceId !== dto.workspaceId)
+      || (storedSession.nodeId && storedSession.nodeId !== node.id))) throw new Error('PROFILE_SESSION_OWNERSHIP_CONFLICT');
+    const candidates = ptySessionManager.listLiveForNode(dto.workspaceId, node.id).filter(session =>
+      session.provider === current.provider && (session.profileId ?? null) === (current.profileId ?? null));
+    if (!storedSession && candidates.length > 1) throw new Error('PROFILE_SESSION_CHANGED');
+    const session = storedSession ?? candidates[0] ?? null;
+    if (sameProvider && adapter.supportsProfileSessionTransfer && storedSession
+      && (storedSession.provider !== current.provider || (storedSession.profileId ?? null) !== (current.profileId ?? null))) throw new Error('PROFILE_SESSION_CHANGED');
+    const conversationId = session?.agentSessionId ?? (typeof current.agentSessionId === 'string' ? current.agentSessionId : null);
+    const preserving = sameProvider && adapter.supportsProfileSessionTransfer && conversationId;
+    if (sameProvider && session && ptySessionManager.hasUnsubmittedOwnerInput(session.id)) throw new Error('PROFILE_SESSION_OWNER_DRAFT');
+    let transfer: { commit: () => Promise<void> } | null = null;
+    if (preserving) {
+      const runtime = terminalExecutionRuntime(workspace, current as TerminalNodePayload);
+      const floor = node.floorId ? await floorService.get(node.floorId) : null;
+      const hostCwd = floor?.path ?? workspace.workingDir;
+      const context = runtime.kind === 'wsl'
+        ? await resolveWslTrackingContext({ runtime, hostCwd, workspaceRoot: workspace.workingDir }) : null;
+      const cwd = context?.linuxWorkingDir ?? hostCwd;
+      const previousEnv = typeof current.profileId === 'string'
+        ? await providerProfileService.resolveEnv(current.profileId, adapter.id, { runtimeHome: context?.linuxHomePath }) : {};
+      const nextEnv = dto.profileId
+        ? await providerProfileService.resolveEnv(dto.profileId, adapter.id, { runtimeHome: context?.linuxHomePath }) : {};
+      const baseEnv = { ...(runtime.kind === 'native' ? process.env : {}), ...(current.env as Record<string, string> | undefined) };
+      const mapPath = runtime.kind === 'wsl' ? (path: string) => wslHostPath(runtime.distribution, path) : null;
+      const sourceRoots = { ...agentStorageRoots({ ...baseEnv, ...previousEnv }, cwd, mapPath),
+        ...(session && !session.exited ? ptySessionManager.transcriptStorageRoots(session.id) : {}) };
+      const targetPayloadEnv = { ...(current.env as Record<string, string> | undefined) };
+      if (adapter.profileStrategy.kind === 'configDir') delete targetPayloadEnv[adapter.profileStrategy.envVar];
+      const targetRoots = agentStorageRoots({ ...(runtime.kind === 'native' ? process.env : {}), ...targetPayloadEnv, ...nextEnv }, cwd, mapPath);
+      transfer = await profileSessionContinuityService.prepare({ sessionId: conversationId!, cwd,
+        posixCwd: runtime.kind === 'wsl', homeDir: context?.homeHostPath,
+        sourceRoot: sourceRoots.claudeConfigDir, targetRoot: targetRoots.claudeConfigDir });
+    }
+    const wasLive = Boolean(session && !session.exited);
+    restart.needed = Boolean(wasLive && preserving);
+    const exited = preserving && session ? ptySessionManager.whenExited(session.id) : Promise.resolve();
     this.killTerminalSessions(dto.workspaceId, node.id, current);
-    const command = adapter.interactiveCommand();
-    const env = { ...command.env };
-    let payload: Record<string, unknown> = {
-      ...current,
-      provider: adapter.id,
-      profileId: dto.profileId,
-      command: command.command,
-      args: [...command.args],
-      ...(Object.keys(env).length ? { env } : {}),
-    };
-    delete payload.sessionId;
-    delete payload.agentSessionId;
-    if (!Object.keys(env).length) delete payload.env;
-    if (!dto.profileId) delete payload.profileId;
-    const roleName = typeof payload.role === 'string' ? payload.role : null;
-    const role = roleName ? await roleService.launchContext(dto.workspaceId, roleName).catch(() => null) : null;
-    payload = materializeInteractiveAgentCommand(payload, role).payload;
+    try {
+      await exited;
+      await transfer?.commit();
+      const latest = await workspaceRepository.getNode(node.id);
+      const latestPayload = (latest?.payload ?? {}) as Record<string, unknown>;
+      if (!latest || latest.workspaceId !== dto.workspaceId || latestPayload.provider !== current.provider
+        || (latestPayload.profileId ?? null) !== (current.profileId ?? null)
+        || (latestPayload.agentSessionId ?? null) !== (current.agentSessionId ?? null)) throw new Error('PROFILE_SESSION_CHANGED');
+      const command = adapter.interactiveCommand();
+      const env = { ...(sameProvider ? latestPayload.env as Record<string, string> | undefined : {}), ...command.env };
+      if (sameProvider) {
+        for (const key of adapter.profileAuthenticationEnvKeys ?? []) delete env[key];
+        if (adapter.profileStrategy.kind === 'configDir') delete env[adapter.profileStrategy.envVar];
+      }
+      let payload: Record<string, unknown> = {
+        ...latestPayload,
+        provider: adapter.id,
+        profileId: dto.profileId,
+        command: sameProvider && typeof latestPayload.command === 'string' ? latestPayload.command : command.command,
+        args: sameProvider && Array.isArray(latestPayload.args) ? [...latestPayload.args] : [...command.args],
+        ...(Object.keys(env).length ? { env } : {}),
+      };
+      delete payload.sessionId;
+      if (preserving) { payload.agentSessionId = conversationId; payload.resumeRecovery = false; }
+      else delete payload.agentSessionId;
+      if (!Object.keys(env).length) delete payload.env;
+      if (!dto.profileId) delete payload.profileId;
+      const roleName = typeof payload.role === 'string' ? payload.role : null;
+      const role = roleName ? await roleService.launchContext(dto.workspaceId, roleName).catch(() => null) : null;
+      payload = materializeInteractiveAgentCommand(payload, role).payload;
+      if (sameProvider && typeof latestPayload.command === 'string') payload.command = latestPayload.command;
 
-    const updated = await workspaceRepository.updateNode(node.id, { payload: payload as never });
-    this.notifyStructureChanged(dto.workspaceId);
-    return updated;
+      const updated = await workspaceRepository.updateNode(node.id, { payload: payload as never });
+      this.notifyStructureChanged(dto.workspaceId);
+      return updated;
+    } catch (error) {
+      // Restart only after this transition has rejected, so wake requests cannot
+      // race the copy or deadlock awaiting their own profile change.
+      if (wasLive && error instanceof Error && error.message !== 'PROFILE_SESSION_STOP_TIMEOUT') {
+        Object.assign(error, { profileRestartRequired: true });
+      }
+      throw error;
+    }
   }
 
   async changeTerminalRuntime(dto: ChangeTerminalRuntimeDto) {

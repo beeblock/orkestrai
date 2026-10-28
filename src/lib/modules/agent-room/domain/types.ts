@@ -55,6 +55,7 @@ export type AgentProviderInfo = {
   id: AgentProviderId;
   displayName: string;
   supportsResume: boolean;
+  supportsProfileSessionTransfer?: boolean;
   efforts?: string[];
   sessionStorage?: string;
   setup?: AgentProviderSetup;

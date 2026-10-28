@@ -7,7 +7,8 @@ import type { IPty } from 'node-pty';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, resolveCommand } from '../agent-path.ts';
-import { buildWslLaunch } from '../WslRuntime.ts';
+import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
+import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 
@@ -40,6 +41,7 @@ export type PtySessionInfo = {
   nodeId?: string | null;
   /** Provider registrado; ausente em shells puros. */
   provider?: string | null;
+  profileId?: string | null;
   /** Conversa real observada no armazenamento do provider. */
   agentSessionId?: string | null;
   /** Home e cwd usados pelo provider para persistir transcripts (WSL-safe). */
@@ -124,6 +126,8 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
 
 type PtySession = PtySessionInfo & {
   pty: IPty;
+  /** Paths stay server-side; never return profile configuration to WebSocket clients. */
+  storageRoots: AgentStorageRoots;
   /** Per-process bridge credential. It must never leave this private record. */
   bridgeAgentToken: string | null;
   managedStartupState: 'none' | 'submitted' | 'uncertain';
@@ -214,12 +218,14 @@ export type CreatePtySessionInput = {
   env?: Record<string, string>;
   /** Environment names intentionally forwarded into a WSL guest. */
   forwardEnvToWsl?: string[];
+  unsetEnvKeys?: string[];
   /** Rotulos humanos (título do no / workspace) para notificações. */
   label?: string | null;
   workspace?: string | null;
   workspaceId?: string | null;
   nodeId?: string | null;
   provider?: string | null;
+  profileId?: string | null;
   runtime?: WorkspaceExecutionRuntime;
   /** Host path corresponding to runtime.linuxWorkingDir. */
   workspaceRoot?: string;
@@ -379,6 +385,7 @@ export class PtySessionManager {
     const rows = input.rows ?? 30;
 
     const env = { ...agentEnv(), ...input.env } as Record<string, string>;
+    for (const key of input.unsetEnvKeys ?? []) delete env[key];
     // node-pty defines TERM from `name` on Unix, but ConPTY only uses `name`
     // internally and does not expose it to the Windows child process. Full-
     // screen CLIs such as Codex use these capabilities to enable mouse-wheel
@@ -396,6 +403,7 @@ export class PtySessionManager {
           workspaceRoot: input.workspaceRoot,
           hostEnv: env,
           forwardEnvToWsl: input.forwardEnvToWsl,
+          unsetEnvKeys: input.unsetEnvKeys,
         })
       : { ...resolveCommand(input.command, input.args ?? [], env), cwd: input.cwd, env };
     const ptyProcess = this.spawnPty(target.command, target.args, {
@@ -424,11 +432,15 @@ export class PtySessionManager {
       workspaceId: input.workspaceId ?? null,
       nodeId: input.nodeId ?? null,
       provider: input.provider ?? null,
+      profileId: input.profileId ?? null,
       agentSessionId: input.agentSessionId ?? null,
       transcriptHome: input.transcriptHome ?? null,
       transcriptCwd: input.transcriptCwd ?? input.cwd,
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
+      storageRoots: agentStorageRoots({ ...(input.runtime?.kind === 'wsl' ? {} : process.env), ...input.env },
+        input.transcriptCwd ?? input.cwd, input.runtime?.kind === 'wsl'
+          ? path => wslHostPath((input.runtime as Extract<WorkspaceExecutionRuntime, { kind: 'wsl' }>).distribution, path) : null),
       bridgeAgentToken: input.bridgeAgentToken ?? null,
       managedStartupState: 'none',
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
@@ -563,6 +575,15 @@ export class PtySessionManager {
     return Boolean(session.provider && session.conptySubmitGuard);
   }
 
+  hasUnsubmittedOwnerInput(id: string): boolean {
+    const session = this.sessions.get(id);
+    return Boolean(session && (session.humanComposerLength > 0 || session.humanDraft.text.length || session.humanDraft.paste || session.deferredHumanInput.length));
+  }
+
+  transcriptStorageRoots(id: string): AgentStorageRoots {
+    return { ...this.sessions.get(id)?.storageRoots };
+  }
+
   get(id: string): PtySessionInfo | null {
     const session = this.sessions.get(id);
     return session ? this.toInfo(session) : null;
@@ -686,6 +707,17 @@ export class PtySessionManager {
     session.rows = rows;
     session.redrawUntil = Date.now() + 1_500;
     session.pty.resize(cols, rows);
+  }
+
+  /** Register before kill: a removed PTY can still be flushing its transcript. */
+  whenExited(id: string, timeoutMs = 10_000): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session || session.exited) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const done = () => { clearTimeout(timer); session.exitListeners.delete(done); resolve(); };
+      const timer = setTimeout(() => { session.exitListeners.delete(done); reject(new Error('PROFILE_SESSION_STOP_TIMEOUT')); }, timeoutMs);
+      session.exitListeners.add(done);
+    });
   }
 
   kill(id: string): boolean {
@@ -1410,6 +1442,7 @@ export class PtySessionManager {
       workspaceId: session.workspaceId,
       nodeId: session.nodeId,
       provider: session.provider,
+      profileId: session.profileId,
       agentSessionId: session.agentSessionId,
       transcriptHome: session.transcriptHome,
       transcriptCwd: session.transcriptCwd,
