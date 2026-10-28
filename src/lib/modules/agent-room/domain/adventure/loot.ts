@@ -6,8 +6,9 @@ import { DIFFICULTIES, DIFFICULTY_RULES, MAX_REGION_LEVEL, power, type Difficult
 /**
  * Chests are where gear comes from. White ones drop from any monster, blue
  * ones from the elite closing a stage, red ones from act bosses (opening a
- * red chest after the first costs a soulstone of that difficulty), and a
- * golden quest chest arrives for every Kanban card the team finishes.
+ * red chest after the first costs a soulstone of that difficulty or a harder
+ * one), and a golden quest chest arrives for every Kanban card the team
+ * finishes.
  */
 
 export type ChestTier = 'white' | 'blue' | 'red' | 'quest';
@@ -17,7 +18,7 @@ export const CHEST_TIERS: ChestTier[] = ['white', 'blue', 'red', 'quest'];
 export const WHITE_CHEST_CHANCE = 0.015;
 /** Base chance the elite at the end of a stage leaves a blue chest. */
 export const BLUE_CHEST_CHANCE = 0.3;
-/** Unopened chests kept before new ones are lost. */
+/** Unopened chests kept before new ones are lost: red ones apart, up to as many as the rest. */
 export const BASE_CHEST_CAPACITY = 20;
 export const COINS_PER_OFFERING = 5;
 

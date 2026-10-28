@@ -785,7 +785,7 @@ export const ADVENTURE_EN: AdventureCatalog = {
     "locked-stage": "That stage is not open yet.",
     "pet": "That pet is not tamed yet.",
     "no-chest": "No chest to open.",
-    "soulstone": "An act boss chest after the first takes a soulstone of its difficulty.",
+    "soulstone": "An act boss chest after the first takes a soulstone of its difficulty or a harder one.",
     "elixir": "You have no elixir of that kind.",
     "fusion-max": "Imperial gems are already the finest cut.",
     "fusion-gems": "Fusing takes three gems of the same kind and quality.",

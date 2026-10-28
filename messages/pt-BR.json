@@ -5729,6 +5729,7 @@
   "adventure.stage_clear": "Fase {stage} concluída",
   "adventure.difficulty_onward": "{difficulty} liberado! O grupo parte para o Ato 1",
   "adventure.difficulty_open": "{difficulty} liberado: viaje pelo mapa do Acampamento",
+  "adventure.chests_lost": "Depósito de baús cheio: os novos se perdem até você abrir alguns no Acampamento",
   "adventure.level_up": "Grupo no nível {level}!",
   "adventure.quest": "Missão cumprida!",
   "adventure.quest_named": "Missão cumprida: {title}",

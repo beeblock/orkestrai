@@ -328,10 +328,36 @@ function chestCapacity(account: AdventureAccount): number {
   return BASE_CHEST_CAPACITY + runeRule(account.runes, 'chest-capacity');
 }
 
+/**
+ * The soulstone a red chest spends: one of its own difficulty first, else one
+ * of the nearest harder difficulty; null when none is left.
+ */
+export function soulstoneFor(soulstones: Record<Difficulty, number>, difficulty: Difficulty): Difficulty | null {
+  return DIFFICULTIES.slice(DIFFICULTIES.indexOf(difficulty)).find((candidate) => soulstones[candidate] > 0) ?? null;
+}
+
+/** A red chest after its boss's first stays closed until a soulstone can open it. */
+function awaitsSoulstone(account: AdventureAccount, chest: ChestEntry): boolean {
+  return chest.tier === 'red' && account.firstBossClears.includes(`${chest.difficulty}:${chest.act}`) && !soulstoneFor(account.soulstones, chest.difficulty);
+}
+
+/**
+ * Red chests are kept apart from the others, each kind up to the capacity, so
+ * act bosses' chests waiting for a soulstone never crowd out the rest. A
+ * boss's first chest opens free and is always kept. A chest that finds no
+ * room is lost and counted, so the strip can say so.
+ */
 function addChest(save: AdventureSave, ctx: EngineContext, drop: ChestDrop): ChestEntry | null {
-  if (save.account.chests.length >= chestCapacity(save.account)) return null;
+  const account = save.account;
+  const red = drop.tier === 'red';
+  const boss = `${drop.difficulty}:${drop.act}`;
+  const first = red && !account.firstBossClears.includes(boss) && !account.chests.some((chest) => chest.tier === 'red' && `${chest.difficulty}:${chest.act}` === boss);
+  if (!first && account.chests.filter((chest) => (chest.tier === 'red') === red).length >= chestCapacity(account)) {
+    account.lostChests += 1;
+    return null;
+  }
   const entry: ChestEntry = { id: ctx.newId(), tier: drop.tier, level: Math.max(1, Math.round(drop.level)), difficulty: drop.difficulty, act: drop.act };
-  save.account.chests.push(entry);
+  account.chests.push(entry);
   return entry;
 }
 
@@ -394,8 +420,8 @@ const AUTO_OPEN_BATCH = 6;
 /**
  * Chests open themselves as they arrive, unless the owner turned it off:
  * a few at a time while the inventory has room. A red chest after an act's
- * first waits for a soulstone of its difficulty. The loot is then settled
- * (`settleLoot`).
+ * first waits for a soulstone of its difficulty or a harder one. The loot is
+ * then settled (`settleLoot`).
  */
 export function autoOpenChests(save: AdventureSave, ctx: EngineContext): OpenResult[] {
   if (!save.account.settings.autoOpen) return [];
@@ -403,7 +429,7 @@ export function autoOpenChests(save: AdventureSave, ctx: EngineContext): OpenRes
   const opened: OpenResult[] = [];
   for (const chest of [...account.chests]) {
     if (opened.length >= AUTO_OPEN_BATCH || freeInventory(save) < 4) break;
-    if (chest.tier === 'red' && account.firstBossClears.includes(`${chest.difficulty}:${chest.act}`) && account.soulstones[chest.difficulty] <= 0) continue;
+    if (awaitsSoulstone(account, chest)) continue;
     opened.push(openChestEntry(save, ctx, chest));
   }
   settleLoot(save, ctx, opened);
@@ -487,8 +513,9 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   if (chest.tier === 'red') {
     const key = `${chest.difficulty}:${chest.act}`;
     if (account.firstBossClears.includes(key)) {
-      if (account.soulstones[chest.difficulty] <= 0) fail('soulstone');
-      account.soulstones[chest.difficulty] -= 1;
+      const soulstone = soulstoneFor(account.soulstones, chest.difficulty);
+      if (!soulstone) fail('soulstone');
+      account.soulstones[soulstone] -= 1;
     } else {
       account.firstBossClears.push(key);
     }
@@ -513,23 +540,29 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   return { chestId: chest.id, tier: chest.tier, items, gold: contents.gold, materials: contents.materials, elixirs: contents.elixirs, soulstones: contents.soulstones, coins: contents.coins, equipped: {}, salvaged: [] };
 }
 
-/** Opens chests by id, or every chest of a tier when no ids are given. */
+/**
+ * Opens chests by id, or every chest of a tier when no ids are given. Red
+ * chests still waiting for a soulstone stay closed while the rest open.
+ */
 export function openChests(save: AdventureSave, ctx: EngineContext, options: { ids?: string[]; tier?: ChestTier; limit?: number }): OpenResult[] {
   const wanted = save.account.chests.filter((chest) => (options.ids ? options.ids.includes(chest.id) : !options.tier || chest.tier === options.tier));
   if (!wanted.length) fail('no-chest');
+  const limit = options.limit ?? 20;
   const opened: OpenResult[] = [];
-  for (const chest of wanted.slice(0, options.limit ?? 20)) {
+  let waiting = false;
+  for (const chest of wanted) {
+    if (opened.length >= limit) break;
+    if (awaitsSoulstone(save.account, chest)) {
+      waiting = true;
+      continue;
+    }
     if (freeInventory(save) < 4) {
       if (!opened.length) fail('inventory-full');
       break;
     }
-    try {
-      opened.push(openChestEntry(save, ctx, chest));
-    } catch (error) {
-      if (!opened.length) throw error;
-      break;
-    }
+    opened.push(openChestEntry(save, ctx, chest));
   }
+  if (!opened.length && waiting) fail('soulstone');
   settleLoot(save, ctx, opened);
   return opened;
 }

@@ -5729,6 +5729,7 @@
   "adventure.stage_clear": "Fase {stage} superada",
   "adventure.difficulty_onward": "¡Se abre {difficulty}! El grupo parte hacia el Acto 1",
   "adventure.difficulty_open": "Se abre {difficulty}: viaja desde el mapa del Campamento",
+  "adventure.chests_lost": "Depósito de cofres lleno: los nuevos se pierden hasta que abras algunos en el Campamento",
   "adventure.level_up": "¡Grupo en el nivel {level}!",
   "adventure.quest": "¡Misión cumplida!",
   "adventure.quest_named": "Misión cumplida: {title}",

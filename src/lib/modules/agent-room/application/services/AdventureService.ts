@@ -37,6 +37,8 @@ export type AdventureOutcome = {
   opened: OpenResult[];
   quests: ReportResult['quests'];
   pets: PetId[];
+  /** Chests lost meanwhile because their storage was full. */
+  lostChests: number;
   result?: unknown;
 };
 
@@ -217,6 +219,7 @@ export class AdventureService {
           opened,
           quests: [...quests, ...(report?.quests ?? [])],
           pets: report?.pets ?? [],
+          lostChests: save.account.lostChests - (before?.account.lostChests ?? 0),
         },
       };
     });

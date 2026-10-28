@@ -785,7 +785,7 @@ export const ADVENTURE_PT: AdventureCatalog = {
     "locked-stage": "Essa fase ainda não foi liberada.",
     "pet": "Esse mascote ainda não foi domado.",
     "no-chest": "Nenhum baú para abrir.",
-    "soulstone": "A partir do segundo, cada baú de chefe de ato exige uma pedra da alma da mesma dificuldade.",
+    "soulstone": "A partir do segundo, cada baú de chefe de ato exige uma pedra da alma da mesma dificuldade ou de uma mais difícil.",
     "elixir": "Você não tem elixir desse tipo.",
     "fusion-max": "Gemas imperiais já são a melhor lapidação.",
     "fusion-gems": "A fusão pede três gemas do mesmo tipo e qualidade.",

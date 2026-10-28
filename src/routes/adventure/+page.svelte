@@ -59,6 +59,8 @@
 
   const REPORT_MS = 5_000;
   const REFRESH_MS = 60_000;
+  /** A full chest storage is announced at most this often. */
+  const CHESTS_LOST_NOTICE_MS = 10 * 60_000;
 
   let workspaceId = $state<string | null>(null);
   let workspaceName = $state('');
@@ -78,6 +80,7 @@
   // Results of battles the server has not acknowledged yet, by workspace.
   const outbox = new ReportOutbox();
   let reporting = false;
+  let chestsLostNoticeAt = 0;
   // So much battle waits for an absent server that the party camps until it answers.
   let holding = $state(false);
   // When each hero's agent was last seen working, to keep the formation steady between turns.
@@ -198,6 +201,11 @@
     }
     for (const quest of outcome.quests) stage?.quest(quest.title);
     for (const petId of outcome.pets) stage?.announce(m['adventure.pet_joined']({ pet: catalog.pets[petId] }), 'gold');
+    // Chests lost to a full storage are worth a word, though not on every report.
+    if (stage && outcome.lostChests > 0 && Date.now() - chestsLostNoticeAt >= CHESTS_LOST_NOTICE_MS) {
+      chestsLostNoticeAt = Date.now();
+      stage.announce(m['adventure.chests_lost'](), 'danger');
+    }
   }
 
   async function refresh(id: string, travel: boolean) {

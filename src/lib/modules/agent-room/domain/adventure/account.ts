@@ -63,6 +63,8 @@ export type AdventureAccount = {
   quests: number;
   killsByMonster: Partial<Record<MonsterId, number>>;
   chests: ChestEntry[];
+  /** Chests thrown away because their storage was full. */
+  lostChests: number;
   soulstones: Record<Difficulty, number>;
   coins: number;
   /** By material key: the id for runes, glyphs and Normal gems, `gem:quality` for the other cuts. */
@@ -110,6 +112,7 @@ export function newAccount(now: string): AdventureAccount {
     quests: 0,
     killsByMonster: {},
     chests: [],
+    lostChests: 0,
     soulstones: { normal: 0, nightmare: 0, hell: 0, torment: 0 },
     coins: 0,
     materials: {},
