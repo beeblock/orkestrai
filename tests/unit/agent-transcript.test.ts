@@ -85,6 +85,46 @@ describe('latest turn completion for supervision', () => {
     expect(parseLatestTurnBoundary('unregistered', '{}')).toEqual({ ready: null, startedAt: null, finishedAt: null });
   });
 
+  it.each([false, true])('bounds completed Claude request work without treating metadata as owner input (old prompt retained: %s)', (retainPrompt) => {
+    const requestAt = '2026-10-28T08:55:44Z';
+    const endedAt = '2026-10-28T08:56:27Z';
+    const events = [
+      ...(retainPrompt ? [{ type: 'user', timestamp: '2026-10-28T04:30:00Z', message: { content: 'Earlier owner prompt' } }] : []),
+      { type: 'user', isMeta: true, timestamp: '2026-10-28T08:55:43Z', message: { content: 'Scheduled inbox check' } },
+      { type: 'api-request', timestamp: requestAt },
+      { type: 'assistant', timestamp: '2026-10-28T08:56:26Z', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Checked the inbox.' }] } },
+      { type: 'system', subtype: 'turn_duration', timestamp: endedAt },
+    ];
+    const transcript = events.map(event => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnBoundary('claude-project-jsonl', transcript))
+      .toEqual({ ready: true, startedAt: Date.parse(requestAt), finishedAt: Date.parse(endedAt) });
+    expect(transcriptContainsPrompt('claude-project-jsonl', transcript, 'Scheduled inbox check')).toBe(false);
+  });
+
+  it.each([undefined, Date.parse('2026-10-28T08:56:00Z')])('keeps a newer Claude API request busy after an earlier completed turn (resumed at: %s)', (processStartedAt) => {
+    const requestAt = '2026-10-28T08:57:00Z';
+    const transcript = [
+      { type: 'user', timestamp: '2026-10-28T08:55:00Z', message: { content: 'Earlier prompt' } },
+      { type: 'assistant', timestamp: '2026-10-28T08:55:10Z', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Earlier answer.' }] } },
+      { type: 'system', subtype: 'turn_duration', timestamp: '2026-10-28T08:55:11Z' },
+      { type: 'api-request', timestamp: requestAt },
+    ].map(event => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnComplete('claude-project-jsonl', transcript, processStartedAt)).toBe(false);
+    expect(parseLatestTurnBoundary('claude-project-jsonl', transcript, processStartedAt))
+      .toEqual({ ready: false, startedAt: Date.parse(requestAt), finishedAt: null });
+  });
+
+  it('does not invent a request timestamp for a completed Claude turn', () => {
+    const endedAt = '2026-10-28T08:56:27Z';
+    const transcript = [
+      { type: 'api-request' },
+      { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done.' }] } },
+      { type: 'system', subtype: 'turn_duration', timestamp: endedAt },
+    ].map(event => JSON.stringify(event)).join('\n');
+    expect(parseLatestTurnBoundary('claude-project-jsonl', transcript))
+      .toEqual({ ready: true, startedAt: null, finishedAt: Date.parse(endedAt) });
+  });
+
   it('uses Kimi epoch times without inventing timestamps for legacy transcripts', () => {
     const events = [{ type: 'turn.prompt', time: 1000, input: [{ type: 'text', text: 'Continue' }] }, { type: 'turn.ended', reason: 'completed', time: 2000 }];
     expect(parseLatestTurnBoundary('kimi-session-dir', events.map(event => JSON.stringify(event)).join('\n')))

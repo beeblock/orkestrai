@@ -1255,6 +1255,7 @@ export function parseLatestTurnComplete(storage: string, transcript: string, pro
     // requires an actual completed assistant turn and no queued user input.
     const queue = scoped.findLast((record) => record?.type === 'queue-operation');
     if (queue?.operation === 'enqueue') return false;
+    if (scoped.findLastIndex(record => record?.type === 'api-request') > scoped.findLastIndex(record => record?.type === 'assistant')) return false;
     const assistant = scoped.findLast((record) => record?.type === 'assistant');
     if (assistant?.message?.stop_reason !== 'end_turn') return false;
   }
@@ -1275,7 +1276,7 @@ function turnActivityBefore(storage: string, records: unknown[], before: number)
   for (const record of records as Array<Record<string, any> | null>) {
     if (!record || typeof record !== 'object') continue;
     const activity = storage === 'claude-project-jsonl'
-      ? ['user', 'assistant', 'queue-operation'].includes(record.type)
+      ? ['user', 'assistant', 'queue-operation', 'api-request'].includes(record.type)
       : storage === 'codex-rollout-jsonl'
         ? record.type === 'response_item' || (record.type === 'event_msg' && record.payload?.type !== 'thread_settings_applied')
         : false;
@@ -1340,12 +1341,19 @@ export function parseLatestTurnBoundary(storage: string, transcript: string, pro
       if (ready) finish = lifecycle;
     }
   } else if (storage === 'claude-project-jsonl') {
+    // Scheduled Claude turns are metadata, not owner prompts. A timestamped
+    // API request still proves newer provider work when the original prompt
+    // is absent from the bounded tail. Keep prompt/reply matching unchanged.
+    const request = scoped.findLast(event => event?.type === 'api-request' && jsonlEventTime(event) !== null);
+    if (request && (jsonlEventTime(beginning) === null || jsonlEventTime(request)! > jsonlEventTime(beginning)!)) beginning = request;
     const queue = scoped.findLast(event => event?.type === 'queue-operation');
     const duration = scoped.findLastIndex(event => event?.type === 'system' && event.subtype === 'turn_duration');
     const work = scoped.findLastIndex(event => ['user', 'assistant', 'api-request'].includes(event?.type));
+    const completed = scoped.findLastIndex(event => event?.type === 'assistant' && event.message?.stop_reason === 'end_turn');
     // Older CLIs may omit stop_reason. Their explicit turn-duration record is
     // still completion; a silent terminal or a thinking block alone is not.
     if (duration >= 0 && duration > work) ready = true;
+    else if (work > completed) ready = false;
     if (queue?.operation === 'enqueue') ready = false;
     if (ready) finish = duration > work ? scoped[duration]
       : scoped.findLast(event => event?.type === 'assistant' && event.message?.stop_reason === 'end_turn');

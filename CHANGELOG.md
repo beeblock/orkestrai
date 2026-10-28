@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+
+- Recover queued agent messages after completed Claude scheduled turns even when the original prompt is outside the bounded transcript tail. Timestamped provider requests release stale delivery barriers while newer work and unsubmitted drafts remain protected.
+
 ## 0.46.2 - 2026-10-27
 
 ### Fixed
