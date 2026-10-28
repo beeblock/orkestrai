@@ -9,6 +9,30 @@ vi.mock('$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js', 
 describe('AgentTerminalDeliveryService', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([
+    { ready: true, finishedOffset: -100, retry: true },
+    { ready: false, finishedOffset: -100, retry: false },
+    { ready: true, finishedOffset: 100, retry: false },
+  ])('retries an unsubmitted native paste only after older completed work ($ready, $finishedOffset)', async ({ ready, finishedOffset, retry }) => {
+    const at = Date.now();
+    const session = { id: 'pty', provider: 'claude', agentSessionId: 'conversation', runtimeKey: 'native', cwd: '/project', exited: false };
+    vi.spyOn(ptySessionManager, 'get').mockReturnValue(session as never);
+    vi.spyOn(workspaceRepository, 'getNode').mockResolvedValue({ id: 'node', workspaceId: 'workspace', type: 'terminal', payload: { provider: 'claude', sessionId: 'pty', agentSessionId: 'conversation' } } as never);
+    vi.spyOn(ptySessionManager, 'automaticDeliverySubmittedAt').mockReturnValue(at);
+    vi.spyOn(ptySessionManager, 'pendingAutomaticDeliveryAt').mockReturnValue(at);
+    vi.spyOn(ptySessionManager, 'releaseAutomaticDeliveryAfterTurn').mockReturnValue(false);
+    const resubmit = vi.spyOn(ptySessionManager, 'retryPendingAutomaticPaste').mockReturnValue(true);
+    vi.mocked(findPromptInTranscript).mockResolvedValue(null);
+    vi.mocked(latestTurnBoundary).mockResolvedValue({ ready, startedAt: at - 1000, finishedAt: at + finishedOffset });
+    vi.spyOn(ptySessionManager, 'writeWithConfirmedSubmit').mockImplementation(async (_id, _text, options) => {
+      options?.onSubmitted?.({ sessionId: 'pty', length: 1 });
+      expect(await options!.isAccepted!()).toBe(false);
+    });
+    await new AgentTerminalDeliveryService().deliver({ workspaceId: 'workspace', nodeId: 'node', sessionId: 'pty', message: 'existing paste' });
+    expect(resubmit).toHaveBeenCalledTimes(retry ? 1 : 0);
+    if (retry) expect(resubmit).toHaveBeenCalledWith('pty', at, at - 100);
+  });
+
   it.each(['native', 'wsl:Ubuntu-24.04'])('propagates missing receipt recovery even when the %s reconciler observes it first', async runtimeKey => {
     const at = Date.now();
     const session = { id: 'pty', provider: 'codex', agentSessionId: 'conversation', runtimeKey, cwd: '/project', transcriptCwd: '/project', transcriptHome: '/isolated-home', exited: false };

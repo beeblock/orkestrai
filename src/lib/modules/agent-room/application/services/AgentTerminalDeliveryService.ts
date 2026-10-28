@@ -98,6 +98,9 @@ export class AgentTerminalDeliveryService {
           const boundary = await latestTurnBoundary(provider, session.transcriptCwd ?? session.cwd, preferredSessionId, {
             homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
           });
+          if (boundary.ready === true && boundary.finishedAt !== null && boundary.finishedAt < pendingAt) {
+            ptySessionManager.retryPendingAutomaticPaste(input.sessionId, pendingAt, boundary.finishedAt);
+          }
           if (boundary.ready === true && boundary.startedAt !== null && boundary.finishedAt !== null
             && ptySessionManager.releaseAutomaticDeliveryAfterTurn(input.sessionId, pendingAt, boundary.startedAt, boundary.finishedAt)) {
             const error = new Error('Provider turn completed without an exact prompt receipt; delivery remains unverified.');

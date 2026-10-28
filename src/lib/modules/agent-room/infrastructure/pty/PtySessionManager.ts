@@ -156,6 +156,7 @@ type PtySession = PtySessionInfo & {
   deliveryReadyAt: number;
   deferredHumanInput: Array<{ data: string; imagePaste: boolean }>;
   humanComposerLength: number;
+  humanInputRevision: number;
   humanDraft: HumanDraft;
   humanComposerInput: HumanComposerInput;
   lastOutputAt: number;
@@ -180,6 +181,9 @@ type ComposerDelivery = {
   confirmationPending?: boolean;
   /** Actual Enter time, rather than when the delivery joined the queue. */
   submittedAt?: number;
+  humanInputRevision?: number;
+  pasteRetryCount?: number;
+  pasteRetryAt?: number;
   /** Where the terminal's output stood when Enter submitted this delivery. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -452,6 +456,7 @@ export class PtySessionManager {
       deliveryReadyAt: 0,
       deferredHumanInput: [],
       humanComposerLength: 0,
+      humanInputRevision: 0,
       humanDraft: { text: '', paste: false },
       humanComposerInput: new HumanComposerInput(),
       lastOutputAt: 0,
@@ -644,6 +649,7 @@ export class PtySessionManager {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
     const imagePaste = options.imagePaste === true;
+    if (data.length || imagePaste) session.humanInputRevision += 1;
     if (session.deliveryInProgress) {
       session.deferredHumanInput.push({ data, imagePaste });
       return;
@@ -1055,6 +1061,26 @@ export class PtySessionManager {
     return true;
   }
 
+  /** Retry only Enter for a proven automatic paste that never began a turn. */
+  retryPendingAutomaticPaste(id: string, submittedAt: number, lastFinishedAt: number): boolean {
+    const session = this.sessions.get(id);
+    const delivery = session?.lastSubmittedDelivery;
+    if (!session || !delivery || session.conptySubmitGuard
+      || !Number.isFinite(lastFinishedAt) || lastFinishedAt >= submittedAt
+      || this.pendingAutomaticDeliveryAt(id) !== submittedAt
+      || delivery.humanInputRevision !== session.humanInputRevision || session.deferredHumanInput.length
+      || (delivery.pasteRetryCount ?? 0) >= 2
+      || Date.now() - (delivery.pasteRetryAt ?? submittedAt) < 5000
+      || Date.now() - session.lastOutputAt < SESSION_IDLE_MS
+      || !session.startupGuard?.hasPendingPaste(session.scrollback)) return false;
+    if (!this.submitIfComposerFree(id)) return false;
+    delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
+    delivery.pasteRetryAt = Date.now();
+    session.outputBurst = true;
+    this.recordLifecycle(session, 'working');
+    return true;
+  }
+
   /** Reenvia Enter apenas se não houver um rascunho humano em andamento. */
   submitIfComposerFree(id: string): boolean {
     const session = this.requireSession(id);
@@ -1128,6 +1154,7 @@ export class PtySessionManager {
     session.deliveryInProgress = true;
     const outputRevisionAtWrite = session.outputRevision;
     const textWrittenAt = Date.now();
+    delivery.humanInputRevision = session.humanInputRevision;
     try {
       // Explicit paste boundaries avoid provider heuristics turning a large
       // handoff and its following Enter into a single never-submitted paste.

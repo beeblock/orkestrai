@@ -4,6 +4,16 @@ import { interactiveStartupGuard, InteractiveStartupGuard } from '$lib/modules/a
 const trust = 'Accessing workspace: /workspace\r\nQuick safety check: Is this a project you created or one you trust?\r\n\u276f No, exit\r\n  Yes, I trust this folder\r\nEnter to confirm';
 
 describe('interactive startup confirmation', () => {
+  it('recognizes only a pasted block in the latest Claude composer', () => {
+    const guard = new InteractiveStartupGuard();
+    expect(guard.hasPendingPaste('❯ [Pasted text #1] + remaining draft\r\nbypass permissions on')).toBe(true);
+    expect(guard.hasPendingPaste('\x1b[H❯\x1b[4G[Pasted\x1b[11Gtext#2]\rshift+tab to cycle')).toBe(true);
+    expect(guard.hasPendingPaste('❯ [Pasted text #1]\r\nPrevious answer\r\n❯ \r\nbypass permissions on')).toBe(false);
+    expect(guard.hasPendingPaste('❯ a human draft that mentions [Pasted text #1]')).toBe(false);
+    expect(guard.hasPendingPaste('No composer visible')).toBe(false);
+    expect(guard.hasPendingPaste('❯ [Pasted text #1]\x1b[2JLoading provider')).toBe(false);
+  });
+
   it('recognizes the column-positioned composer from Claude 2.1.283, even in split chunks', () => {
     const output = '\x1b[2J\x1b[H\r\x1b[12GClaude\x1b[19GCode\x1b[24Gv2.1.283'
       + '\r\x1b[1B\u276f Try\x1b[7G"write\x1b[14Ga\x1b[16Gtest"'

@@ -22,6 +22,8 @@ pt-BR, English, and Spanish translations.
 
 - Fix creating and editing sourced memories from the interface: workspace route identifiers no longer invalidate the strictly validated memory body.
 
+- Recover a native Claude automatic paste whose first Enter was missed during startup: confirm only the existing pasted draft, with a bounded retry and no intervening human input or active provider turn. Never retype the message or change its delivery receipt.
+
 ### Security
 
 - Update qs to 6.16.2 to prevent comma-formatted query serialization from crashing on untrusted objects, preserving the current Postman runtimes and the dependency audit gate.

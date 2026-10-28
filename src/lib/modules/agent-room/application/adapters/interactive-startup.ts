@@ -9,6 +9,16 @@ export class InteractiveStartupGuard {
 
   get canAcceptMessages(): boolean { return this.ready; }
 
+  /** A paste in the current composer, rather than an older rendered message. */
+  hasPendingPaste(output: string): boolean {
+    let tail = output.slice(-32_768);
+    const clear = [...tail.matchAll(/\x1b\[[23]J/g)].at(-1);
+    if (clear) tail = tail.slice(clear.index! + clear[0].length);
+    const text = stripVTControlCharacters(tail);
+    const prompt = text.lastIndexOf('\u276f');
+    return prompt >= 0 && /^\u276f[\s\u00a0]*\[Pasted\s*text\s*#\d+\]/i.test(text.slice(prompt));
+  }
+
   observe(data: string): void {
     if (this.ready) return;
     this.output = (this.output + data).slice(-32_768);
