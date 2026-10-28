@@ -20,6 +20,10 @@ pt-BR, English, and Spanish translations.
 - Red chests are stored apart from the other chests, up to the same limit, so chests waiting for a soulstone no longer fill the storage and make new white, blue, quest and first boss chests disappear. A boss's first chest, which opens free, is always kept, and the strip warns when chest storage is full instead of discarding chests silently.
 - Opening red chests in the Camp skips those still waiting for a soulstone instead of stopping at the first one.
 
+### Security
+
+- Update qs to 6.16.2 to prevent comma-formatted query serialization from crashing on untrusted objects, preserving the current Postman runtimes and the dependency audit gate.
+
 ## 0.46.2 - 2026-10-27
 
 ### Fixed

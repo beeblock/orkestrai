@@ -45,6 +45,20 @@ function request(url: string, overrides: Record<string, unknown> = {}) {
 }
 
 describe('compatible API Client script runtimes', () => {
+  it('keeps Postman comma query serialization safe for non-callable toString input', () => {
+    const requestRequire = createRequire(require.resolve('postman-request/package.json'));
+    const qs = requestRequire('qs');
+    const inputs = [
+      JSON.parse('{"a":[{"toString":"x"}]}'),
+      qs.parse('a[0][toString]=x', { allowPrototypes: true }),
+      { a: [Object.create(null)] },
+    ];
+    for (const input of inputs) for (const encodeValuesOnly of [false, true]) {
+      expect(() => qs.stringify(input, { arrayFormat: 'comma', encodeValuesOnly })).not.toThrow();
+    }
+    expect(qs.stringify({ a: ['one', 'two'] }, { arrayFormat: 'comma' })).toBe('a=one%2Ctwo');
+  });
+
   it('keeps every Postman dynamic variable available on the patched Faker runtime', () => {
     const dynamicVariables = require('postman-collection/lib/superstring/dynamic-variables') as Record<string, { generator: () => unknown }>;
 
