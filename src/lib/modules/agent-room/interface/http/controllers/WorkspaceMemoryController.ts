@@ -25,7 +25,7 @@ export class WorkspaceMemoryController extends Controller {
 
   async store(event: RequestEvent) {
     try {
-      const input = await SaveWorkspaceMemoryRequest.validate(event);
+      const input = await SaveWorkspaceMemoryRequest.validate({ ...event, params: {} });
       return this.json({ data: await saveWorkspaceMemoryAction.execute(new SaveWorkspaceMemoryDto(event.params.id, input)) }, 201);
     } catch (error) {
       return this.failure(error, 'Could not save workspace memory.');
@@ -34,7 +34,7 @@ export class WorkspaceMemoryController extends Controller {
 
   async update(event: RequestEvent) {
     try {
-      const input = await ReviseWorkspaceMemoryRequest.validate(event);
+      const input = await ReviseWorkspaceMemoryRequest.validate({ ...event, params: {} });
       return this.json({ data: await reviseWorkspaceMemoryAction.execute(new ReviseWorkspaceMemoryDto(event.params.id, event.params.memoryId, input)) });
     } catch (error) {
       if (error instanceof WorkspaceMemoryConflictError) return this.json({ error: error.message, current: error.current }, 409);

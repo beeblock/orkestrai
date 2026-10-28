@@ -3,9 +3,28 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { workspaceMemoryService, WorkspaceMemoryConflictError } from '$lib/modules/agent-room/application/services/WorkspaceMemoryService.js';
 import { workspaceMemoryRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceMemoryRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { WorkspaceMemoryController } from '$lib/modules/agent-room/interface/http/controllers/WorkspaceMemoryController.js';
 
 describe('WorkspaceMemoryService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('creates and revises memory over workspace HTTP routes without mixing route ids into the strict body', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'HTTP memory', workingDir: '/tmp/memory' });
+    const controller = new WorkspaceMemoryController();
+    const event = (body: unknown, memoryId?: string) => {
+      const url = new URL(`http://localhost/api/agent-room/workspaces/${workspace.id}/memory`);
+      return { params: { id: workspace.id, ...(memoryId ? { memoryId } : {}) }, url,
+        request: new Request(url, { method: memoryId ? 'PUT' : 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) } as never;
+    };
+    const input = { title: 'Validated project decision', content: 'Reuse the established deployment provider.', kind: 'decision', sources: [{ type: 'user', label: 'Owner' }] };
+    const created = await controller.store(event(input));
+    expect(created.status, await created.clone().text()).toBe(201);
+    const original = (await created.json()).data;
+    const revised = await controller.update(event({ ...input, content: 'Use the verified deployment provider.', baseRevision: original.revision, baseUpdatedAt: original.updatedAt }, original.id));
+    expect(revised.status, await revised.clone().text()).toBe(200);
+    expect((await revised.json()).data).toMatchObject({ revision: 2, content: 'Use the verified deployment provider.' });
+    expect((await controller.store(event({ ...input, id: workspace.id }))).status).toBe(400);
+  });
 
   it('persists sourced memory and finds it through source-aware search', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Memory', workingDir: '/tmp/memory' });

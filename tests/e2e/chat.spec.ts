@@ -32,15 +32,15 @@ test.describe('Chat', () => {
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Profile memory flow', workingDir: dir } })).json()).data;
     const root = `/api/agent-room/workspaces/${workspace.id}`;
     try {
-      const node = (await (await request.post(`${root}/nodes`, { data: { type: 'terminal', title: 'Memory Lead', payload: { provider: 'claude', maestro: true, args: [] } } })).json()).data;
+      const node = (await (await request.post(`${root}/nodes`, { data: { type: 'terminal', title: 'Memory Lead', payload: { provider: 'claude', maestro: true, command: '/bin/cat', args: [] } } })).json()).data;
       const taskResponse = await request.post(`${root}/tasks`, { data: { title: 'Validate DNS deployment', assigneeNodeId: node.id, status: 'done' } });
-      expect(taskResponse.ok()).toBe(true);
+      expect(taskResponse.ok(), await taskResponse.text()).toBe(true);
       const task = (await taskResponse.json()).data;
       const response = await request.post(`${root}/learning`, { data: { command: 'reflect', nodeId: node.id, taskId: task.id, title: 'Check DNS before deployment', trigger: 'Before deployment of an existing service', mistake: 'Assumed the DNS record existed', correction: 'Verify the DNS record before starting deployment.', evidence: 'The DNS lookup failed before the record was added and passed afterwards.' } });
       expect(response.ok()).toBe(true);
       const lesson = (await response.json()).data;
       const fact = await request.post(`${root}/memory`, { data: { title: 'Existing deployment provider', content: 'Reuse the existing deployment provider.', kind: 'decision', createdByNodeId: node.id, sources: [{ type: 'task', sourceId: task.id, label: 'Validated task' }] } });
-      expect(fact.ok()).toBe(true);
+      expect(fact.ok(), await fact.text()).toBe(true);
       await page.goto(`/chat?workspace=${workspace.id}`);
       const profile = page.locator('aside.profile');
       await expect(profile).toBeVisible();
@@ -52,7 +52,7 @@ test.describe('Chat', () => {
       await expect(profile.getByText('Verify the DNS record before starting deployment.', { exact: true })).toHaveCount(0);
       await page.route(`**${root}/learning?*`, route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary read failure' }) }));
       const created = await request.post(`${root}/memory`, { data: { title: 'Second validated decision', content: 'Updated project decision arrives live.', kind: 'fact', createdByNodeId: node.id, sources: [{ type: 'user', label: 'Owner' }] } });
-      expect(created.ok()).toBe(true);
+      expect(created.ok(), await created.text()).toBe(true);
       await expect(profile.getByRole('alert')).toHaveText('Não foi possível carregar memórias e aprendizados.');
       await expect(profile.getByText('Nenhuma memória com fontes ou lição ativa deste agente ainda.')).toHaveCount(0);
       await page.unroute(`**${root}/learning?*`);
