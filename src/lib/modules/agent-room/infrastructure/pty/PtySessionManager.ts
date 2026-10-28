@@ -649,7 +649,10 @@ export class PtySessionManager {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
     const imagePaste = options.imagePaste === true;
-    if (data.length || imagePaste) session.humanInputRevision += 1;
+    // xterm sends focus/device/color reports through onData too. Those are
+    // terminal protocol replies, not edits to the owner's draft.
+    const protocolOnly = /^(?:\x1b\[[IO]|\x1b\[[?>]?[\d;:]+c|\x1b\](?:10|11|12);rgba?:[a-fA-F\d/]+(?:\x07|\x1b\\))+$/.test(data);
+    if (imagePaste || (data.length && !protocolOnly)) session.humanInputRevision += 1;
     if (session.deliveryInProgress) {
       session.deferredHumanInput.push({ data, imagePaste });
       return;

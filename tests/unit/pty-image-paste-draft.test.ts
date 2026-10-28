@@ -47,14 +47,24 @@ describe('missed automatic paste submission', () => {
     expect(writes.filter(text => text === '\r')).toHaveLength(3);
   });
 
-  it.skipIf(process.platform === 'win32')('does not submit after any human input, even when the owner clears the draft again', async () => {
+  it.skipIf(process.platform === 'win32').each(['human draft\x15', '\x1b[A', '\x1b[1;5C', '\t'])('does not submit after human input, even if no characters remain (%j)', async data => {
     const { manager, session, at, writes, showPaste } = await pasted();
-    manager.writeHumanInput(session.id, 'human draft\x15');
+    manager.writeHumanInput(session.id, data);
     showPaste();
     await vi.advanceTimersByTimeAsync(6000);
     const before = writes.length;
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
     expect(writes).toHaveLength(before);
+  });
+
+  it.skipIf(process.platform === 'win32')('does not mistake xterm focus/device/color replies for a human edit', async () => {
+    const { manager, session, at, showPaste } = await pasted();
+    for (const report of ['\x1b[I', '\x1b[O', '\x1b[?1;2c', '\x1b[>0;276;0c', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\']) {
+      manager.writeHumanInput(session.id, report);
+    }
+    showPaste();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
   });
 
   it.skipIf(process.platform === 'win32')('requires the same submission, an older completed turn and a current pasted block', async () => {

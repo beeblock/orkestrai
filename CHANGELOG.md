@@ -22,7 +22,7 @@ pt-BR, English, and Spanish translations.
 
 - Fix creating and editing sourced memories from the interface: workspace route identifiers no longer invalidate the strictly validated memory body.
 
-- Recover a native Claude automatic paste whose first Enter was missed during startup: confirm only the existing pasted draft, with a bounded retry and no intervening human input or active provider turn. Never retype the message or change its delivery receipt.
+- Recover a native Claude automatic paste whose first Enter was missed during startup: confirm only the existing pasted draft, with a bounded retry and no intervening human input or active provider turn. Never retype the message or change its delivery receipt. Terminal focus, device and color reports do not count as human draft edits.
 
 ### Security
 
