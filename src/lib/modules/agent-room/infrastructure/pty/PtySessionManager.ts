@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import type { IPty } from 'node-pty';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
 import { executionRuntimeKey } from '../../domain/runtime.ts';
-import { agentEnv, resolveCommand } from '../agent-path.ts';
+import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
@@ -384,7 +384,7 @@ export class PtySessionManager {
     const cols = input.cols ?? 120;
     const rows = input.rows ?? 30;
 
-    const env = { ...agentEnv(), ...input.env } as Record<string, string>;
+    const env = { ...agentEnv(), ...normalizeWindowsPath(input.env ?? {}) } as Record<string, string>;
     for (const key of input.unsetEnvKeys ?? []) delete env[key];
     // node-pty defines TERM from `name` on Unix, but ConPTY only uses `name`
     // internally and does not expose it to the Windows child process. Full-

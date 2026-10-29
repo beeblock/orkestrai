@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Start received-model agents on Windows through the bundled console runtime and CLI entry, without a global command or CMD/PATH lookup. WSL startup checks use the provisioned workspace launcher path, and missing commands are no longer reported as missing WSL distributions.
 - Align the model access panel with the other Provider Center sections through a shared responsive page column and matching card spacing and corners.
 
 ## 0.49.0 - 2026-10-29

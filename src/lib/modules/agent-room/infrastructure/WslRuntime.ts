@@ -230,10 +230,10 @@ export function guestWorkingDirectory(
 function wslFailure(error: unknown, runtime: Extract<WorkspaceExecutionRuntime, { kind: 'wsl' }>, command?: string): WslLaunchError {
   const candidate = error as NodeJS.ErrnoException & { stderr?: string; stdout?: string };
   const detail = `${candidate.message ?? ''}\n${candidate.stderr ?? ''}\n${candidate.stdout ?? ''}`.trim();
-  if (/distribution|distro|WSL_E_DISTRO_NOT_FOUND|there is no distribution/i.test(detail)) {
+  if (/WSL_E_DISTRO_NOT_FOUND|there is no distribution|no (?:installed )?distributions|(?:distribution|distro)[^\r\n]*(?:does not exist|not found|not registered|is unavailable)/i.test(`${candidate.stderr ?? ''}\n${candidate.stdout ?? ''}\n${candidate.code ?? ''}`)) {
     return new WslLaunchError('WSL_DISTRIBUTION_UNAVAILABLE', `WSL distribution is unavailable: ${runtime.distribution}`);
   }
-  if (/chdir|directory|no such file|WSL_E_PATH_NOT_FOUND/i.test(detail)) {
+  if (/chdir|no such file or directory|WSL_E_PATH_NOT_FOUND/i.test(`${candidate.stderr ?? ''}\n${candidate.stdout ?? ''}\n${candidate.code ?? ''}`)) {
     return new WslLaunchError('WSL_DIRECTORY_NOT_FOUND', `WSL working directory is unavailable: ${runtime.linuxWorkingDir}`);
   }
   if (command) return new WslLaunchError('WSL_COMMAND_NOT_FOUND', `Command is not installed in ${runtime.distribution}: ${command}`);
@@ -275,8 +275,15 @@ export async function preflightWslLaunch(input: {
     await execFileAsync('wsl.exe', [
       '--distribution', input.runtime.distribution,
       '--cd', context.linuxWorkingDir,
-      '--exec', '/bin/bash', '-lic', 'command -v -- "$1" >/dev/null', 'orkestrai-preflight', command,
-    ], { encoding: 'utf8', windowsHide: true, timeout: 15_000 });
+      '--exec', '/bin/bash', '-lic', 'export PATH="$ORKESTRAI_WORKSPACE_BIN:$PATH"; command -v -- "$1" >/dev/null', 'orkestrai-preflight', command,
+    ], {
+      encoding: 'utf8', windowsHide: true, timeout: 15_000,
+      env: {
+        ...process.env,
+        ORKESTRAI_WORKSPACE_BIN: posix.join(input.runtime.linuxWorkingDir, '.orkestrai', 'bin'),
+        WSLENV: appendWslEnv(process.env.WSLENV, ['ORKESTRAI_WORKSPACE_BIN']),
+      },
+    });
     return context;
   } catch (error) {
     throw wslFailure(error, input.runtime, command);

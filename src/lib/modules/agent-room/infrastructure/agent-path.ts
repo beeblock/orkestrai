@@ -185,13 +185,25 @@ export function sanitizeAgentEnvironment(
   return env;
 }
 
+/** Windows environment names are case-insensitive; ConPTY must receive only one PATH. */
+export function normalizeWindowsPath(env: Record<string, string>, platform: NodeJS.Platform = process.platform): Record<string, string> {
+  if (platform !== 'win32') return env;
+  const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH');
+  if (!pathKey) return env;
+  const path = env.PATH ?? (pathKey ? env[pathKey] : '');
+  const normalized = { ...env };
+  for (const key of Object.keys(normalized)) if (key.toUpperCase() === 'PATH') delete normalized[key];
+  normalized.PATH = path;
+  return normalized;
+}
+
 /**
  * Copia de process.env com o PATH aumentado: shim -> PATH herdado -> PATH do
  * registro (shell nova, so Win) -> dirs conhecidos -> nvm. O Set dedup mantendo
  * a primeira ocorrencia (preserva a prioridade herdada).
  */
 export function agentEnv(): Record<string, string> {
-  const env = sanitizeAgentEnvironment(process.env);
+  const env = normalizeWindowsPath(sanitizeAgentEnvironment(process.env));
   const current = (env.PATH ?? '').split(delimiter).filter(Boolean);
   const shimDir = env.ORKESTRAI_SHIM_DIR ? [env.ORKESTRAI_SHIM_DIR] : [];
   const merged = [...shimDir, ...current, ...windowsRegistryPathDirs(), ...EXTRA_PATH_DIRS, ...nvmBins()];
@@ -217,9 +229,18 @@ export function agentEnv(): Record<string, string> {
 export function resolveCommand(
   command: string,
   args: string[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  platform: NodeJS.Platform = process.platform,
 ): { command: string; args: string[] } {
-  if (!IS_WIN) return { command, args };
+  if (platform !== 'win32') return { command, args };
+  // Our bundled agent is not a globally installed CLI. Launch its console
+  // runtime directly, avoiding cmd/PATHEXT and stale or mixed-case PATH values.
+  const consoleRuntime = env.ORKESTRAI_CLI_CONSOLE_RUNTIME;
+  const cliEntry = env.ORKESTRAI_CLI_JS;
+  if (/^orkestrai(?:\.cmd)?$/i.test(command) && consoleRuntime && cliEntry
+    && existsSync(consoleRuntime) && existsSync(cliEntry)) {
+    return { command: consoleRuntime, args: [cliEntry, ...args] };
+  }
   if (!/^[A-Za-z0-9._-]+$/.test(command) || /\.(exe|com)$/i.test(command)) return { command, args };
 
   const pathext = (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').map((entry) => entry.trim()).filter(Boolean);
