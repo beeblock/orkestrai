@@ -20,6 +20,32 @@ env:
   NODE_OPTIONS: '--max-old-space-size=6144'
 
 jobs:
+  relay-container:
+    name: Verify production relay container
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Build isolated relay image
+        run: docker build --file packages/orkestrai-relay/Dockerfile --tag orkestrai-relay:ci .
+
+      - name: Verify both public relay protocols
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f orkestrai-relay-ci >/dev/null 2>&1 || true' EXIT
+          docker run --detach --rm --name orkestrai-relay-ci --publish 127.0.0.1:18787:8787 orkestrai-relay:ci
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18787/health > "$RUNNER_TEMP/relay-health.json"; then
+              node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; const h=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); assert.equal(h.ok,true); for (const p of ['orkestrai-collaboration.v1','orkestrai-inference.v1']) assert.ok(h.protocols.includes(p));" "$RUNNER_TEMP/relay-health.json"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs orkestrai-relay-ci
+          exit 1
+
   windows-native:
     name: Verify Windows desktop transport
     runs-on: windows-latest

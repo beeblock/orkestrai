@@ -14,6 +14,10 @@ pt-BR, English, and Spanish translations.
 - Lend selected Claude/Codex account profiles to an approved guest device for a bounded time, independently of workspace collaboration. Enforce per-account model and reasoning-effort scopes, expiry, revocation, concurrency and durable request limits. Provider credentials remain on the owner computer; guest files, commands and native bridge/CLI/MCP tools run on the guest.
 - Connect received model access to managed, resumable guest agents and streamed replies. Grant Codex image generation separately, return generated PNGs to the guest and retain native image-workflow validation; image generations consume the same access limits.
 
+### Fixed
+
+- Build and verify the inference relay independently of desktop lifecycle scripts, with a restricted container context and both relay protocols checked in CI.
+
 ## 0.48.0 - 2026-10-28
 
 ### Added

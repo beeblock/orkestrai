@@ -1,0 +1,8 @@
+**
+!package.json
+!package-lock.json
+!packages
+!packages/orkestrai-collaboration-protocol
+!packages/orkestrai-collaboration-protocol/**
+!packages/orkestrai-relay
+!packages/orkestrai-relay/**
