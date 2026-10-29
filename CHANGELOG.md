@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.49.1 - 2026-10-29
+
 ### Fixed
 
 - Release queued owner messages after an Orkestrai guest agent explicitly finishes a tool-only turn without answer text, while keeping unfinished turns and human drafts protected. Keep guest inference marked as working during silent model/tool work instead of reporting idle after terminal output stops, and attach pending inbox messages to native tool results during a running turn.
