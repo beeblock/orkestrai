@@ -132,7 +132,7 @@
 </Dialog.Root>
 
 <style>
-  .access-panel { margin: 0 0 1.5rem; padding: 1.25rem; border: 1px solid var(--app-border); border-radius: 1rem; background: var(--app-surface); color: var(--app-text); }
+  .access-panel { margin: 0 auto 14px; padding: 16px 18px; border-radius: 12px; background: var(--app-surface); box-shadow: var(--app-shadow-border); color: var(--app-text); }
   .access-heading,.access-card-heading,.access-column-heading,.access-actions { display: flex; align-items: center; gap: .65rem; justify-content: space-between; }
   .access-heading { align-items: flex-start; margin-bottom: 1.25rem; } .access-heading h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; font-weight: 650; }
   .access-heading p,.access-card p,.pending-device p,.access-empty { color: var(--app-text-muted); font-size: .8125rem; line-height: 1.55; margin-top: .4rem; }

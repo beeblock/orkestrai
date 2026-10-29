@@ -475,8 +475,12 @@
     color: var(--app-text);
   }
 
-  .page-header {
+  .providers-page > :global(*) {
     width: min(1100px, 100%);
+    margin-inline: auto;
+  }
+
+  .page-header {
     min-height: 70px;
     margin: 0 auto 16px;
     display: flex;
@@ -491,7 +495,6 @@
   .header-spacer { flex: 1; }
 
   .overview {
-    width: min(1100px, 100%);
     margin: 0 auto 14px;
     padding: 16px 18px;
     display: flex;
@@ -517,7 +520,7 @@
   .overview p { margin: 3px 0 0; color: var(--app-text-muted); font-size: 12px; }
 
 
-  .provider-list { width: min(1100px, 100%); margin: 0 auto; display: grid; gap: 10px; }
+  .provider-list { margin: 0 auto; display: grid; gap: 10px; }
   /* Estado fica no selo; o cartao em si e neutro e ganha elevacao no hover. */
   .provider-row { border-radius: 12px; background: var(--app-surface); box-shadow: var(--app-shadow-border); overflow: hidden; transition: box-shadow var(--duration-quick) ease-out, background-color var(--duration-quick) ease-out; }
   .provider-row:hover { box-shadow: var(--app-shadow-border-hover); }
@@ -566,7 +569,7 @@
   .profile-form-error { margin: 0; color: var(--app-danger, #d94b4b); font-size: 12px; }
   .profile-form-actions { display: flex; gap: 8px; }
 
-  .empty-state { width: min(1100px, 100%); min-height: 180px; margin: 0 auto; display: grid; border-radius: 12px; background: var(--app-surface-subtle); box-shadow: var(--app-shadow-border); }
+  .empty-state { min-height: 180px; margin: 0 auto; display: grid; border-radius: 12px; background: var(--app-surface-subtle); box-shadow: var(--app-shadow-border); }
   :global(.provider-refresh-spin) { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 

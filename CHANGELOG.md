@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+
+- Align the model access panel with the other Provider Center sections through a shared responsive page column and matching card spacing and corners.
+
 ## 0.49.0 - 2026-10-29
 
 ### Added
