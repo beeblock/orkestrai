@@ -16,7 +16,12 @@ test('Central de Providers lista o registry e mostra a configuração oficial', 
   try {
     await page.goto('/providers');
     await expect(page.getByRole('heading', { name: 'Provider Center' })).toBeVisible();
-    await expect(page.locator('.provider-row')).toHaveCount(16);
+    const status = await request.get('/api/agent-room/status');
+    expect(status.ok()).toBe(true);
+    const providers: Array<{ id: string }> = (await status.json()).data.providers;
+    expect(providers.some(provider => provider.id === 'shared')).toBe(true);
+    await expect(page.locator('.provider-row')).toHaveCount(providers.length);
+    await expect(page.locator('.provider-row').filter({ has: page.getByRole('heading', { name: 'Orkestrai', exact: true }) })).toHaveCount(1);
     await expect(page.locator('.provider-row', { hasText: 'Oh My Pi' })).toHaveCount(1);
     await expect(page.locator('.provider-row').filter({ has: page.getByText('Pi', { exact: true }) })).toHaveCount(1);
 
@@ -24,7 +29,7 @@ test('Central de Providers lista o registry e mostra a configuração oficial', 
     await claude.getByRole('button', { name: 'View setup' }).click();
     await expect(claude.getByText('1. Install the CLI')).toBeVisible();
     await expect(claude.getByRole('link', { name: 'Open official guide' })).toHaveAttribute('href', /^https:\/\//);
-    await expect(page.getByRole('region', { name: /\d+ of 16 CLIs detected on this device/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: new RegExp(`\\d+ of ${providers.length} CLIs detected on this device`) })).toBeVisible();
   } finally {
     await request.put('/api/agent-room/settings', { data: { uiLanguage: 'pt-BR' } });
   }

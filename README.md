@@ -978,12 +978,20 @@ platforms, validates update manifests, and publishes verified artifacts as
 [GitHub Releases](https://github.com/beeblock/orkestrai/releases).
 See [docs/releases.md](docs/releases.md) for the complete process.
 
+## Delegated model access
+
+Lend selected Claude/Codex account profiles from **Provider Center → Model access**, independently of workspace collaboration.
+
+1. **Owner:** choose **Lend access**, select account profiles, allowed models/efforts, expiry and request/concurrency limits. Send the private invitation to the selected guest.
+2. **Guest:** open **Use invitation** in their own Orkestrai and paste the invitation. Compare the displayed device fingerprint with the owner; the owner approves that exact device.
+3. **Guest:** select **Orkestrai** and the received account/model when creating or changing an agent. Work in a local workspace as usual: tools, files, commands and integrations execute on the guest computer. The owner supplies model responses and retains provider credentials. Selected conversation inputs and tool results pass through the owner computer and provider.
+4. **Images:** the owner separately enables Codex image access for that account. The guest selects the received Codex access for the native image workflow. References and generated PNGs stay in the guest workspace; each generation counts toward the access request limit.
+5. **Owner:** inspect, change limits or revoke access in Model access. Expiry/revocation cancels active and queued inference. Both desktops must remain online and connected to the inference relay. Other paid integrations keep their own accounts and billing.
+
+The in-app manual and guided tour cover this flow in Portuguese, English and Spanish. See the [public manual](https://orkestrai.app/en/docs#subscription-lending), [use case](https://orkestrai.app/en/use-cases#subscription-lending), and [implementation and verification](docs/design/subscription-lending.md).
+
 ## License
 
 Orkestrai is licensed under the [Apache License 2.0](LICENSE). Third-party
 components and downloaded models remain subject to the licenses listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-### Delegated model access
-
-Provider Center → Model access lends selected Claude/Codex account profiles to an explicitly approved guest device, with expiry, model/effort restrictions and request/concurrency limits. The guest works in their own Orkestrai: tools, files and integrations execute on their computer. The owner supplies model responses, retains provider credentials and can revoke active/queued inference. Codex image access is a separate permission; references and generated files belong to the guest workspace. Both desktops must remain connected to a compatible inference relay. See [implementation and verification](docs/design/subscription-lending.md).

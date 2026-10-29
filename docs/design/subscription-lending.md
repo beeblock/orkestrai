@@ -1,6 +1,6 @@
 # Delegated model access
 
-Status: implementation in `feat/subscription-lending`; not released.
+Status: included in Orkestrai 0.49.0. See the release changelog and verification report for supported provider contracts.
 
 ## Accepted product contract
 

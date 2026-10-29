@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.49.0 - 2026-10-29
+
 ### Added
 
 - Lend selected Claude/Codex account profiles to an approved guest device for a bounded time, independently of workspace collaboration. Enforce per-account model and reasoning-effort scopes, expiry, revocation, concurrency and durable request limits. Provider credentials remain on the owner computer; guest files, commands and native bridge/CLI/MCP tools run on the guest.
