@@ -983,3 +983,7 @@ See [docs/releases.md](docs/releases.md) for the complete process.
 Orkestrai is licensed under the [Apache License 2.0](LICENSE). Third-party
 components and downloaded models remain subject to the licenses listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Delegated model access
+
+Provider Center → Model access lends selected Claude/Codex account profiles to an explicitly approved guest device, with expiry, model/effort restrictions and request/concurrency limits. The guest works in their own Orkestrai: tools, files and integrations execute on their computer. The owner supplies model responses, retains provider credentials and can revoke active/queued inference. Codex image access is a separate permission; references and generated files belong to the guest workspace. Both desktops must remain connected to a compatible inference relay. See [implementation and verification](docs/design/subscription-lending.md).

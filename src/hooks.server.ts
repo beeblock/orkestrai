@@ -1,3 +1,4 @@
+import { modelAccessService } from '$lib/modules/model-access/application/services/ModelAccessService.js';
 import { getAgentAdapter } from '$lib/modules/agent-room/application/adapters/registry.js';
 import { mobileAccessService } from '$lib/modules/agent-room/application/services/MobileAccessService.js';
 /**
@@ -55,6 +56,7 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
 if (!building) {
   void afterDatabaseReady(() => {
     creativeQueueService.start();
+    void modelAccessService.start().catch(() => {});
     if (!globalRef.__orkestraiComputerObserver) {
       computerObservationService.start();
       globalRef.__orkestraiComputerObserver = true;

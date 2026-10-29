@@ -1,3 +1,4 @@
+import { managedTranscriptRoot, managedTranscriptPath } from '../pty/ManagedAgentTranscript.js';
 import type { AgentStorageRoots } from './AgentStorageRoots.js';
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -261,7 +262,7 @@ function normalizedPrompt(value: string): string {
 
 function promptMatches(storage: string, actual: string, expected: string): boolean {
   if (normalizedPrompt(actual) === normalizedPrompt(expected)) return true;
-  if (storage !== 'claude-project-jsonl') return false;
+  if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return false;
   // Claude wraps a bracketed paste in the persisted user message. Match the
   // entire envelope and its id, never a substring from several pasted prompts.
   const pasted = /^\s*<pasted_content id="([a-zA-Z0-9_-]+)">\s*([\s\S]*?)\s*<\/pasted_content id="\1">\s*$/.exec(actual);
@@ -474,7 +475,7 @@ function kimiTurnComplete(jsonl: string): boolean {
 }
 
 function promptFromJsonlEvent(storage: string, event: any): string | null {
-  if (storage === 'claude-project-jsonl') {
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
     const queued = claudeQueuedPrompt(event);
     if (queued) return queued;
     if (!isClaudeUserPrompt(event)) return null;
@@ -662,7 +663,7 @@ function promptOccurrenceCount(storage: string, transcript: string, expectedProm
 }
 
 export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string): boolean {
-  if (storage === 'claude-project-jsonl') {
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
     const expected = normalizedPrompt(expectedPrompt);
     for (const line of transcript.trim().split('\n').reverse()) {
       let event: any;
@@ -684,7 +685,7 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
 }
 
 function parserForStorage(storage: string | undefined): ((jsonl: string) => ParsedTranscriptTurn) | null {
-  if (storage === 'claude-project-jsonl') return (jsonl) => ({ prompt: claudePrompt(jsonl), reply: parseClaudeTranscriptReply(jsonl), complete: claudeTurnComplete(jsonl) });
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) return (jsonl) => ({ prompt: claudePrompt(jsonl), reply: parseClaudeTranscriptReply(jsonl), complete: claudeTurnComplete(jsonl) });
   if (storage === 'codex-rollout-jsonl') return (jsonl) => ({ prompt: codexPrompt(jsonl), ...codexCompletion(jsonl) });
   if (storage === 'kimi-session-dir') return (jsonl) => ({ prompt: kimiPrompt(jsonl), reply: parseKimiTranscriptReply(jsonl), complete: kimiTurnComplete(jsonl) });
   if (['opencode-session-json', 'cursor-transcript-jsonl', 'antigravity-workspace-cache'].includes(storage ?? '')) {
@@ -1018,8 +1019,8 @@ function openCodeTurn(sessionId: string, options: TranscriptLookupOptions = {}):
 }
 
 function preferredTranscriptPath(storage: string | undefined, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): string | null {
-  if (storage === 'claude-project-jsonl') {
-    const path = claudeTranscriptPath(cwd, sessionId, options);
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
+    const path = storage === 'orkestrai-jsonl' ? managedTranscriptPath(realCwd(cwd, options.posixCwd), sessionId) : claudeTranscriptPath(cwd, sessionId, options);
     return existsSync(path) ? path : null;
   }
   if (storage === 'codex-rollout-jsonl') return findCodexTranscript(sessionId, options);
@@ -1081,8 +1082,8 @@ function recentFiles(
 }
 
 function candidateTranscriptPaths(storage: string | undefined, cwd: string, since: number, options: TranscriptLookupOptions = {}): string[] {
-  if (storage === 'claude-project-jsonl') {
-    const dir = dirname(claudeTranscriptPath(cwd, 'placeholder', options));
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
+    const dir = storage === 'orkestrai-jsonl' ? managedTranscriptRoot(realCwd(cwd, options.posixCwd)) : dirname(claudeTranscriptPath(cwd, 'placeholder', options));
     return recentFiles(dir, since, 0, (name) => name.endsWith('.jsonl'));
   }
   if (storage === 'codex-rollout-jsonl') {
@@ -1147,7 +1148,7 @@ function codexTranscriptCwd(path: string, options: TranscriptLookupOptions = {})
 }
 
 function sessionIdForPath(storage: string | undefined, path: string): string | null {
-  if (storage === 'claude-project-jsonl') return basename(path, '.jsonl');
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) return basename(path, '.jsonl');
   if (storage === 'codex-rollout-jsonl') {
     return basename(path).match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/)?.[1] ?? null;
   }
@@ -1234,7 +1235,7 @@ function promptAtPath(storage: string | undefined, path: string, expectedPrompt:
   return Boolean(transcript && storage && transcriptContainsPrompt(storage, transcript, expectedPrompt));
 }
 
-const FILE_LOOKUP_STORAGES = new Set(['claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
+const FILE_LOOKUP_STORAGES = new Set(['orkestrai-jsonl', 'claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
 
 /** A quiet PTY is not proof that a provider has finished its latest turn. */
 export function parseLatestTurnComplete(storage: string, transcript: string, processStartedAt?: number): boolean | null {
@@ -1247,11 +1248,17 @@ export function parseLatestTurnComplete(storage: string, transcript: string, pro
   // final answer while a new turn is running or waiting for tool approval.
   const start = records.findLastIndex((event) => event && typeof event === 'object' && promptFromJsonlEvent(storage, event));
   const scoped = records.slice(Math.max(0, start));
+  // Our managed transcript is created before the very first prompt. A validated
+  // header with no turn work proves that it is a fresh conversation, not a busy
+  // Claude session missing its completion record. The PTY idle gate still applies.
+  if (storage === 'orkestrai-jsonl' && start < 0
+    && scoped.some(record => record?.type === 'system' && record.subtype === 'orkestrai-managed')
+    && !scoped.some(record => ['user','assistant','api-request','queue-operation','guest-tool'].includes(record?.type))) return true;
   // Quitting or crashing mid-turn leaves the turn open forever: a resumed CLI
   // starts idle without closing it. Activity older than this process cannot be
   // a running turn, so it must not hold queued work back.
   if (processStartedAt && turnActivityBefore(storage, scoped, processStartedAt)) return true;
-  if (storage === 'claude-project-jsonl') {
+  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
     // Legacy reply extraction tolerates missing stop_reason; proactive work
     // requires an actual completed assistant turn and no queued user input.
     const queue = scoped.findLast((record) => record?.type === 'queue-operation');
@@ -1276,7 +1283,7 @@ function turnActivityBefore(storage: string, records: unknown[], before: number)
   let latest = 0;
   for (const record of records as Array<Record<string, any> | null>) {
     if (!record || typeof record !== 'object') continue;
-    const activity = storage === 'claude-project-jsonl'
+    const activity = (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')
       ? ['user', 'assistant', 'queue-operation', 'api-request'].includes(record.type)
       : storage === 'codex-rollout-jsonl'
         ? record.type === 'response_item' || (record.type === 'event_msg' && record.payload?.type !== 'thread_settings_applied')
@@ -1296,11 +1303,11 @@ async function conversationTail(
   if (!storage || !FILE_LOOKUP_STORAGES.has(storage)) return null;
   const actualCwd = await transcriptCwd(cwd, options.posixCwd);
   const home = options.homeDir ?? homedir();
-  const root = storage === 'claude-project-jsonl'
+  const root = storage === 'orkestrai-jsonl' ? managedTranscriptRoot(actualCwd) : storage === 'claude-project-jsonl'
     ? join(options.claudeConfigDir ?? join(home, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
     : storage === 'codex-rollout-jsonl' ? join(options.codexHome ?? join(home, '.codex'), 'sessions')
       : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
-  const path = storage === 'claude-project-jsonl' ? join(root, `${sessionId}.jsonl`)
+  const path = (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') ? join(root, `${sessionId}.jsonl`)
     : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
       : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
   const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
@@ -1341,7 +1348,7 @@ export function parseLatestTurnBoundary(storage: string, transcript: string, pro
       ready = lifecycle.payload.type !== 'task_started';
       if (ready) finish = lifecycle;
     }
-  } else if (storage === 'claude-project-jsonl') {
+  } else if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
     // Scheduled Claude turns are metadata, not owner prompts. A timestamped
     // API request still proves newer provider work when the original prompt
     // is absent from the bounded tail. Keep prompt/reply matching unchanged.
@@ -1409,7 +1416,7 @@ async function findFileTurn(
 ): Promise<FileTurn | null> {
   const actualCwd = await transcriptCwd(cwd, options.posixCwd);
   const home = options.homeDir ?? homedir();
-  const root = storage === 'claude-project-jsonl'
+  const root = storage === 'orkestrai-jsonl' ? managedTranscriptRoot(actualCwd) : storage === 'claude-project-jsonl'
     ? join(options.claudeConfigDir ?? join(home, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
     : storage === 'codex-rollout-jsonl' ? join(options.codexHome ?? join(home, '.codex'), 'sessions')
       : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
@@ -1431,7 +1438,7 @@ async function findFileTurn(
     return value;
   };
   const preferred = preferredSessionId
-    ? storage === 'claude-project-jsonl' ? join(root, `${preferredSessionId}.jsonl`)
+    ? (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') ? join(root, `${preferredSessionId}.jsonl`)
       : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, preferredSessionId, 4)
         : join(root, preferredSessionId, 'agents', 'main', 'wire.jsonl')
     : null;
@@ -1441,7 +1448,7 @@ async function findFileTurn(
     // search every other conversation, or to select a different agent's turn.
     if (match) return match;
   }
-  const paths = await recentTranscriptFiles(root, storage === 'claude-project-jsonl' ? 0 : 5);
+  const paths = await recentTranscriptFiles(root, (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') ? 0 : 5);
   for (const entry of paths) {
     if (entry.mtime < since - 2_000 || entry.path === preferred) continue;
     if (storage === 'codex-rollout-jsonl') {
@@ -1614,8 +1621,8 @@ export async function findReplyToPrompt(
 export async function lastReplyText(provider: string, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): Promise<string | null> {
   try {
     const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
-    if (storage === 'claude-project-jsonl') {
-      const path = claudeTranscriptPath(cwd, sessionId, options);
+    if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
+      const path = storage === 'orkestrai-jsonl' ? managedTranscriptPath(realCwd(cwd, options.posixCwd), sessionId) : claudeTranscriptPath(cwd, sessionId, options);
       if (!existsSync(path)) return null;
       const jsonl = readTail(path);
       return jsonl ? parseClaudeTranscriptReply(jsonl) : null;

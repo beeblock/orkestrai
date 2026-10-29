@@ -1,3 +1,4 @@
+import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { createHash } from 'node:crypto';
 import { basename, posix, relative, resolve, sep } from 'node:path';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -377,6 +378,14 @@ function runRecord(active: ImageWorkflowActiveRun, status: ImageWorkflowRun['sta
 }
 
 export class ImageWorkflowService {
+  private async imageExecutor(node: CanvasNode) {
+    const payload = node.payload as TerminalNodePayload;
+    if (node.type !== 'terminal' || !payload.provider || !hasAgentAdapter(payload.provider)) return false;
+    return Boolean(await getAgentAdapter(payload.provider).supportsImageWorkflows?.(payload.args?.[payload.args.indexOf('--model') + 1]));
+  }
+  private async imageExecutors(nodes: CanvasNode[]) {
+    return (await Promise.all(nodes.filter(node => node.type === 'terminal').map(async node => await this.imageExecutor(node) ? node : null))).filter((node): node is CanvasNode => !!node);
+  }
   async list(workspaceId: string, includeHistory = false) {
     const [nodes, edges] = await Promise.all([workspaceRepository.listNodes(workspaceId), workspaceRepository.listEdges(workspaceId)]);
     return Promise.all(nodes.filter((node) => node.type === 'imageWorkflow').map((node) => this.describe(node, nodes, edges, includeHistory)));
@@ -463,7 +472,7 @@ export class ImageWorkflowService {
     if (!['note', 'image', 'terminal'].includes(target.type)) throw new ImageWorkflowError('image_workflow_connection_type_invalid');
     if (target.type === 'terminal') {
       const provider = (target.payload as TerminalNodePayload).provider;
-      if (target.id !== dto.actorNodeId || provider !== 'codex') throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+      if (target.id !== dto.actorNodeId || !await this.imageExecutor(target)) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
     }
 
     const payload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
@@ -596,7 +605,9 @@ export class ImageWorkflowService {
       '[Orkestrai Image Workflow]',
       `You are the Codex executor for workflow ${execution.workflowNodeId}, run ${execution.runId}.`,
       'Call image_workflow_read for this node to obtain the exact prompt, reference paths, and preallocated output paths.',
-      'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.',
+      execution.tool.displayName === 'image_gen.imagegen'
+        ? 'Use the built-in image_gen.imagegen tool only. Do not ask for an API key, do not call the OpenAI Images API directly, and do not use scripts/image_gen.py.'
+        : `Use ${execution.tool.displayName} only (${execution.tool.normalizedName}), the approved delegated image_gen.imagegen equivalent. Supply a fresh UUID idempotencyKey per intended generation; preserve that key after uncertain results. Copy its returned guest path to outputAbsolutePaths with copy_file, which handles native/WSL and Floor paths without changing pixels. Do not request credentials or call an Images API yourself.`,
       'Every visual change, including background removal, MUST be performed by another built-in image_gen.imagegen call. Never use Python, Pillow, ImageMagick, ffmpeg, remove-bg, generated masks, canvas pixel processing, or any other script/tool to alter image pixels. Shell/file commands may only create the assigned directory and copy the exact native ImageGen result to its assigned path.',
       execution.delivery.targetWidth
         ? `Compose for the requested ${execution.delivery.targetWidth} x ${execution.delivery.targetHeight} delivery frame and obey its safe-area contract. Do not resize or crop the file yourself: image_workflow_validate only performs exact-size resampling when the native aspect ratio already matches, and otherwise returns a native ImageGen reframe prompt.`
@@ -639,9 +650,7 @@ export class ImageWorkflowService {
       connected.map(({ node }) => node).filter((node) => node.type === 'note'),
       existingPayload.contextOrder,
     ).slice(0, 12);
-    const connectedExecutors = connected.map(({ node }) => node).filter((node) => (
-      node.type === 'terminal' && (node.payload as TerminalNodePayload).provider === 'codex'
-    ));
+    const connectedExecutors = await this.imageExecutors(connected.map(({ node }) => node));
     const executorNode = dto.actorNodeId
       ? connectedExecutors.find((node) => node.id === dto.actorNodeId)
       : connectedExecutors.find((node) => agents.some((agent) => agent.nodeId === node.id && agent.sessionAlive));
@@ -874,6 +883,9 @@ export class ImageWorkflowService {
       : result.errorCode === 'image_workflow_output_aspect_mismatch'
         ? Math.max(0, MAX_ATTEMPTS_PER_OUTPUT - deliveryValidationCount)
         : null;
+    const executor = await workspaceRepository.getNode(active.executorNodeId);
+    const provider = (executor?.payload as TerminalNodePayload | undefined)?.provider;
+    const repairTool = provider && hasAgentAdapter(provider) ? getAgentAdapter(provider).imageWorkflowTool?.name ?? 'image_gen.imagegen' : 'image_gen.imagegen';
     return {
       path: outputPath,
       valid: result.valid,
@@ -893,16 +905,16 @@ export class ImageWorkflowService {
       normalized: result.normalized ?? false,
       sourceMasterPath: result.sourceMasterPath ?? null,
       attemptsRemaining,
-      repairTool: repairPrompt ? 'image_gen.imagegen' : null,
+      repairTool: repairPrompt ? repairTool : null,
       repairPrompt,
       repairReferencedImagePaths: repairPrompt ? [outputPath] : [],
       repair: repairPrompt
-        ? `Call image_gen.imagegen with only this invalid output in referenced_image_paths and the exact repairPrompt returned in this response. Do not use Python or any non-ImageGen pixel manipulation. Replace the same assigned file with that native result and validate again.`
+        ? `Call ${repairTool} with only this invalid output in referenced_image_paths and the exact repairPrompt returned in this response. Do not use Python or any non-ImageGen pixel manipulation. Replace the same assigned file with that native result and validate again.`
         : null,
     };
   }
 
-  async status(workspaceId: string, nodeId: string): Promise<{ running: boolean; runId: string | null; lastError: string | null; executorReady: boolean; executorNodeId: string | null; executorTitle: string | null }> {
+  async status(workspaceId: string, nodeId: string): Promise<{ running: boolean; runId: string | null; lastError: string | null; executorReady: boolean; executorNodeId: string | null; executorTitle: string | null; imageExecutorIds?: string[] }> {
     const [node, nodes, edges, agents] = await Promise.all([
       workspaceRepository.getNode(nodeId), workspaceRepository.listNodes(workspaceId),
       workspaceRepository.listEdges(workspaceId), bridgeService.listAgents(workspaceId),
@@ -928,9 +940,7 @@ export class ImageWorkflowService {
         return this.status(workspaceId, nodeId);
       }
     }
-    const connectedCodex = connectedNodes(node, nodes, edges).map(({ node: connected }) => connected).filter((connected) => (
-      connected.type === 'terminal' && (connected.payload as TerminalNodePayload).provider === 'codex'
-    ));
+    const connectedCodex = await this.imageExecutors(connectedNodes(node, nodes, edges).map(({ node }) => node));
     const connectedAgents = connectedCodex.flatMap((connected) => {
       const agent = agents.find((candidate) => candidate.nodeId === connected.id);
       return agent ? [agent] : [];
@@ -941,6 +951,7 @@ export class ImageWorkflowService {
       runId: payload.activeRun?.id ?? null,
       lastError: payload.lastError ?? null,
       executorReady: Boolean(executor?.sessionAlive),
+      imageExecutorIds: connectedCodex.map(node => node.id),
       executorNodeId: executor?.nodeId ?? connectedCodex[0]?.id ?? null,
       executorTitle: executor?.title ?? connectedCodex[0]?.title ?? null,
     };
@@ -1029,15 +1040,18 @@ export class ImageWorkflowService {
 
   private executionSpec(workspace: Workspace, workflow: CanvasNode, active: ImageWorkflowActiveRun, agents: Awaited<ReturnType<typeof bridgeService.listAgents>>) {
     const executor = agents.find((agent) => agent.nodeId === active.executorNodeId);
+    const imageTool = executor?.provider && hasAgentAdapter(executor.provider) ? getAgentAdapter(executor.provider).imageWorkflowTool : undefined;
+    // Managed delegated agents resolve these paths on the guest, independent of WSL and Floor cwd.
+    const outputPath = (path: string) => imageTool?.workspaceReferences ? resolve(workspace.workingDir,path) : agentPath(workspace,path);
     return {
       workflowNodeId: workflow.id,
       runId: active.id,
       status: 'running' as const,
-      executor: { nodeId: active.executorNodeId, title: executor?.title ?? 'Codex', provider: 'codex' as const },
+      executor: { nodeId: active.executorNodeId, title: executor?.title ?? 'Codex', provider: executor?.provider ?? 'codex' },
       tool: {
-        displayName: 'image_gen.imagegen', normalizedName: 'tools.image_gen__imagegen',
+        displayName: imageTool?.name ?? 'image_gen.imagegen', normalizedName: imageTool?.normalizedName ?? 'tools.image_gen__imagegen',
         prompt: active.promptSnapshot,
-        referenced_image_paths: active.referencePaths.map((path) => agentPath(workspace, path)),
+        referenced_image_paths: active.referencePaths.map(outputPath),
         calls: active.requestedOutputs,
         maxAttemptsPerOutput: MAX_ATTEMPTS_PER_OUTPUT,
         maxAttemptsPerValidationIssue: MAX_ATTEMPTS_PER_OUTPUT,
@@ -1054,20 +1068,20 @@ export class ImageWorkflowService {
       transparencyStrategy: active.transparencyStrategy ?? 'direct-alpha',
       workspaceRoot: workspace.runtimeKind === 'wsl' && workspace.wslWorkingDir ? workspace.wslWorkingDir : workspace.workingDir,
       outputPaths: active.outputPaths,
-      outputAbsolutePaths: active.outputPaths.map((path) => agentPath(workspace, path)),
+      outputAbsolutePaths: active.outputPaths.map(outputPath),
       validation: {
         tool: 'image_workflow_validate',
         arguments: { nodeId: workflow.id, runId: active.id, outputPath: '<one assigned output path>' },
         genuineAlphaRequired: active.transparentBackground,
         repair: active.transparentBackground ? {
-          tool: 'image_gen.imagegen',
+          tool: imageTool?.name ?? 'image_gen.imagegen',
           prompt: transparentRepairPrompt(active, 1),
           escalationPrompt: transparentRepairPrompt(active, 2),
           referenced_image_paths: ['<the invalid assigned output path only>'],
           forbiddenPixelTools: ['python', 'pillow', 'imagemagick', 'ffmpeg', 'remove-bg', 'generated masks', 'canvas pixel processing'],
         } : null,
         deliveryRepair: active.targetWidth && active.targetHeight ? {
-          tool: 'image_gen.imagegen',
+          tool: imageTool?.name ?? 'image_gen.imagegen',
           prompt: deliveryRepairPrompt(active, null, null),
           referenced_image_paths: ['<the invalid assigned output path only>'],
           rejectsCropping: true,
@@ -1123,7 +1137,7 @@ export class ImageWorkflowService {
   private async requireCodexActor(workspaceId: string, actorNodeId: string) {
     const [node, agents] = await Promise.all([workspaceRepository.getNode(actorNodeId), bridgeService.listAgents(workspaceId)]);
     const actor = agents.find((agent) => agent.nodeId === actorNodeId);
-    if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal' || actor?.provider !== 'codex') {
+    if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal' || !await this.imageExecutor(node)) {
       throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
     }
     return node;

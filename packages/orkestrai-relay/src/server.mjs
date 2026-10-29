@@ -7,6 +7,8 @@ import {
   collaborationEnvelopeSchema,
 } from '@orkestrai/collaboration-protocol';
 
+import { INFERENCE_PROTOCOL, inferenceEnvelopeSchema } from '@orkestrai/collaboration-protocol/inference';
+
 const ROOM_IDLE_MS = 15 * 60_000;
 const ATTEMPT_WINDOW_MS = 60_000;
 const MAX_ATTEMPTS_PER_IP = 30;
@@ -15,7 +17,7 @@ const OPAQUE_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 
 /**
  * @typedef {{ allowedOrigins?: string, maxPeers?: number }} RelayOptions
- * @typedef {{ shareId: string, peerId: string, role: 'host' | 'guest' }} RelayRegistration
+ * @typedef {{ shareId: string, peerId: string, role: 'host' | 'guest', protocol: string, roomKey: string }} RelayRegistration
  * @typedef {{ id: string, role: 'host' | 'guest', websocket: WebSocket, alive: boolean }} RelayPeer
  * @typedef {{
  *   host: RelayPeer | null,
@@ -63,10 +65,12 @@ export function createRelayServer(options = {}) {
   };
 
   const server = http.createServer((request, response) => {
-    const pathname = new URL(request.url ?? '/', 'http://relay.local').pathname;
+    let pathname;
+    try { pathname = new URL(request.url ?? '/', 'http://relay.local').pathname; }
+    catch { response.writeHead(400); response.end(); return; }
     if (pathname === '/health' || pathname === '/ready') {
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      response.end(JSON.stringify({ ok: true, protocol: COLLABORATION_PROTOCOL }));
+      response.end(JSON.stringify({ ok: true, protocol: COLLABORATION_PROTOCOL, protocols: [COLLABORATION_PROTOCOL, INFERENCE_PROTOCOL] }));
       return;
     }
     if (pathname === '/metrics') {
@@ -83,7 +87,7 @@ export function createRelayServer(options = {}) {
     maxPayload: MAX_ENCRYPTED_FRAME_BYTES,
     perMessageDeflate: false,
     handleProtocols(protocols) {
-      return protocols.has(COLLABORATION_PROTOCOL) ? COLLABORATION_PROTOCOL : false;
+      return protocols.has(INFERENCE_PROTOCOL) ? INFERENCE_PROTOCOL : protocols.has(COLLABORATION_PROTOCOL) ? COLLABORATION_PROTOCOL : false;
     },
   });
 
@@ -98,8 +102,11 @@ export function createRelayServer(options = {}) {
   }
 
   server.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url ?? '/', 'http://relay.local');
-    if (url.pathname !== '/v1/connect') return rejectUpgrade(socket, '404 Not Found', 'Not found.');
+    let url;
+    try { url = new URL(request.url ?? '/', 'http://relay.local'); }
+    catch { return rejectUpgrade(socket, '400 Bad Request', 'Invalid URL.'); }
+    if (!['/v1/connect', '/v1/inference'].includes(url.pathname)) return rejectUpgrade(socket, '404 Not Found', 'Not found.');
+    const protocol = url.pathname === '/v1/inference' ? INFERENCE_PROTOCOL : COLLABORATION_PROTOCOL;
     const origin = request.headers.origin;
     if (!isOriginAllowed(origin, allowedOrigins)) return rejectUpgrade(socket, '403 Forbidden', 'Origin is not allowed.');
     const ip = request.socket.remoteAddress ?? 'unknown';
@@ -114,14 +121,16 @@ export function createRelayServer(options = {}) {
       return rejectUpgrade(socket, '400 Bad Request', 'Invalid relay registration.');
     }
     const offered = String(request.headers['sec-websocket-protocol'] ?? '').split(',').map((value) => value.trim());
-    if (!offered.includes(COLLABORATION_PROTOCOL)) return rejectUpgrade(socket, '426 Upgrade Required', 'Unsupported protocol.');
-    const room = rooms.get(shareId);
+    if (offered.length !== 1 || offered[0] !== protocol) return rejectUpgrade(socket, '426 Upgrade Required', 'Unsupported protocol.');
+    const roomKey = protocol === INFERENCE_PROTOCOL ? `inference:${shareId}` : shareId;
+    const room = rooms.get(roomKey);
+    if (role === 'guest' && room?.guests.has(peerId)) return rejectUpgrade(socket, '409 Conflict', 'Peer already connected.');
     if (role === 'host' && room?.host) return rejectUpgrade(socket, '409 Conflict', 'A host is already connected.');
     if (role === 'guest' && (!room?.host || room.guests.size >= room.maxPeers)) {
       return rejectUpgrade(socket, room?.host ? '409 Conflict' : '404 Not Found', room?.host ? 'Room is full.' : 'Host is offline.');
     }
     wss.handleUpgrade(request, socket, head, (websocket) => {
-      wss.emit('connection', websocket, request, { shareId, peerId, role });
+      wss.emit('connection', websocket, request, { shareId, peerId, role, protocol, roomKey });
     });
   });
 
@@ -130,8 +139,8 @@ export function createRelayServer(options = {}) {
     /** @type {import('node:http').IncomingMessage} */ _request,
     /** @type {RelayRegistration} */ registration,
   ) => {
-    const { shareId, peerId, role } = registration;
-    const room = rooms.get(shareId) ?? {
+    const { shareId, peerId, role, protocol, roomKey } = registration;
+    const room = rooms.get(roomKey) ?? {
       host: null,
       guests: new Map(),
       maxPeers: Math.min(5, Math.max(1, Number(options.maxPeers ?? 5))),
@@ -139,7 +148,7 @@ export function createRelayServer(options = {}) {
       byteWindowStartedAt: Date.now(),
       bytesInWindow: 0,
     };
-    rooms.set(shareId, room);
+    rooms.set(roomKey, room);
     /** @type {RelayPeer} */
     const peer = { id: peerId, role, websocket, alive: true };
     if (role === 'host') room.host = peer;
@@ -158,7 +167,7 @@ export function createRelayServer(options = {}) {
       }
       let envelope;
       try {
-        envelope = collaborationEnvelopeSchema.parse(JSON.parse(payload.toString('utf8')));
+        envelope = (protocol === INFERENCE_PROTOCOL ? inferenceEnvelopeSchema : collaborationEnvelopeSchema).parse(JSON.parse(payload.toString('utf8')));
       } catch {
         metrics.protocolErrors += 1;
         websocket.close(1008, 'Invalid collaboration envelope.');
@@ -177,20 +186,24 @@ export function createRelayServer(options = {}) {
         : [room.host];
       for (const target of targets) {
         if (!target || target.websocket.readyState !== WebSocket.OPEN) continue;
+        if (target.websocket.bufferedAmount > 1024 * 1024) {
+          target.websocket.close(1008, 'Slow recipient.');
+          continue;
+        }
         target.websocket.send(data, { binary: isBinary, compress: false });
         metrics.framesForwarded += 1;
         metrics.bytesForwarded += bytes;
       }
     });
     websocket.on('close', () => {
-      if (role === 'host' && room.host?.id === peerId) {
+      if (role === 'host' && room.host === peer) {
         room.host = null;
         for (const guest of room.guests.values()) guest.websocket.close(1012, 'Host disconnected.');
         room.guests.clear();
-      } else {
+      } else if (room.guests.get(peerId) === peer) {
         room.guests.delete(peerId);
       }
-      if (!room.host && room.guests.size === 0) rooms.delete(shareId);
+      if (!room.host && room.guests.size === 0 && rooms.get(roomKey) === room) rooms.delete(roomKey);
     });
   });
 

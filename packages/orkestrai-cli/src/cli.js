@@ -470,6 +470,20 @@ async function runCommand(argv, options, sink) {
 
   const config = { ...resolveConfig(env, cwd), [INBOX_SINK]: sink };
 
+  if (command === 'model-access') {
+    const operation = rest[0] ?? 'status';
+    const input = flags.input ? JSON.parse(String(flags.input)) : {};
+    const body = operation === 'status' ? { operation } : operation === 'propose' ? { operation, taskId: flags.task, input } : operation === 'revoke' ? { ...input,operation,taskId:flags.task,grantId:flags.grant ?? input.grantId,revision:flags.revision === undefined ? input.revision : Number(flags.revision) } : { ...input,operation,taskId:flags.task,connectionId:flags.connection ?? input.connectionId };
+    out(JSON.stringify(await bridge(config, 'POST', '/api/agent-room/bridge/model-access', body), null, 2));
+    return 0;
+  }
+
+  if (command === 'model-access-agent') {
+    const { runModelAccessAgent } = await import('./model-access-agent.js');
+    await runModelAccessAgent(argv.slice(1), { input: options.input ?? process.stdin, write: options.write ?? ((chunk) => process.stdout.write(chunk)), request: (body, signal) => fetch(`${config.apiUrl}/api/agent-room/bridge/model-access/agent`, { method: 'POST', signal, headers: { 'content-type': 'application/json', authorization: `Bearer ${config.token}`, ...(config[BRIDGE_AGENT_TOKEN] ? { 'x-orkestrai-agent-token': config[BRIDGE_AGENT_TOKEN] } : {}) }, body: JSON.stringify(body) }) });
+    return 0;
+  }
+
   switch (command) {
     case 'list': {
       const agentIdentity = flags.agent ?? selfAgent;

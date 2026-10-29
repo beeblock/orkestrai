@@ -9,6 +9,7 @@ persist workspace content and does not expose the local PTY WebSocket.
 - `GET /health` and `GET /ready`: process health and protocol version.
 - `GET /metrics`: aggregate connection and forwarding counters only.
 - `WS /v1/connect`: versioned collaboration transport.
+- `WS /v1/inference`: inference-only `orkestrai-inference.v1` transport, in separate rooms even when identifiers match. It never accepts workspace/terminal frames. Deploy this relay version before enabling delegated access in a desktop release.
 
 ## Production deployment
 

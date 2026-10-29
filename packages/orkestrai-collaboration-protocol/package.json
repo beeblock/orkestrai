@@ -11,6 +11,10 @@
     "./browser": {
       "types": "./src/browser.d.ts",
       "default": "./src/browser.js"
+    },
+    "./inference": {
+      "types": "./src/inference/index.d.ts",
+      "default": "./src/inference/index.js"
     }
   },
   "dependencies": {

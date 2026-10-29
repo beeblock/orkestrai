@@ -1,3 +1,4 @@
+import { managedTranscriptPath } from './ManagedAgentTranscript.ts';
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -29,6 +30,7 @@ function openReadonlySqlite(path: string): ReadonlySqliteDatabase {
 }
 
 export type AgentSessionStorage =
+  | 'orkestrai-jsonl'
   | 'claude-project-jsonl'
   | 'codex-rollout-jsonl'
   | 'kimi-session-dir'
@@ -104,13 +106,13 @@ export class AgentSessionTracker {
    * exata; nesse caso o chamador preserva o comportamento anterior.
    */
   isAgentSessionResumable(storage: string | undefined, cwd: string, agentSessionId: string): boolean | null {
-    if (storage !== 'claude-project-jsonl') return null;
+    if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return null;
     try {
       const slug = this.realCwd(cwd).replace(/[^a-zA-Z0-9]/g, '-');
-      const transcript = join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', slug, `${agentSessionId}.jsonl`);
+      const transcript = storage === 'orkestrai-jsonl' ? managedTranscriptPath(this.realCwd(cwd), agentSessionId) : join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', slug, `${agentSessionId}.jsonl`);
       if (!existsSync(transcript)) return false;
       const stat = statSync(transcript);
-      return stat.isFile() && this.isResumableClaudeTranscript(transcript, agentSessionId, stat.size);
+      return stat.isFile() && (storage === 'orkestrai-jsonl' ? stat.size > 0 : this.isResumableClaudeTranscript(transcript, agentSessionId, stat.size));
     } catch {
       return false;
     }
@@ -211,7 +213,7 @@ export class AgentSessionTracker {
     onFound: (agentSessionId: string) => void,
     timeoutMs = 1_800_000
   ): boolean {
-    if (storage !== 'claude-project-jsonl') return false;
+    if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return false;
     this.unwatch(ptySessionId);
     const started = Date.now();
     const inspect = () => {

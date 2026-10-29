@@ -1,4 +1,5 @@
 import type { AgentAdapter, AgentRoleLaunchContext } from './types.js';
+import { sharedAdapter } from './SharedAdapter.js';
 import { claudeAdapter } from './ClaudeAdapter.js';
 import { codexAdapter } from './CodexAdapter.js';
 import { kimiAdapter } from './KimiAdapter.js';
@@ -114,3 +115,5 @@ registerAgentAdapter(gooseAdapter);
 registerAgentAdapter(ampAdapter);
 registerAgentAdapter(piAdapter);
 registerAgentAdapter(ohMyPiAdapter);
+
+registerAgentAdapter(sharedAdapter);

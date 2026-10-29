@@ -22,6 +22,7 @@
     runId: string | null;
     lastError: string | null;
     executorReady: boolean;
+    imageExecutorIds?: string[];
     executorNodeId: string | null;
     executorTitle: string | null;
   };
@@ -126,7 +127,7 @@
   }), data.payload.referenceOrder));
   const contexts = $derived(orderedConnections(connections.filter((connection) => connection.targetType === 'note'), data.payload.contextOrder));
   const executors = $derived(connections.filter((connection) => connection.targetType === 'terminal'));
-  const codexExecutors = $derived(executors.filter((connection) => connection.targetPayload?.provider === 'codex'));
+  const codexExecutors = $derived(executors.filter((connection) => status?.imageExecutorIds ? status.imageExecutorIds.includes(connection.targetId) : connection.targetPayload?.provider === 'codex'));
   const outputs = $derived(connections.filter((connection) => {
     const generatedBy = connection.targetPayload?.generatedBy as { workflowNodeId?: unknown } | undefined;
     return connection.targetType === 'image' && generatedBy?.workflowNodeId === id;

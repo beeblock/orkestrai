@@ -43,6 +43,8 @@ export class ProviderProfileError extends Error {
 }
 
 async function profileIsReferenced(profileId: string, providerId: string): Promise<boolean> {
+  const { modelAccessService } = await import('$lib/modules/model-access/application/services/ModelAccessService.js');
+  if (await modelAccessService.referencesProfile(profileId)) return true;
   const routingId = usageRoutingId({ provider: providerId, profileId });
   for (const workspace of await workspaceRepository.listWorkspaces()) {
     const nodes = await workspaceRepository.listNodes(workspace.id, undefined, true, true);

@@ -16,6 +16,8 @@ export const claudeAdapter: AgentAdapter = {
   id: 'claude',
   displayName: 'Claude',
   supportsResume: false,
+  async verifyDelegatedAccount(profileId, images) { const { verifyDelegatedAccount } = await import('./delegated-inference.js'); await verifyDelegatedAccount('claude', profileId, images); },
+  async runDelegatedInference(input) { const { NativeInferenceProvider } = await import('./delegated-inference.js'); await new NativeInferenceProvider().run(input); },
   efforts: CLAUDE_EFFORTS,
   sessionStorage: 'claude-project-jsonl',
   supportsProfileSessionTransfer: true,

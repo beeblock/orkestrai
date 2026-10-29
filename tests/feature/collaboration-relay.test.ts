@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { COLLABORATION_PROTOCOL } from '@orkestrai/collaboration-protocol';
+import { INFERENCE_PROTOCOL } from '@orkestrai/collaboration-protocol/inference';
 import { createRelayServer } from '../../packages/orkestrai-relay/src/server.mjs';
 
 let relay: ReturnType<typeof createRelayServer> | null = null;
@@ -31,6 +32,20 @@ afterEach(async () => {
 });
 
 describe('opaque collaboration relay', () => {
+  it('isolates inference rooms from workspace sharing and refuses a mismatched protocol', async () => {
+    relay=createRelayServer();const address=await relay.listen(0,'127.0.0.1');if(!address || typeof address==='string')throw new Error('address');
+    const base=`ws://127.0.0.1:${address.port}`;
+    const workspace=await connect(`${base}/v1/connect?share=same_room&peer=host_same&role=host`);
+    const host=new WebSocket(`${base}/v1/inference?share=same_room&peer=host_same&role=host`,INFERENCE_PROTOCOL);
+    await new Promise<void>((resolve,reject)=>{host.once('open',()=>resolve());host.once('error',reject);});
+    const guest=new WebSocket(`${base}/v1/inference?share=same_room&peer=guest_same&role=guest`,INFERENCE_PROTOCOL);
+    await new Promise<void>((resolve,reject)=>{guest.once('open',()=>resolve());guest.once('error',reject);});
+    let leaked=0;workspace.on('message',()=>leaked++);
+    const frame=JSON.stringify({protocol:INFERENCE_PROTOCOL,shareId:'same_room',senderDeviceId:'guest_same',recipientPeerId:'host_same',keyId:'opaque_key_identifier_01',sequence:1,nonce:'AAAAAAAAAAAAAAAA',ciphertext:'opaqueEncryptedPayloadValue'});
+    const received=nextMessage(host);guest.send(frame);expect(await received).toBe(frame);expect(leaked).toBe(0);
+    await expect(connect(`${base}/v1/inference?share=wrong_room&peer=host_wrong&role=host`)).rejects.toThrow(/426/);
+    workspace.close();guest.close();host.close();
+  });
   it('forwards a valid opaque envelope without plaintext inspection', async () => {
     relay = createRelayServer();
     const address = await relay.listen(0, '127.0.0.1');

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ModelAccessPanel from '$lib/components/agent-room/ModelAccessPanel.svelte';
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import NodeEmptyState from '$lib/components/agent-room/canvas/NodeEmptyState.svelte';
   import { onMount } from 'svelte';
@@ -254,6 +255,8 @@
       ]}
     />
   </section>
+
+  <ModelAccessPanel />
 
   {#if loading}
     <div class="provider-list" aria-hidden="true">

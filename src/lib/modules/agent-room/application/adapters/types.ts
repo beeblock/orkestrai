@@ -76,6 +76,12 @@ export interface AgentAdapter {
   detect(): Promise<AgentDetection>;
   /** Monta o comando headless one-shot a partir do payload de execucao. */
   buildCommand(request: AgentRunRequest): AgentCommandSpec;
+  /** Private delegated inference worker; it can execute only guest-proxied tools. */
+  verifyDelegatedAccount?(profileId: string | null, images: boolean): Promise<void>;
+  runDelegatedInference?(input: import('$lib/modules/model-access/infrastructure/providers/InferenceProvider.js').InferenceProviderRun): Promise<void>;
+  /** Image workflows use a capability check, including a delegated offering's policy. */
+  imageWorkflowTool?: { name: string; normalizedName: string; workspaceReferences?: boolean };
+  supportsImageWorkflows?(model?: string | null): Promise<boolean>;
   /** Separate tool-free inference; never reuse an interactive development session. */
   respondPrivately?(input: { instructions: string; content: string; model?: string | null; launchArgs?: string[]; signal?: AbortSignal; profileEnv?: Record<string, string> }): Promise<string>;
   /** Monta o comando TUI interativo para rodar o agente num terminal PTY. */

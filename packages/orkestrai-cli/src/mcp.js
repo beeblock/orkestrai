@@ -83,6 +83,10 @@ const DESIGN_PROTOTYPE_TRANSITION = { type: 'object', additionalProperties: fals
 /** Tools expostas (inputSchema JSON Schema). args -> bridge no callTool(). */
 /** @type {Array<{name: string, description: string, inputSchema: Record<string, any>}>} */
 const TOOLS = [
+  { name: 'model_access_status', description: 'List model-access grants and received connections on this computer. Does not reveal keys, invitations or provider credentials. Workspace sharing is separate.', inputSchema: { type: 'object', additionalProperties: false, properties: {} } },
+  { name: 'model_access_propose', description: 'Propose a time-limited model-access grant for an active assigned owner task. The owner must still approve the guest device in Provider Center. This never approves a person automatically.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, input: { type: 'object', description: 'Grant name, relayUrl, expiresInMinutes, offerings [{providerId,profileId,models,efforts,images}], concurrency, requestsPerMinute, maxRequests. Null models/efforts permit all; profileId null selects the default account.' } }, required: ['taskId','input'] } },
+  { name: 'model_access_revoke', description: 'Revoke an owned grant for an active assigned owner task. Cancels its active and queued inference. Requires the current revision from model_access_status.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string' }, grantId: { type: 'string' }, revision: { type: 'integer' } }, required: ['taskId','grantId','revision'] } },
+  { name: 'model_access_disconnect', description: 'Disconnect a received model-access connection for an active assigned owner task.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string' }, connectionId: { type: 'string' } }, required: ['taskId','connectionId'] } },
   { name: 'portal_configure_hosts', description: 'Configure exact Portal hostnames for an assigned task in any workspace. Read portal.revision (not layout revision) from canvas_list. Accepts localhost, 127.0.0.1 and [::1]; no URLs, ports, wildcards or empty unrestricted lists. Changes hosts only, never pauses, control, background or agent grants. Explicit owner instructions and workspace policies remain binding. No Computer/OS permission is needed. If MCP is older, use orkestrai canvas portal-hosts --task <id> --input <json>.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string', format: 'uuid' }, nodeId: { type: 'string', format: 'uuid' }, revision: { type: 'string', pattern: '^[a-f0-9]{64}$' }, allowedHosts: { type: 'array', minItems: 1, maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 253 } } }, required: ['taskId', 'nodeId', 'revision', 'allowedHosts'] } },
   { name: 'shell_update', description: 'Correct an existing managed Shell title, cwd or startup command. Read shell.revision from canvas_list, not the layout revision. Editing preserves other saved commands/environment and never types into or stops the running process. If restartRequired, explicitly call shell_restart after checking runtime ownership. No Computer or owner intervention. Never persist credentials.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string', format: 'uuid' }, nodeId: { type: 'string', format: 'uuid' }, revision: { type: 'string', pattern: '^[a-f0-9]{64}$' }, changes: { type: 'object', additionalProperties: false, minProperties: 1, properties: { title: { type: 'string', minLength: 1, maxLength: 120 }, cwd: { type: 'string', minLength: 1, maxLength: 4000 }, startupCommand: { type: 'string', maxLength: 4000 } } } }, required: ['taskId', 'nodeId', 'revision', 'changes'] } },
   { name: 'shell_restart', description: 'Explicitly restart only this managed Shell and submit its saved startup once. Read shell.revision and shell.sessionId from canvas_list; pass expectedSessionId (null only if no live Shell). Stale config/session is rejected: do not blindly retry or terminate unrelated servers by port. Startup submission is not functional verification.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string', format: 'uuid' }, nodeId: { type: 'string', format: 'uuid' }, revision: { type: 'string', pattern: '^[a-f0-9]{64}$' }, expectedSessionId: { type: ['string', 'null'], minLength: 1, maxLength: 120 } }, required: ['taskId', 'nodeId', 'revision', 'expectedSessionId'] } },
@@ -534,6 +538,10 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     return bridge('POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId: computerArgs.taskId, idempotencyKey: computerArgs.idempotencyKey, ...(computerArgs.risk ? { risk: computerArgs.risk } : {}), input });
   };
   switch (name) {
+    case 'model_access_status': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'status' });
+    case 'model_access_propose': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'propose', taskId: args.taskId, input: args.input });
+    case 'model_access_revoke': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'revoke', taskId: args.taskId, grantId: args.grantId, revision: args.revision });
+    case 'model_access_disconnect': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'disconnect', taskId: args.taskId, connectionId: args.connectionId });
     case 'canvas_list': {
       const canvasArgs = /** @type {Record<string, any>} */ (args);
       const query = new URLSearchParams();
@@ -1416,3 +1424,8 @@ export async function runMcpServer(options) {
 }
 
 export const MCP_TOOLS = TOOLS;
+
+/** @param {{bridge:(method:string,path:string,body?:any)=>Promise<any>,findFreePort:()=>Promise<number>,selfAgent:string|null}} options @param {string} name @param {Record<string,any>} [args] */
+export async function executeMcpTool({ bridge, findFreePort, selfAgent }, name, args = {}) {
+  return callTool(bridge, findFreePort, selfAgent, name, args);
+}
