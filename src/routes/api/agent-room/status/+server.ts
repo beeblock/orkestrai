@@ -30,6 +30,7 @@ export const GET: RequestHandler = async ({ url }) => {
       const models = await withWorkspaceExecutionRuntime(runtime, () => adapter.listModels()).catch(() => []);
       return {
         id: adapter.id,
+        bundled: adapter.bundled ?? false,
         displayName: adapter.displayName,
         supportsResume: adapter.supportsResume,
         supportsProfileSessionTransfer: adapter.supportsProfileSessionTransfer ?? false,

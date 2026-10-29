@@ -1266,6 +1266,10 @@ export function parseLatestTurnComplete(storage: string, transcript: string, pro
     if (scoped.findLastIndex(record => record?.type === 'api-request') > scoped.findLastIndex(record => record?.type === 'assistant')) return false;
     const assistant = scoped.findLast((record) => record?.type === 'assistant');
     if (assistant?.message?.stop_reason !== 'end_turn') return false;
+    // Our guest runner owns this explicit completion record. A tool-only turn
+    // can finish with no answer text: the composer is free even though there
+    // is no reply to mirror or forward. Do not apply this to provider files.
+    if (storage === 'orkestrai-jsonl') return true;
   }
   if (storage === 'codex-rollout-jsonl') {
     const lifecycle = scoped.findLast((record) => ['task_started', 'task_complete', 'turn_aborted'].includes(record?.payload?.type));

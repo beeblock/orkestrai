@@ -40,7 +40,7 @@ function memory() {
 const services: ModelAccessService[] = []; let relay: ReturnType<typeof createRelayServer> | undefined;
 afterEach(async () => { await Promise.all(services.splice(0).map(service => service.stop())); await relay?.close(); relay = undefined; vi.restoreAllMocks(); });
 async function wait<T>(fn: () => Promise<T>, accept: (value: T) => boolean): Promise<T> { for (let i=0;i<150;i++) { const value = await fn(); if (accept(value)) return value; await new Promise(resolve => setTimeout(resolve,20)); } throw new Error('Expected state was not reached.'); }
-async function setup(provider: InferenceProvider, image = false) {
+async function setup(provider: InferenceProvider, image = false, skipApproval = false) {
   relay = createRelayServer(); const address = await relay.listen(0); if (!address || typeof address === 'string') throw new Error('address');
   const owner = memory(), guest = memory(), profiles = { list: async () => [], assertCompatible: async () => {} };
   const hostService = new ModelAccessService({ repository: owner.repository, secrets: owner.vault, profiles, provider });
@@ -51,10 +51,12 @@ async function setup(provider: InferenceProvider, image = false) {
   const connection = await guestService.join(JoinModelAccessDto.from({ invite, displayName: 'Guest machine', relayUrl: grant.relayUrl }));
   const pending = (await wait(() => hostService.status(), state => state.grants[0].pending.length === 1)).grants[0].pending[0];
   expect((await guestService.status()).connections[0].status).toBe('pending');
-  await hostService.approve(ApproveModelAccessDto.from(grant.id, { revision: grant.revision, guestId: pending.id, fingerprint: pending.fingerprint, approved: true }));
-  await wait(() => guestService.status(), state => state.connections[0].state === 'connected');
+  if (!skipApproval) {
+    await hostService.approve(ApproveModelAccessDto.from(grant.id, { revision: grant.revision, guestId: pending.id, fingerprint: pending.fingerprint, approved: true }));
+    await wait(() => guestService.status(), state => state.connections[0].state === 'connected');
+  }
   const request = { offeringId: grant.policy.offerings[0].id, model: image ? 'gpt-6.1-sol' : 'sonnet', effort: 'high' as const, system: 'Act on the guest only.', messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Private guest prompt.' }] }], tools: [{ name: 'local_test', description: 'Guest only.', inputSchema: { type: 'object', properties: {} } }] };
-  return { owner, guest, hostService, guestService, grant, connection, request, invite };
+  return { owner, guest, hostService, guestService, grant, connection, request, invite, pending };
 }
 describe('delegated model access through the real relay', () => {
   it('returns a large Codex edit to guest files and validates/completes the native Canvas image workflow', async () => {
@@ -173,5 +175,71 @@ describe('delegated model access through the real relay', () => {
     expect(await first).toBeInstanceOf(Error); expect(await second).toBeInstanceOf(Error);
     expect(stopped).toBe(true); expect(calls).toBe(1);
     expect((await context.hostService.status()).grants[0].status).toBe('revoked');
+  });
+});
+
+describe('live received-access changes', () => {
+  it('notifies both desktops when an owner declines a pending device', async () => {
+    const context=await setup({async run(){}},false,true);
+    const ownerStates: Array<Awaited<ReturnType<ModelAccessService['status']>>> = [];
+    const guestStates: Array<Awaited<ReturnType<ModelAccessService['status']>>> = [];
+    const offOwner=context.hostService.subscribe(()=>{void context.hostService.status().then(state=>ownerStates.push(state));});
+    const offGuest=context.guestService.subscribe(()=>{void context.guestService.status().then(state=>guestStates.push(state));});
+    try {
+      await context.hostService.approve(ApproveModelAccessDto.from(context.grant.id,{revision:context.grant.revision,guestId:context.pending.id,fingerprint:context.pending.fingerprint,approved:false}));
+      await wait(async()=>ownerStates,states=>states.some(state=>state.grants[0].pending.length===0));
+      await wait(async()=>guestStates,states=>states.some(state=>state.connections[0].state==='denied'));
+    } finally {offOwner();offGuest();}
+  });
+  it('notifies both desktops after model admission and revocation', async () => {
+    const context = await setup({async run() {}});
+    const ownerStates: Array<Awaited<ReturnType<ModelAccessService['status']>>> = [];
+    const guestStates: Array<Awaited<ReturnType<ModelAccessService['status']>>> = [];
+    const offOwner = context.hostService.subscribe(() => { void context.hostService.status().then(value => ownerStates.push(value)); });
+    const offGuest = context.guestService.subscribe(() => { void context.guestService.status().then(value => guestStates.push(value)); });
+    try {
+      await context.guestService.infer(context.connection.id,context.request,{signal:new AbortController().signal,emit:async()=>{},callTool:async()=>{throw new Error('unused');}});
+      await wait(async()=>ownerStates,states=>states.some(state=>state.grants[0].requestsUsed===1));
+      const latest = (await context.hostService.status()).grants[0];
+      await context.hostService.revoke(latest.id,latest.revision);
+      await wait(async()=>guestStates,states=>states.some(state=>state.connections[0].status==='revoked'));
+      expect(ownerStates.some(state=>state.grants[0].status==='revoked')).toBe(true);
+    } finally { offOwner(); offGuest(); }
+  });
+  it('publishes image request usage while the original inference is still running', async () => {
+    let imageReserved!:()=>void, finish!:()=>void;
+    const reserved = new Promise<void>(resolve=>imageReserved=resolve);
+    const held = new Promise<void>(resolve=>finish=resolve);
+    const context = await setup({async run(input) { await held; await input.reserveImage!(randomUUID()); imageReserved(); await heldAfterImage; }},true);
+    let finishAfterImage!:()=>void;
+    const heldAfterImage = new Promise<void>(resolve=>finishAfterImage=resolve);
+    const states: number[] = [];
+    const off = context.hostService.subscribe(()=>{ void context.hostService.status().then(state=>states.push(state.grants[0].requestsUsed)); });
+    const run = context.guestService.infer(context.connection.id,context.request,{signal:new AbortController().signal,emit:async()=>{},callTool:async()=>{throw new Error('unused');}});
+    try {
+      await wait(async()=>states,values=>values.includes(1));
+      // No other state change follows this image reservation until we release the worker.
+      states.length=0; finish(); await reserved;
+      await wait(async()=>states,values=>values.includes(2));
+      expect((await context.hostService.status()).grants[0].running).toBe(1);
+    } finally { finish(); finishAfterImage(); off(); await run; }
+  });
+});
+
+
+describe('effort availability in received model policies', () => {
+  it('intersects account restrictions with each model capability', async () => {
+    const context = await setup({async run() {}});
+    const { getAgentAdapter } = await import('$lib/modules/agent-room/application/adapters/registry.js');
+    vi.spyOn(getAgentAdapter('claude'),'listModels').mockResolvedValue([
+      {provider:'claude',value:'low-only',label:'Low only',efforts:['low']},
+      {provider:'claude',value:'high-only',label:'High only',efforts:['high']},
+    ]);
+    const updated = await context.hostService.revise(context.grant.id,{
+      revision:(await context.hostService.status()).grants[0].revision,name:'Restricted',expiresInMinutes:10,
+      offerings:[{providerId:'claude',profileId:null,models:null,efforts:['high','max'],images:false}],
+      concurrency:1,requestsPerMinute:10,maxRequests:5,
+    });
+    expect(updated.policy.offerings[0].availableModels).toEqual([{value:'high-only',label:'High only',efforts:['high']}]);
   });
 });

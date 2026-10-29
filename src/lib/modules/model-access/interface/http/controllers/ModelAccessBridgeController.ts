@@ -43,15 +43,23 @@ export class ModelAccessBridgeController extends Controller {
       const stream = new TransformStream<Uint8Array, Uint8Array>(), writer = stream.writable.getWriter(), encoder = new TextEncoder();
       const send = (event: string, text: string) => writer.write(encoder.encode(JSON.stringify({ event, text }) + '\n'));
       void writer.closed.catch(abort);
+      let inboxPending = false;
       const bridge = async (method: string, path: string, body?: unknown) => {
         if (!path.startsWith('/api/agent-room/bridge/')) throw new Error('INFERENCE_GUEST_TOOL_ROUTE');
         // The guest's live terminal identity stays on this computer. It never enters model input.
         const response = await event.fetch(path, { method, headers: { authorization: `Bearer ${token}`, 'x-orkestrai-agent-token': agentToken, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
         const payload = await response.json(); if (!response.ok || payload.error) throw new Error(typeof payload.error === 'string' ? payload.error : 'Guest tool failed.');
+        if (!path.startsWith('/api/agent-room/bridge/inbox') && Number(response.headers.get('x-orkestrai-inbox')) > 0) inboxPending = true;
         return payload.data;
       };
+      const readInbox = async () => {
+        if (!inboxPending) return null;
+        inboxPending = false;
+        try { return await bridge('GET', '/api/agent-room/bridge/inbox'); }
+        catch { inboxPending = true; return null; }
+      };
       const env = { ORKESTRAI_NODE_ID: nodeId, ORKESTRAI_AGENT_TITLE: nodeId, ORKESTRAI_AGENT_TOKEN: agentToken, ORKESTRAI_WORKSPACE_CONFIG: join(workspace.workingDir, '.orkestrai/workspace.json'), ORKESTRAI_API_URL: event.url.origin };
-      void guestAgentService.run(GuestAgentDto.from(workspace.id, nodeId, input), { signal: controller.signal, emit: send, bridge, env }).then(() => send('done','')).catch(async error => {
+      void guestAgentService.run(GuestAgentDto.from(workspace.id, nodeId, input), { signal: controller.signal, emit: send, bridge, env, readInbox }).then(() => send('done','')).catch(async error => {
         const code = error instanceof Error && /^(?:INFERENCE|MODEL_ACCESS)_[A-Z_]+$/.test(error.message) ? error.message : 'INFERENCE_FAILED';
         await send('error', code).catch(() => {});
       }).finally(async () => { controller.abort(); event.request.signal.removeEventListener('abort', abort); await writer.close().catch(() => {}); });

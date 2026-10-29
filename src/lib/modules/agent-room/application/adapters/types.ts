@@ -54,6 +54,8 @@ export type ParsedAgentOutput = {
  * sem tocar no runner.
  */
 export interface AgentAdapter {
+  /** The CLI is distributed with the app, without an external installer or login. */
+  bundled?: boolean;
   /** Identificador unico do provider (ex.: 'claude', 'codex'). */
   id: AgentName;
   /** Nome amigavel exibido na UI e nas mensagens de erro. */

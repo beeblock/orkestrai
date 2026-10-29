@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Release queued owner messages after an Orkestrai guest agent explicitly finishes a tool-only turn without answer text, while keeping unfinished turns and human drafts protected. Keep guest inference marked as working during silent model/tool work instead of reporting idle after terminal output stops, and attach pending inbox messages to native tool results during a running turn.
+- Keep received-access approval, denial, revocation and request counts live in Provider Center, including the invitation dialog and in-flight image generations. Wrap long invitations without stretching the dialog. Choose allowed models from each provider catalog and compatible efforts with accessible controls; show the bundled Orkestrai CLI as included instead of requiring installation.
 - Start received-model agents on Windows through the bundled console runtime and CLI entry, without a global command or CMD/PATH lookup. WSL startup checks use the provisioned workspace launcher path, and missing commands are no longer reported as missing WSL distributions.
 - Align the model access panel with the other Provider Center sections through a shared responsive page column and matching card spacing and corners.
 

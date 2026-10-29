@@ -135,6 +135,8 @@ type PtySession = PtySessionInfo & {
   /** An owner action or Core shutdown is ending this PTY, not an agent failure. */
   stopping?: boolean;
   initialIdleObserved: boolean;
+  /** An app-owned runner can be working without producing terminal bytes. */
+  managedTurn: boolean;
   startupGuard: InteractiveStartupGuard | null;
   bracketedPaste: boolean;
   terminalModeTail: string;
@@ -445,6 +447,7 @@ export class PtySessionManager {
       managedStartupState: 'none',
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
+      managedTurn: false,
       startupGuard: interactiveStartupGuard(input.provider),
       bracketedPaste: false,
       terminalModeTail: '',
@@ -1055,10 +1058,28 @@ export class PtySessionManager {
   /** Read-only gate for optional supervision, not a reservation or delivery receipt. */
   canAcceptAutomaticMessage(id: string): boolean {
     const session = this.sessions.get(id);
-    return Boolean(session && !session.exited && session.waiting && session.scrollback.length > 0
+    return Boolean(session && !session.exited && !session.managedTurn && session.waiting && session.scrollback.length > 0
       && !session.deliveryInProgress && !session.awaitingDeliveryIdle && !session.deliveryQueue.length
       && session.humanComposerLength === 0
       && (!session.startupGuard || session.startupGuard.canAcceptMessages));
+  }
+
+  /** Keep authoritative guest inference/tool work separate from output silence. */
+  beginManagedTurn(id: string, agentSessionId: string): () => void {
+    const session = this.requireSession(id);
+    if (session.exited || session.agentSessionId !== agentSessionId || session.managedTurn) throw new Error('INFERENCE_AGENT_IDENTITY');
+    session.managedTurn = true;
+    this.setWaiting(session, false);
+    this.recordLifecycle(session, 'working');
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      session.managedTurn = false;
+      // Keep draft, prompt receipt and startup guards; the normal quiet boundary
+      // also gives the local CLI time to finish consuming its streamed response.
+      if (!session.exited) this.scheduleAttentionCheck(session);
+    };
   }
 
   /** Only an idle, empty composer may recover an unconfirmed automatic submit. */
@@ -1132,6 +1153,7 @@ export class PtySessionManager {
   private scheduleAttentionCheck(session: PtySession): void {
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
+      if (session.managedTurn) return;
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) return;
       if (session.outputBurst && session.waiting) {
         session.outputBurst = false;
@@ -1175,6 +1197,7 @@ export class PtySessionManager {
   private drainDeliveryQueue(session: PtySession): void {
     if (
       session.exited ||
+      session.managedTurn ||
       (session.startupGuard && !session.startupGuard.canAcceptMessages) ||
       session.deliveryInProgress ||
       session.awaitingDeliveryIdle ||

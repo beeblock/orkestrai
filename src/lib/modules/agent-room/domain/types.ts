@@ -52,6 +52,8 @@ export type AgentProfileStrategy =
  * /api/agent-room/status para a UI montar seletores dinamicamente.
  */
 export type AgentProviderInfo = {
+  /** Included runtime; connection readiness is reported separately. */
+  bundled?: boolean;
   id: AgentProviderId;
   displayName: string;
   supportsResume: boolean;

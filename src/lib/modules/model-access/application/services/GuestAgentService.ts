@@ -16,7 +16,7 @@ import { guestAgentSelection } from './GuestAgentSelection.js';
 import { MODEL_ACCESS_AGENT_PROVIDER } from '../../domain/types.js';
 
 type Output = (event: string, text: string) => Promise<void>;
-type Context = { signal: AbortSignal; emit: Output; bridge: (method: string, path: string, body?: unknown) => Promise<any>; env: Record<string,string> };
+type Context = { signal: AbortSignal; emit: Output; bridge: (method: string, path: string, body?: unknown) => Promise<any>; env: Record<string,string>; readInbox?: () => Promise<{ items: unknown[]; remaining: number } | null> };
 export class GuestAgentService {
   private busy = new Set<string>();
   async run(dto: GuestAgentDto, context: Context) {
@@ -43,6 +43,7 @@ export class GuestAgentService {
       await workspaceRepository.updateNode(nodeId,{ payload:{...payload,args} });
     }
     await context.emit('configured',JSON.stringify({model:selection.value,effort}));
+    const endManagedTurn = input.operation === 'turn' ? ptySessionManager.beginManagedTurn(session.id, input.sessionId) : () => {};
     let turnStarted = false, turnClosed = false;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -68,6 +69,7 @@ export class GuestAgentService {
       let messages: InferenceRequest['messages'] = records.flatMap(record => {
         if (['user','assistant'].includes(record.type) && record.message?.content?.length) return [{ role: record.type, content: record.message.content }];
         if (record.type === 'guest-tool') return [{ role: 'assistant' as const, content: [{ type: 'text' as const, text: `Tool ${record.name}:\n${record.summary}` }] }];
+        if (record.type === 'guest-inbox' && typeof record.text === 'string') return [{ role: 'user' as const, content: [{ type: 'text' as const, text: record.text }] }];
         return [];
       });
       const previous = messages.slice(0,-1);
@@ -100,6 +102,15 @@ export class GuestAgentService {
             // Guest-owned history retains text, not repeated screenshot/video base64 payloads.
             const summary = name === 'imagegen' || name === 'imagegen_store' ? JSON.stringify({ id: args.idempotencyKey ?? args.id, success: answer.success, image: true, ...(name === 'imagegen_store' ? {output:answer.content.filter(part => part.type === 'text')} : {}) }).slice(0,1500) : JSON.stringify({ arguments: args, success: answer.success, content: answer.content.map(part => part.type === 'image' ? { type: 'image', note: 'Image shown in this turn; reopen its guest path if needed.' } : part) }).slice(0, 1500);
             await appendFile(path, JSON.stringify({ ...stamp(), type: 'guest-tool', name, summary }) + '\n');
+            // Honor the same advisory inbox header as native CLI/MCP clients.
+            // Keep each claimed message in managed history and in this tool's
+            // result, rather than waiting for a long model turn to finish.
+            const inbox = await context.readInbox?.().catch(() => null);
+            if (inbox?.items.length) {
+              const text = '[orkestrai:inbox] Messages arrived while you worked. Read all messages; answer asks with the reply tool and their messageId.\n' + JSON.stringify(inbox);
+              await appendFile(path, JSON.stringify({ ...stamp(), type: 'guest-inbox', text }) + '\n');
+              answer = { ...answer, content: [...answer.content, { type: 'text', text }] };
+            }
             return answer;
           },
         });
@@ -110,7 +121,9 @@ export class GuestAgentService {
         turnClosed = true; throw error;
       }
     } finally {
-      if (turnStarted && !turnClosed) await appendFile(path, JSON.stringify({ uuid:randomUUID(),sessionId:input.sessionId,isSidechain:false,timestamp:new Date().toISOString(),type:'assistant',message:{role:'assistant',content:[{type:'text',text:'Inference interrupted before completion.'}],stop_reason:'end_turn'},interrupted:true })+'\n').catch(() => {});
+      try {
+        if (turnStarted && !turnClosed) await appendFile(path, JSON.stringify({ uuid:randomUUID(),sessionId:input.sessionId,isSidechain:false,timestamp:new Date().toISOString(),type:'assistant',message:{role:'assistant',content:[{type:'text',text:'Inference interrupted before completion.'}],stop_reason:'end_turn'},interrupted:true })+'\n').catch(() => {});
+      } finally { endManagedTurn(); }
     }
   }
 }

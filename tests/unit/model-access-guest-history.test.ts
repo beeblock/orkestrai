@@ -24,6 +24,7 @@ function setup(cwd=directory) {
   const node={id:nodeId,workspaceId,type:'terminal',payload:{provider:'shared',args:['model-access-agent','--model',model,'--effort','high']}} as any;
   vi.spyOn(workspaceRepository,'getWorkspace').mockResolvedValue(workspace); vi.spyOn(workspaceRepository,'getNode').mockResolvedValue(node);
   vi.spyOn(workspaceRepository,'listNodes').mockResolvedValue([node]); vi.spyOn(workspaceRepository,'updateNode').mockResolvedValue(node);
+  vi.spyOn(ptySessionManager,'beginManagedTurn').mockReturnValue(vi.fn());
   vi.spyOn(ptySessionManager,'listLiveForNode').mockReturnValue([{agentSessionId:sessionId,cwd}] as any);
   vi.spyOn(filesystemService,'read').mockRejectedValue(new Error('not present'));
   vi.spyOn(modelAccessService,'status').mockResolvedValue({grants:[],connections:[{id:connectionId,status:'active',state:'connected',name:'Lent account',policy:{offerings:[{id:offeringId,providerId:'codex',models:['model'],efforts:['high'],images:false,availableModels:[{value:'model',efforts:['high']}]}]}}]} as any);
@@ -33,6 +34,28 @@ function setup(cwd=directory) {
   return {service,context,dto,infer,path:managedTranscriptPath(directory,sessionId)};
 }
 describe('managed guest conversation', () => {
+  it('releases authoritative working state when inference fails',async()=>{
+    const state=setup(), release=vi.fn();
+    vi.mocked(ptySessionManager.beginManagedTurn).mockReturnValue(release);
+    state.infer.mockRejectedValueOnce(new Error('INFERENCE_OFFLINE'));
+    await expect(state.service.run(state.dto('turn','Try the received model'),state.context)).rejects.toThrow('INFERENCE_OFFLINE');
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(parseLatestTurnBoundary('orkestrai-jsonl',await readFile(state.path,'utf8')).ready).toBe(true);
+  });
+  it('hands mid-turn inbox messages to the model and retains them for exact resume',async()=>{
+    const state=setup();
+    const inbox={items:[{messageId:randomUUID(),kind:'owner',content:'New owner instruction during work'}],remaining:0};
+    let toolResult:any;
+    state.infer.mockImplementationOnce(async (_id,_request,context)=>{
+      toolResult=await context.callTool('read_file',{path:'missing.txt'});
+      await context.emit('text','Handled the new instruction');
+    });
+    await state.service.run(state.dto('turn','First work'),{...state.context,readInbox:async()=>inbox});
+    expect(JSON.stringify(toolResult.content)).toContain('New owner instruction during work');
+    await state.service.run(state.dto('turn','Continue after restart'),state.context);
+    expect(JSON.stringify((state.infer.mock.calls[1][1] as InferenceRequest).messages)).toContain('New owner instruction during work');
+    expect((await readFile(state.path,'utf8')).split('"type":"guest-inbox"')).toHaveLength(2);
+  });
   it('accepts the first inbox message on a fresh managed conversation without inventing an assistant reply',async()=>{
     const state=setup();await state.service.run(state.dto('open'),state.context);
     const transcript=await readFile(state.path,'utf8');expect(parseLatestTurnBoundary('orkestrai-jsonl',transcript).ready).toBe(true);

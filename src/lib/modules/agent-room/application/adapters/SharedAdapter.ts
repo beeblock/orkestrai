@@ -1,7 +1,7 @@
 import type { AgentAdapter } from './types.js';
 import type { AgentModelOption } from '../../domain/types.js';
 export const sharedAdapter: AgentAdapter = {
-  id: 'shared', displayName: 'Orkestrai', supportsResume: true, sessionStorage: 'orkestrai-jsonl',
+  id: 'shared', bundled: true, displayName: 'Orkestrai', supportsResume: true, sessionStorage: 'orkestrai-jsonl',
   efforts: ['low','medium','high','xhigh','max','ultra'], profileStrategy: { kind: 'unsupported' }, setup: { docsUrl: 'https://orkestrai.app/docs' },
   imageWorkflowTool: { name: 'imagegen', normalizedName: 'mcp__guest__imagegen', workspaceReferences: true },
   async supportsImageWorkflows(value) {
@@ -10,10 +10,8 @@ export const sharedAdapter: AgentAdapter = {
     const { connections } = await modelAccessService.status(); const connection = connections.find(item => item.id === connectionId && item.status === 'active' && item.state === 'connected');
     return Boolean(connection?.policy?.offerings.some(item => item.id === offeringId && item.providerId === 'codex' && item.images));
   },
-  async detect() {
-    const { modelAccessService } = await import('$lib/modules/model-access/application/services/ModelAccessService.js');
-    const status = await modelAccessService.status(); return { installed: status.connections.some(connection => connection.status === 'active' && connection.state === 'connected') };
-  },
+  // This CLI ships with the app; received access controls models, not installation.
+  async detect() { return { installed: true }; },
   interactiveCommand(options) { return { command: 'orkestrai', args: ['model-access-agent', ...(options?.model ? ['--model', options.model] : []), ...(options?.effort ? ['--effort', options.effort] : [])] }; },
   buildCommand(request) { return { command: 'orkestrai', args: ['model-access-agent','--once', ...(request.model ? ['--model', request.model] : []), ...(request.effort ? ['--effort', request.effort] : [])] }; },
   resumeArgs(id) { return id ? ['--session-id', id] : []; }, freshSessionArgs(id) { return ['--session-id', id]; },

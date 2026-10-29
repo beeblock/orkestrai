@@ -256,7 +256,7 @@
     />
   </section>
 
-  <ModelAccessPanel />
+  <ModelAccessPanel {providers} />
 
   {#if loading}
     <div class="provider-list" aria-hidden="true">
@@ -283,10 +283,10 @@
                 <h2>{provider.displayName}</h2>
                 <span class:ready={provider.installed} class="status-badge">
                   {#if provider.installed}<CheckCircle2 size={12} />{:else}<CircleAlert size={12} />{/if}
-                  {provider.installed ? m['providers.detected']() : m['providers.not_detected']()}
+                  {provider.bundled ? m['model_access.bundled']() : provider.installed ? m['providers.detected']() : m['providers.not_detected']()}
                 </span>
               </div>
-              <p>{provider.installed ? m['providers.ready_description']() : m['providers.setup_description']()}</p>
+              <p>{provider.bundled ? m['model_access.bundled_help']() : provider.installed ? m['providers.ready_description']() : m['providers.setup_description']()}</p>
               {#if PROVIDER_STATUS_SOURCES[provider.id]}
                 {@const status = providerStatusStore.value(provider.id)}
                 <a
@@ -329,7 +329,7 @@
                   if (!expanded && !profiles[provider.id]) loadProfiles(provider.id);
                 }}
               >
-                {expanded ? m['providers.setup_close']() : m['providers.setup_open']()}
+                {provider.bundled ? m['model_access.access_guide']() : expanded ? m['providers.setup_close']() : m['providers.setup_open']()}
                 {#if expanded}<ChevronUp size={13} />{:else}<ChevronDown size={13} />{/if}
               </Button>
             </div>
@@ -337,6 +337,10 @@
 
           {#if expanded}
             <div class="setup-panel">
+              {#if provider.bundled}
+                <p class="setup-note">{m['model_access.bundled_help']()}</p>
+                <Button size="sm" variant="outline" href="#model-access-heading">{m['model_access.join']()}</Button>
+              {:else}
               <div class="setup-step">
                 <span class="step-icon"><SquareTerminal size={15} /></span>
                 <div class="step-copy">
@@ -368,6 +372,7 @@
                   <p>{m['providers.check_body']()}</p>
                 </div>
               </div>
+              {/if}
               {#if provider.setup?.docsUrl}
                 <a class="guide-link" href={provider.setup.docsUrl} target="_blank" rel="noreferrer">
                   {m['providers.official_guide']()}<ExternalLink size={13} />

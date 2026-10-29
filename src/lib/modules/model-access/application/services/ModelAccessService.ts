@@ -81,7 +81,12 @@ export class ModelAccessService {
       const adapter = getAgentAdapter(item.providerId);
       if (!this.skipProviderVerification) { if (!adapter.verifyDelegatedAccount) throw new Error('INFERENCE_PROVIDER_UNAVAILABLE'); await adapter.verifyDelegatedAccount(item.profileId, item.images); }
       const catalog = (await adapter.listModels()).slice(0, 100).filter(model => /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(model.value));
-      const availableModels = (item.models ?? catalog.map(model => model.value)).slice(0, 100).map(value => { const model = catalog.find(model => model.value === value); return { value, label: (model?.label ?? value).slice(0, 100), efforts: (item.efforts ?? model?.efforts ?? adapter.efforts ?? ['low','medium','high']).filter(effort => ['none','minimal','low','medium','high','xhigh','max','ultra'].includes(effort)) as import('../../contracts/schemas/model-access.schema.js').ModelAccessOffering['availableModels'][number]['efforts'] }; });
+      const availableModels = (item.models ?? catalog.map(model => model.value)).slice(0, 100).map(value => {
+        const model = catalog.find(model => model.value === value);
+        const supported = model?.efforts ?? adapter.efforts ?? ['low','medium','high'];
+        return { value, label: (model?.label ?? value).slice(0, 100), efforts: (item.efforts ?? supported).filter(effort => supported.includes(effort) && ['none','minimal','low','medium','high','xhigh','max','ultra'].includes(effort)) as import('../../contracts/schemas/model-access.schema.js').ModelAccessOffering['availableModels'][number]['efforts'] };
+      }).filter(model => model.efforts.length > 0);
+      if (!availableModels.length) throw new Error('MODEL_ACCESS_EFFORT_UNSUPPORTED');
       const prior = previous?.offerings.find(offering => offering.providerId === item.providerId && offering.profileId === item.profileId);
       offerings.push({ ...item, availableModels, id: prior?.id ?? ('id' in item && typeof item.id === 'string' ? item.id : uuidv7()), label: profile?.name ?? (item.providerId === 'claude' ? 'Claude' : 'Codex') });
     }
@@ -120,7 +125,7 @@ export class ModelAccessService {
       if (!grant || grant.status !== 'draft' || grant.revision !== input.revision || Date.parse(grant.expiresAt) <= Date.now()) throw new Error('MODEL_ACCESS_REVISION_CONFLICT');
       const host = this.hosts.get(grant.id), peer = host?.transport.pending.get(input.guestId);
       if (!host || !peer || peer.fingerprint !== input.fingerprint) throw new Error('MODEL_ACCESS_GUEST_MISMATCH');
-      if (!input.approved) { host.transport.deny(peer.id); await this.repo.audit(grant.id, 'guest.denied', { guestId: peer.id, fingerprint: peer.fingerprint }); return grant; }
+      if (!input.approved) { host.transport.deny(peer.id); await this.repo.audit(grant.id, 'guest.denied', { guestId: peer.id, fingerprint: peer.fingerprint }); this.notify(); return grant; }
       const updated = await this.repo.updateGrant(grant.id, input.revision, { guest: peer, status: 'active' });
       await host.transport.approve(updated); await this.repo.audit(grant.id, 'guest.approved', { guestId: peer.id, fingerprint: peer.fingerprint }); this.notify(); return updated;
     });
@@ -161,7 +166,7 @@ export class ModelAccessService {
           await bodies.receive(message);
         } else if (message.type === 'request.cancel') { const run = this.runs.get(message.requestId); if (run?.grantId === grant.id && run.peer === peer) run.controller.abort(); }
       },
-      disconnected: peer => this.cancelPeer(grant.id, peer),
+      disconnected: peer => { this.cancelPeer(grant.id, peer); this.notify(); },
     });
     const delay = Math.min(2147483647, Math.max(1, Date.parse(grant.expiresAt) - Date.now()));
     const expiry = setTimeout(() => { void this.expire(grant.id); }, delay); expiry.unref?.(); this.expirations.set(grant.id, expiry);
@@ -247,7 +252,7 @@ export class ModelAccessService {
           // control lock: revocation holds it while waiting for this worker to stop.
           const latest = await this.repo.grant(run.grantId); const offer = this.assertPolicy(latest, run.request);
             if (!offer.images || offer.providerId !== 'codex' || latest!.revision !== run.revision || run.controller.signal.aborted) throw new Error('INFERENCE_IMAGE_DENIED');
-            await this.repo.reserveRequest(run.grantId, run.revision, id); await this.repo.audit(run.grantId, 'image.accepted', { requestId: id, offeringId: offer.id });
+            await this.repo.reserveRequest(run.grantId, run.revision, id); this.notify(); await this.repo.audit(run.grantId, 'image.accepted', { requestId: id, offeringId: offer.id });
         },
         finishImage: (id, state) => this.repo.finishRequest(id, state),
         emit: async (event, text) => {
@@ -293,11 +298,11 @@ export class ModelAccessService {
     this.guests.set(connection.id, guest);
     guest.transport = new InferenceGuestTransport(connection, JSON.parse(raw), {
       state: state => { guest.state = state; this.notify(); if (['offline','error'].includes(state)) this.reconnectGuest(connection.id, guest); },
-      approved: async (policy, expiresAt, name) => { await this.repo.updateConnection(connection.id, { status: 'active', policy, expiresAt, name }); },
+      approved: async (policy, expiresAt, name) => { await this.repo.updateConnection(connection.id, { status: 'active', policy, expiresAt, name }); this.notify(); },
       disconnected: () => { for (const [id, run] of this.guestRuns) if (run.connectionId === connection.id) { this.guestRuns.delete(id); run.reject(new Error('INFERENCE_UNCONFIRMED')); } },
       message: async message => {
         if (message.type === 'session.revoked' && message.reason === 'policy_changed') { this.closeGuest(connection.id); await this.openGuest((await this.repo.connection(connection.id))!); return; }
-        if (message.type === 'session.revoked') { await this.repo.updateConnection(connection.id, { status: message.reason === 'expired' ? 'expired' : 'revoked' }); this.closeGuest(connection.id); return; }
+        if (message.type === 'session.revoked') { await this.repo.updateConnection(connection.id, { status: message.reason === 'expired' ? 'expired' : 'revoked' }); this.closeGuest(connection.id); this.notify(); return; }
         if (!('requestId' in message)) return;
         const run = this.guestRuns.get(message.requestId); if (!run || run.connectionId !== connection.id) return;
         if (message.type === 'stream') { run.outputBytes += Buffer.byteLength(message.text); if (run.outputBytes > 16 * 1024 * 1024) throw new Error('INFERENCE_OUTPUT_LIMIT'); await run.emit(message.event, message.text); }

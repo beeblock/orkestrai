@@ -16,6 +16,23 @@ describe('PTY activity lifecycle', () => {
     delete hook.__orkestraiHumanPrompt;
   });
 
+  it.skipIf(process.platform === 'win32')('keeps silent managed work busy and restores inbox readiness only after completion', async () => {
+    const states: string[] = [];
+    hook.__orkestraiRecordActivity = input => { if (input.nodeId === 'managed-node') states.push(input.state); };
+    const session = ptySessionManager.create({command:'/bin/sh',args:['-c','echo ready; sleep 30'],cwd:tmpdir(),workspaceId:'managed-workspace',nodeId:'managed-node',provider:'shared',agentSessionId:'managed-conversation'});
+    sessions.push(session.id);
+    await vi.waitFor(()=>expect(ptySessionManager.canAcceptAutomaticMessage(session.id)).toBe(true),{timeout:4000});
+    expect(()=>ptySessionManager.beginManagedTurn(session.id,'another-conversation')).toThrow('INFERENCE_AGENT_IDENTITY');
+    const release=ptySessionManager.beginManagedTurn(session.id,'managed-conversation');
+    await new Promise(resolve=>setTimeout(resolve,2800));
+    expect(states.at(-1)).toBe('working');
+    expect(ptySessionManager.get(session.id)?.waiting).toBe(false);
+    expect(ptySessionManager.canAcceptAutomaticMessage(session.id)).toBe(false);
+    release(); release();
+    await vi.waitFor(()=>expect(ptySessionManager.canAcceptAutomaticMessage(session.id)).toBe(true),{timeout:4000});
+    expect(states.at(-1)).toBe('idle');
+  },12000);
+
   it.skipIf(process.platform === 'win32')('does not report an intentional PTY shutdown as a teammate failure', async () => {
     const states: string[] = [];
     hook.__orkestraiRecordActivity = input => { if (input.nodeId === 'planned-stop') states.push(input.state); };

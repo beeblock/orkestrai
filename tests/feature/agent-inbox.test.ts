@@ -76,6 +76,25 @@ describe('Agent inbox', () => {
     vi.restoreAllMocks();
   });
 
+  it('drains the owner queue after a managed tool-only turn ends, without terminal input', async () => {
+    const { workspace, nodes } = await team();
+    const recipient = session(nodes.Lider); recipient.provider = 'shared';
+    const at = new Date().toISOString();
+    const records: unknown[] = [
+      {type:'user',timestamp:at,message:{role:'user',content:[{type:'text',text:'Inspect.'}]}},
+      {type:'assistant',timestamp:at,message:{role:'assistant',content:[],stop_reason:'tool_use'}},
+      {type:'guest-tool',timestamp:at,name:'canvas_list',summary:'Completed.'},
+    ];
+    vi.mocked(transcript.latestTurnBoundary).mockImplementation(async () => transcript.parseLatestTurnBoundary('orkestrai-jsonl',records.map(row=>JSON.stringify(row)).join('\n')));
+    await agentInboxService.enqueue({workspaceId:workspace.id,toNodeId:nodes.Lider,kind:'owner',content:'Next owner task'});
+    await agentInboxService.drain(workspace.id,nodes.Lider);
+    expect(prompts).toHaveLength(0);
+    records.push({type:'assistant',timestamp:new Date().toISOString(),message:{role:'assistant',content:[{type:'text',text:''}],stop_reason:'end_turn'}});
+    await agentInboxService.drain(workspace.id,nodes.Lider);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].message).toContain('Next owner task');
+  });
+
   it('includes canonical memory context in an owner message without an extra agent turn', async () => {
     const { workspace, nodes } = await team();
     const context = vi.spyOn(agentLearningService, 'context').mockResolvedValue('SOURCED_MEMORY_CONTEXT');
