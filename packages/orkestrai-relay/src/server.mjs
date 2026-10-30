@@ -102,6 +102,9 @@ export function createRelayServer(options = {}) {
   }
 
   server.on('upgrade', (request, socket, head) => {
+    // HTTP removes its socket error handling after an upgrade. A reset can
+    // also arrive while a rejected handshake response is still being written.
+    socket.on('error', () => socket.destroy());
     let url;
     try { url = new URL(request.url ?? '/', 'http://relay.local'); }
     catch { return rejectUpgrade(socket, '400 Bad Request', 'Invalid URL.'); }
@@ -139,6 +142,9 @@ export function createRelayServer(options = {}) {
     /** @type {import('node:http').IncomingMessage} */ _request,
     /** @type {RelayRegistration} */ registration,
   ) => {
+    // ws forwards transport errors to the peer. Contain them to that peer;
+    // its normal close handler removes room membership and notifies guests.
+    websocket.on('error', () => websocket.terminate());
     const { shareId, peerId, role, protocol, roomKey } = registration;
     const room = rooms.get(roomKey) ?? {
       host: null,

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { COLLABORATION_PROTOCOL } from '@orkestrai/collaboration-protocol';
 import { INFERENCE_PROTOCOL } from '@orkestrai/collaboration-protocol/inference';
+import { PassThrough } from 'node:stream';
 import { createRelayServer } from '../../packages/orkestrai-relay/src/server.mjs';
 
 let relay: ReturnType<typeof createRelayServer> | null = null;
@@ -32,6 +33,35 @@ afterEach(async () => {
 });
 
 describe('opaque collaboration relay', () => {
+  it('contains a reset during upgrade rejection instead of emitting an unhandled socket error', async () => {
+    relay = createRelayServer();
+    const socket = new PassThrough();
+    relay.server.emit('upgrade', { url: '/missing', headers: {}, socket: {} }, socket, Buffer.alloc(0));
+    expect(() => socket.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))).not.toThrow();
+    expect(socket.destroyed).toBe(true);
+  });
+
+  it('disconnects a failed websocket peer while keeping another room and the relay available', async () => {
+    relay = createRelayServer();
+    const address = await relay.listen(0, '127.0.0.1');
+    if (!address || typeof address === 'string') throw new Error('address');
+    const base = `ws://127.0.0.1:${address.port}`;
+    const failed = await connect(`${base}/v1/connect?share=failed_room&peer=failed_host&role=host`);
+    const healthy = await connect(`${base}/v1/connect?share=healthy_room&peer=healthy_host&role=host`);
+    try {
+      const rooms = [...relay.rooms.values()];
+      const peer = rooms.find(room => room.host?.id === 'failed_host')!.host!;
+      expect(() => peer.websocket.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))).not.toThrow();
+      await expect.poll(() => [...relay!.rooms.values()].some(room => room.host?.id === 'failed_host')).toBe(false);
+      expect(healthy.readyState).toBe(WebSocket.OPEN);
+      const response = await fetch(`http://127.0.0.1:${address.port}/health`);
+      expect(response.ok).toBe(true);
+    } finally {
+      failed.close();
+      healthy.close();
+    }
+  });
+
   it('isolates inference rooms from workspace sharing and refuses a mismatched protocol', async () => {
     relay=createRelayServer();const address=await relay.listen(0,'127.0.0.1');if(!address || typeof address==='string')throw new Error('address');
     const base=`ws://127.0.0.1:${address.port}`;
