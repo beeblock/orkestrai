@@ -103,8 +103,18 @@ intact, while a smaller chest can still use the remaining room.
   Light/dark inspection changes the actual `appTheme` setting and asserts different
   Camp color tokens, avoiding a false theme test based only on the `dark` class.
   Both captures were reviewed at 1024 px; controls and help text fit and are legible.
-- The updated RPG preview installation is pending. Its signed bundle and healthy
-  Core must be verified before declaring the delivery complete.
+- The updated arm64 ad-hoc preview is installed in `/Applications/Orkestrai.app`.
+  Copy, deep/strict signature, helper entitlements, architecture and Core health
+  passed. The packaged recovery chunk's SHA-256 matched the tested production
+  build before replacement. Only the latest verified rollback ZIP is retained.
+- The installed Core returned HTTP 200 and persisted recovery version 1 in the
+  owner's existing save. Its 34 red chests now have all required keys: 12 Normal,
+  10 Nightmare and 8 Torment soulstones, plus four first-free chests. Key shortfall
+  is zero. The bag was 90/90 and the stash 0/150; no manual inventory transfer or
+  manual database edit was performed. The owner can use Store all to free space.
+- Existing experience remains intact (the strongest hero was level 85 at the
+  final check). Torment advancement and Paragon are verified by simulation and
+  persistence tests; Paragon still starts at hero level 100.
 
 ## Disk hygiene
 
