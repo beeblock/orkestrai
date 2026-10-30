@@ -1,4 +1,4 @@
-import { chmod, open, readdir, unlink } from 'node:fs/promises';
+import { chmod, open, readdir, unlink, access } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { Connection, Migrator, Schema } from '@beeblock/svelar/database';
 import Database from 'better-sqlite3';
@@ -6,6 +6,8 @@ import Database from 'better-sqlite3';
 /**
  * `onPhase` hears each slow step before it starts ('backup', 'migrating'),
  * so the desktop can tell a long preparation from a stuck server.
+ * @param {any[]} migrations
+ * @param {{databasePath?: string, existingDatabase?: boolean, onPhase?: (phase: string) => void | Promise<void>}} [options]
  */
 export async function runStartupMigrations(migrations, { databasePath, existingDatabase = false, onPhase } = {}) {
   // Desktop SQLite supports transactional DDL. Keep Svelar's migrator/history
@@ -35,11 +37,34 @@ export async function runStartupMigrations(migrations, { databasePath, existingD
       if (snapshot.pragma('quick_check', { simple: true }) !== 'ok') throw new Error('The startup database backup failed integrity verification.');
     } finally { snapshot.close(); }
     await chmod(backupPath, 0o600);
+    // User annotations/evidence now live beside the main database. A backup is
+    // a pair; verify both files before pruning the previous recoverable pair.
+    const graphPath = `${databasePath}.code-graph.sqlite`;
+    let graphBackupPath;
+    if (await access(graphPath).then(() => true, () => false)) {
+      graphBackupPath = `${graphPath}.bak-${stamp}`;
+      const graphReserved = await open(graphBackupPath, 'wx', 0o600);
+      await graphReserved.close();
+      const graph = new Database(graphPath, { readonly: true, fileMustExist: true });
+      try { graph.prepare('VACUUM INTO ?').run(graphBackupPath); } finally { graph.close(); }
+      const graphSnapshot = new Database(graphBackupPath);
+      try {
+        graphSnapshot.pragma('journal_mode = DELETE');
+        if (graphSnapshot.pragma('quick_check', { simple: true }) !== 'ok') throw new Error('The code graph backup failed integrity verification.');
+      } finally { graphSnapshot.close(); }
+      await chmod(graphBackupPath, 0o600);
+    }
     // Keep the newest completed backup; pruning failure must not invalidate it.
     const prefix = `${basename(databasePath)}.bak-`;
     const backups = (await readdir(dirname(databasePath))).filter((name) => name.startsWith(prefix)
       && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d{3}Z)?$/.test(name.slice(prefix.length)));
     for (const old of backups.filter((name) => name !== basename(backupPath))) await unlink(join(dirname(databasePath), old)).catch(() => undefined);
+    if (graphBackupPath) {
+      const graphPrefix = `${basename(graphPath)}.bak-`;
+      const graphBackups = (await readdir(dirname(graphPath))).filter(name => name.startsWith(graphPrefix)
+        && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d{3}Z)?$/.test(name.slice(graphPrefix.length)));
+      for (const old of graphBackups.filter(name => name !== basename(graphBackupPath))) await unlink(join(dirname(graphPath), old)).catch(() => undefined);
+    }
   }
 
   // Table/column/index changes and their migration records commit together.

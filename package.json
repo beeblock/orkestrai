@@ -1,6 +1,6 @@
 {
   "name": "orkestrai",
-  "version": "0.49.1",
+  "version": "0.50.0",
   "description": "A visual canvas for orchestrating multidisciplinary teams of AI agents.",
   "private": true,
   "license": "Apache-2.0",
@@ -241,6 +241,7 @@
       "electron/**",
       "scripts/orkestrai-server.mjs",
       "scripts/run-startup-migrations.mjs",
+      "scripts/prepare-code-graph-storage.mjs",
       "scripts/install-orkestrai-shim.mjs",
       "scripts/mobile-gateway.mjs",
       "src/lib/database/migrations/**",

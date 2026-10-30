@@ -121,6 +121,7 @@ const TOOLS = [
     operation: { type: 'string', enum: ['fetch', 'pull', 'push', 'checkout', 'createBranch', 'renameBranch', 'deleteBranch', 'merge', 'rebase', 'cherryPick', 'revert', 'createTag', 'deleteTag', 'stash', 'stashPop', 'abortMerge', 'abortRebase'] },
     ref: { type: 'string', maxLength: 300 }, name: { type: 'string', maxLength: 240 }, remote: { type: 'string', maxLength: 240 }, message: { type: 'string', maxLength: 1000 }, force: { type: 'boolean' }, setUpstream: { type: 'boolean' }, expectedRevision: { type: 'string', pattern: '^[0-9a-fA-F]{64}$' }, confirmed: { type: 'boolean' }, taskId: { type: 'string', format: 'uuid' },
   }, required: ['operation', 'expectedRevision', 'taskId'] } },
+  { name: 'code_graph_metrics', description: 'Measured graph query counts, latency buckets, estimated context tokens and index/storage cost over the last 30 days. No claim of measured token savings.', inputSchema: { type: 'object', additionalProperties: false, properties: {} } },
   { name: 'code_graph_status', description: 'Retorna os repositorios registrados, estado da indexacao, diagnosticos e contagens do grafo de codigo do workspace.', inputSchema: { type: 'object', properties: {} } },
   { name: 'code_graph_index', description: 'Indexa sob demanda o codigo dos repositorios aprovados do workspace. Omita projectIds para indexar todos.', inputSchema: { type: 'object', properties: { projectIds: { type: 'array', maxItems: 16, items: { type: 'string', format: 'uuid' } }, force: { type: 'boolean', default: false } } } },
   { name: 'code_graph_search', description: 'Busca simbolos por nome, caminho, assinatura e documentacao. Use antes de ler vizinhanca e impacto.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 120 }, projectId: { type: 'string', format: 'uuid' }, kinds: { type: 'array', items: { type: 'string', enum: ['module', 'namespace', 'class', 'interface', 'type', 'enum', 'function', 'method', 'variable', 'endpoint', 'apiRequest', 'schema', 'gateway', 'resource', 'external', 'evidence'] } }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 } }, required: ['query'] } },
@@ -600,6 +601,8 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'git_execute':
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente).');
       return bridge('POST', '/api/agent-room/bridge/git/execute', { ...args, from: selfAgent });
+    case 'code_graph_metrics':
+      return bridge('GET', '/api/agent-room/bridge/code-graph/metrics');
     case 'code_graph_status':
       return bridge('GET', '/api/agent-room/bridge/code-graph');
     case 'code_graph_index':

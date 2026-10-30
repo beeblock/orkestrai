@@ -1,3 +1,5 @@
+import { instrumentCodeGraphController, setCodeGraphQuerySnapshot } from '../../../infrastructure/code-graph/CodeGraphQueryMetrics.js';
+import { codeGraphMetricsService } from '../../../application/services/CodeGraphMetricsService.js';
 import { ChangeTerminalProviderDto } from '../../../application/dto/WorkspaceDtos.js';
 import { SwitchAgentProfileRequest } from '../requests/SwitchAgentProfileRequest.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
@@ -79,7 +81,7 @@ import { imageWorkflowReadQuerySchema } from '$lib/modules/agent-room/contracts/
 import { AddImageWorkflowReferenceAction, CompleteImageWorkflowAction, ConnectImageWorkflowNodeAction, CreateImageWorkflowAction, DisconnectImageWorkflowNodeAction, FailImageWorkflowAction, RunSavedImageWorkflowAction, UpdateImageWorkflowAction, ValidateImageWorkflowOutputAction } from '$lib/modules/agent-room/application/actions/RunImageWorkflowAction.js';
 import { AddImageWorkflowReferenceDto, CompleteImageWorkflowDto, ConnectImageWorkflowNodeDto, CreateImageWorkflowDto, FailImageWorkflowDto, UpdateImageWorkflowDto, ValidateImageWorkflowOutputDto } from '$lib/modules/agent-room/application/dto/ImageWorkflowDtos.js';
 import { AddImageWorkflowReferenceRequest, BridgeRunImageWorkflowRequest, CompleteImageWorkflowRequest, ConnectImageWorkflowNodeRequest, CreateImageWorkflowRequest, FailImageWorkflowRequest, ImageWorkflowActorRequest, UpdateImageWorkflowRequest, ValidateImageWorkflowOutputRequest } from '$lib/modules/agent-room/interface/http/requests/ImageWorkflowRequests.js';
-import { CodeGraphAccessError, codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
+import { CodeGraphAccessError, CodeGraphPreparingError, codeGraphIndexService } from '$lib/modules/agent-room/application/services/CodeGraphIndexService.js';
 import { codeGraphChangeSchema, codeGraphCompareSchema, codeGraphContextSchema, codeGraphContractSchema, codeGraphEvidenceImportSchema, codeGraphEvidenceSnapshotSchema, codeGraphHandoffSchema, codeGraphIndexSchema, codeGraphInvestigationCreateSchema, codeGraphInvestigationUpdateSchema, codeGraphLocateSchema, codeGraphQualitySchema, codeGraphRevisionsSchema, codeGraphSearchSchema, codeGraphSemanticActionSchema, codeGraphSemanticSearchSchema, codeGraphTraversalSchema } from '$lib/modules/agent-room/contracts/schemas/codeGraphSchemas.js';
 import { indexCodeGraphAction } from '$lib/modules/agent-room/application/actions/IndexCodeGraphAction.js';
 import { IndexCodeGraphDto } from '$lib/modules/agent-room/application/dto/CodeGraphDto.js';
@@ -87,7 +89,7 @@ import { codeGraphChangeIntelligenceService } from '$lib/modules/agent-room/appl
 import { codeGraphHandoffService } from '$lib/modules/agent-room/application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '$lib/modules/agent-room/application/services/CodeGraphContractService.js';
 import { codeGraphQualityService } from '$lib/modules/agent-room/application/services/CodeGraphQualityService.js';
-import { codeGraphSemanticService } from '$lib/modules/agent-room/application/services/CodeGraphSemanticService.js';
+import { CodeGraphSemanticPreparingError, codeGraphSemanticService } from '$lib/modules/agent-room/application/services/CodeGraphSemanticService.js';
 import { codeGraphRuntimeEvidenceService } from '$lib/modules/agent-room/application/services/CodeGraphRuntimeEvidenceService.js';
 import { codeGraphOperationsService } from '$lib/modules/agent-room/application/services/CodeGraphOperationsService.js';
 import { codeGraphInvestigationRepository } from '$lib/modules/agent-room/infrastructure/repositories/CodeGraphInvestigationRepository.js';
@@ -116,6 +118,11 @@ import { bridgeCalendarOperationsSchema, bridgeChecklistOperationsSchema } from 
  * workspace, sem CSRF — ver hooks.server.ts csrfExcludePaths).
  */
 export class BridgeController extends Controller {
+  constructor() {
+    super();
+    instrumentCodeGraphController(this, 'agent', ['codeGraphSearch', 'codeGraphSymbol', 'codeGraphGraph', 'codeGraphChanges', 'codeGraphContracts', 'codeGraphQuality', 'codeGraphSemantic', 'codeGraphEvidence', 'codeGraphContext', 'codeGraphOperations', 'codeGraphExplain', 'codeGraphLocate', 'codeGraphRevisions', 'codeGraphCompare']);
+  }
+
   async canvasList(event: any) {
     try {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
@@ -380,6 +387,13 @@ export class BridgeController extends Controller {
     }
   }
 
+  async codeGraphMetrics(event: any) {
+    try {
+      const workspace = await this.resolveCodeGraphWorkspace(event, false);
+      return this.json({ data: await codeGraphMetricsService.snapshot(workspace.id) });
+    } catch (error) { return this.errorResponse(error, 'Failed to load graph metrics.'); }
+  }
+
   async codeGraphStatus(event: any) {
     try {
       const workspace = await this.resolveCodeGraphWorkspace(event);
@@ -484,7 +498,7 @@ export class BridgeController extends Controller {
     try {
       const workspace = await this.resolveCodeGraphWorkspace(event);
       const query = event.url.searchParams.get('q');
-      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(workspace.id) });
+      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(workspace.id, false) });
       const input = codeGraphSemanticSearchSchema.parse(Object.fromEntries(event.url.searchParams));
       return this.json({ data: await codeGraphSemanticService.search(workspace.id, {
         query: input.q,
@@ -2165,7 +2179,16 @@ export class BridgeController extends Controller {
     if (workspace.codeIntelligenceMode !== 'assisted') {
       throw new CodeGraphAccessError(workspace.codeIntelligenceMode);
     }
-    if (requireFresh) await codeGraphIndexService.ensureFresh(workspace.id);
+    (event.locals ??= {}).codeGraphWorkspaceId = workspace.id;
+    if (requireFresh) {
+      const snapshot = await codeGraphIndexService.availableSnapshot(workspace.id);
+      const refreshing = snapshot.projects.some(project => project.status === 'indexing');
+      const outdated = snapshot.projects.some(project => project.status !== 'ready');
+      const state = refreshing ? 'refreshing' as const : outdated ? 'outdated' as const : 'committed' as const;
+      event.locals.codeGraphSnapshot = { state, revisionIds: snapshot.projects.flatMap(project => project.currentRevisionId ? [project.currentRevisionId] : []) };
+      setCodeGraphQuerySnapshot(event.locals.codeGraphSnapshot);
+      event.setHeaders?.({ 'x-orkestrai-code-graph-state': state });
+    }
     return workspace;
   }
 
@@ -2187,6 +2210,7 @@ export class BridgeController extends Controller {
   }
 
   private errorResponse(error: unknown, fallback: string, status = 400) {
+    if (error instanceof CodeGraphSemanticPreparingError || error instanceof CodeGraphPreparingError) return this.json({ error: error.message, code: error.code }, error.status);
     if (error instanceof AutonomyGatePendingError) return this.json({ error: `${error.message} Gate: ${error.gate.id}. Wait for the owner decision, inspect the current target, then retry with the same idempotency key.`, gateId: error.gate.id }, 409);
     const responseStatus = error instanceof CodeGraphAccessError ? error.status : status;
     return this.json({ error: error instanceof Error ? error.message : fallback }, responseStatus);

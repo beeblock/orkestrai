@@ -1908,6 +1908,7 @@ export const TOURS_PT: Tour[] = [
       },
     ],
   },
+  {"id": "code-graph-performance", "icon": "Activity", "title": "Medir a inteligência de código em um projeto grande", "tagline": "Separar a indexação das conversas e mostrar o uso medido do grafo.", "steps": [{"id": "open-usage", "title": "Conferir o uso real", "body": "O botão de atividade no cabeçalho do Grafo de código abre Uso e desempenho. A contagem dos agentes demonstra chamadas reais às ferramentas; zero significa que nenhuma foi registrada. A latência é medida por faixas; os tokens são estimativas do contexto retornado, não uma economia comprovada. O painel só atualiza enquanto estiver aberto."}, {"id": "query-as-an-agent", "title": "CLI / MCP", "body": "orkestrai graph metrics · code_graph_metrics"}, {"id": "keep-messages-moving", "title": "Atualizar sem bloquear entregas", "body": "Altere um arquivo de código e continue conversando com o líder. As consultas usam um snapshot concluído enquanto a thread atualiza o grafo. Confira a duração da indexação após terminar; um erro do índice não pode suspender tarefas independentes."}]},
   {
     id: 'code-intelligence-graph',
     icon: 'Waypoints',
@@ -1931,7 +1932,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'choose-code-intelligence-mode',
         title: 'Escolha atualização e acesso',
-        body: 'Edite o workspace para escolher Assistido, Manual ou Desativado. Assistido observa mudanças estabilizadas, atualiza incrementalmente e faz as consultas dos agentes aguardarem a revisão mais recente. Manual deixa a indexação com você e bloqueia agentes. Desativado para os watchers e bloqueia o grafo sem apagar o histórico local.',
+        body: "Assistido monitora os repositórios aprovados e atualiza o código alterado em uma thread de segundo plano. Os agentes consultam o último grafo concluído sem esperar a próxima indexação; os metadados da resposta distinguem um snapshot concluído de uma atualização em andamento e incluem os ids das revisões. A indexação explícita ainda aguarda a conclusão. Manual mantém o grafo visual disponível para você, marca alterações estabilizadas como desatualizadas e bloqueia ferramentas do grafo para agentes. Desativado encerra o monitoramento e bloqueia o grafo preservando os dados locais. Evidências de execução permanecem vinculadas à revisão importada.",
       },
       {
         id: 'explore-symbol-impact',
@@ -1951,7 +1952,7 @@ export const TOURS_PT: Tour[] = [
       {
         id: 'build-semantic-index',
         title: 'Pesquise por intenção, localmente',
-        body: 'Abra Análises → Busca semântica. O modo Assistido prepara automaticamente o índice compacto local, reaproveita vetores inalterados após edições e oferece Atualizar agora para forçar uma passagem imediata. Ative o brilho ao lado da busca e descreva o comportamento desejado em vez de adivinhar o nome do símbolo. O índice não exige chave nem download de modelo, nunca envia código para fora do dispositivo e as buscas dos agentes aguardam a revisão mais recente. O modo Manual mantém os controles explícitos Construir e Reconstruir.',
+        body: "Abra Inteligência → Semântica. O modo Assistido prepara o índice de intenção local em segundo plano e reutiliza vetores verificados após edições. Durante a preparação, use a busca por nome; a consulta de intenção do agente retorna essa orientação imediatamente, sem esperar a construção. Não exige chave de API nem download de modelo. O modo Manual mantém os controles Construir e Reconstruir.",
       },
       {
         id: 'overlay-runtime-evidence',

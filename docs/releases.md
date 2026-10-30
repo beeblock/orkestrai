@@ -226,6 +226,28 @@ instalação antiga pode permanecer offline por meses antes de fazer a migraçã
 
 ## Proteções de desempenho contra regressão
 
+Na 0.50.0, o grafo de código passa a usar um SQLite próprio e workers fora da
+thread principal do Core. A preparação verifica a identidade do banco e a cópia
+antes de retirar as tabelas antigas; uma falha preserva os dados e permite abrir
+as conversas. Os backups posteriores formam um par com o mesmo timestamp:
+`database.db.bak-*` e `database.db.code-graph.sqlite.bak-*`. Restaure o par antes
+de testar um rollback de banco/aplicativo; versões anteriores não conhecem o
+arquivo separado. Não apague WALs ativos nem anotações para liberar espaço.
+
+`code-graph-storage-isolation.test.ts` cobre mensagens durante publicação,
+rollback, retomada de cache, vínculos de arquivos inalterados, restauração de
+FTS e preservação de cópias divergentes. `code-graph-metrics.test.ts` cobre o
+escopo e o contrato comum de UI/CLI/MCP. O benchmark opt-in
+`vitest.graph-runtime.config.ts` copia metadados de uma fonte explicitamente
+indicada em modo somente leitura; ele exige p95 de buscas por nome abaixo de
+100 ms e de persistência de mensagens abaixo de 200 ms durante a indexação
+real. Não o aponte para outro banco sem autorização nem interprete esses
+números como recibos do terminal ou economia comprovada de tokens.
+
+Ao mudar a semântica de parsers/resolução, atualize a versão de configuração
+em `CodeGraphIndexService` (`INDEXER_VERSION`); mudanças no formato do cache também exigem sua
+versão de codec. O cache persistente não deve reaproveitar análise incompatível.
+
 A CI obrigatória do mesmo SHA da release executa os testes abaixo; não remova
 esses casos nem flexibilize limites para contornar uma falha de publicação.
 

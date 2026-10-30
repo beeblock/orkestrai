@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { CodeGraphMetrics } from '$lib/modules/agent-room/domain/code-graph-metrics.js';
   import type { NodeProps } from '@xyflow/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
@@ -91,6 +92,29 @@
   };
 
   let { id, data, selected } = $props<NodeProps & { data: CodeGraphNodeData }>();
+  let metricsOpen = $state(false);
+  let metrics = $state<CodeGraphMetrics | null>(null);
+  let metricsError = $state(false);
+  $effect(() => {
+    if (!metricsOpen) return;
+    const workspaceId = data.workspaceId;
+    let disposed = false, pending = false;
+    metrics = null;
+    metricsError = false;
+    const refreshMetrics = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const next = await api<CodeGraphMetrics>(`/api/agent-room/workspaces/${workspaceId}/code-graph/metrics`);
+        if (!disposed) { metrics = next; metricsError = false; }
+      } catch { if (!disposed) metricsError = true; }
+      finally { pending = false; }
+    };
+    void refreshMetrics();
+    const timer = setInterval(() => void refreshMetrics(), 5_000);
+    return () => { disposed = true; clearInterval(timer); };
+  });
+
   let snapshot = $state<CodeGraphSnapshot | null>(null);
   let graph = $state<CodeGraphSubgraph | null>(null);
   let changes = $state<CodeGraphChangeIntelligence | null>(null);
@@ -239,7 +263,7 @@
     });
     const body = await response.text();
     const payload = body ? JSON.parse(body) : { error: m['code_graph.load_error']() };
-    if (!response.ok || payload.error) throw new Error(payload.error || m['code_graph.load_error']());
+    if (!response.ok || payload.error) throw new Error(payload.code === 'semantic_preparing' ? m['code_graph.semantic_preparing']() : payload.error || m['code_graph.load_error']());
     return payload.data as T;
   }
 
@@ -1114,7 +1138,7 @@
         selectedSymbol = null;
         results = [];
         semanticMatches = [];
-        toast.info(m['code_graph.semantic_build_required']());
+        toast.info(status.refreshing ? m['code_graph.semantic_preparing']() : m['code_graph.semantic_build_required']());
         return;
       }
       searchMode = 'semantic';
@@ -1333,6 +1357,9 @@
   {#snippet icon()}<Waypoints size={14} />{/snippet}
   {#snippet title()}{data.title}{/snippet}
   {#snippet actions()}
+    <HeaderIconButton label={m['code_graph.metrics_title']()} class="node-action-btn" side="left" onclick={() => metricsOpen = true}>
+      <Activity size={12} />
+    </HeaderIconButton>
     <HeaderIconButton label={m['code_graph.refresh']()} class="node-action-btn" side="left" onclick={() => void load()}>
       <RefreshCw size={12} class={loading ? 'animate-spin' : undefined} />
     </HeaderIconButton>
@@ -1699,7 +1726,7 @@
             <div class="flex items-center gap-2.5">
               <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)]"><Sparkles size={14} /></span>
               <div class="min-w-0 flex-1">
-                <strong class="block text-[12px] font-medium">{semanticStateLabel(semanticStatus.state)}</strong>
+                <strong class="block text-[12px] font-medium">{semanticStatus.refreshing ? m['code_graph.semantic_preparing']() : semanticStateLabel(semanticStatus.state)}</strong>
                 <span class="block truncate font-mono text-[11px] text-[var(--app-text-muted)]" title={semanticStatus.model}>{semanticStatus.model}</span>
               </div>
             </div>
@@ -1708,7 +1735,7 @@
             </div>
             <span class="mt-1.5 block text-ui-xs text-[var(--app-text-muted)] tabular-nums">{m['code_graph.semantic_symbols']({ indexed: semanticStatus.indexedSymbols, total: semanticStatus.totalSymbols })}</span>
             <div class={`mt-3 grid gap-1.5 ${data.codeIntelligenceMode === 'assisted' ? 'grid-cols-1' : 'grid-cols-2'}`}>
-              <Button size="xs" class="w-full" disabled={semanticLoading || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
+              <Button size="xs" class="w-full" disabled={semanticLoading || semanticStatus.refreshing || !hasIndexedGraph || semanticStatus.totalSymbols === 0} onclick={() => void updateSemantic('build')}>
                 <RefreshCw size={11} class={semanticLoading ? 'animate-spin' : undefined} />
                 {data.codeIntelligenceMode === 'assisted'
                   ? m['code_graph.semantic_refresh']()
@@ -1921,6 +1948,36 @@
     </div>
   </div>
 </NodeShell>
+
+<Dialog.Root bind:open={metricsOpen}>
+  <Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+    <Dialog.Header>
+      <Dialog.Title>{m['code_graph.metrics_title']()}</Dialog.Title>
+      <Dialog.Description>{m['code_graph.metrics_description']()}</Dialog.Description>
+    </Dialog.Header>
+    {#if metricsError}
+      <p role="status" class="text-sm text-[var(--app-danger)]">{m['code_graph.metrics_error']()}</p>
+    {:else if !metrics}
+      <LoaderCircle size={20} class="animate-spin" aria-label={m['code_graph.metrics_title']()} />
+    {:else}
+      <dl class="grid grid-cols-2 gap-4 rounded-xl border border-[var(--app-border)] p-4">
+        <div><dt class="text-xs text-[var(--app-text-muted)]">{m['code_graph.metrics_agents']()}</dt><dd class="mt-1 text-2xl tabular-nums">{metrics.agentCalls.toLocaleString(localeState.current)}</dd></div>
+        <div><dt class="text-xs text-[var(--app-text-muted)]">{m['code_graph.metrics_users']()}</dt><dd class="mt-1 text-2xl tabular-nums">{metrics.userCalls.toLocaleString(localeState.current)}</dd></div>
+        <div><dt class="text-xs text-[var(--app-text-muted)]">{m['code_graph.metrics_p95']()}</dt><dd class="mt-1 text-lg tabular-nums">{metrics.p95UpperMs === null ? (metrics.totals.calls ? '>5 000 ms' : '—') : `${metrics.p95UpperMs} ms`}</dd></div>
+        <div><dt class="text-xs text-[var(--app-text-muted)]">{m['code_graph.metrics_failures']()}</dt><dd class="mt-1 text-lg tabular-nums">{metrics.totals.failures.toLocaleString(localeState.current)}</dd></div>
+        <div class="col-span-2"><dt class="text-xs text-[var(--app-text-muted)]">{m['code_graph.metrics_tokens']()}</dt><dd class="mt-1 text-lg tabular-nums">{metrics.totals.estimatedContextTokens.toLocaleString(localeState.current)}</dd></div>
+      </dl>
+      {#if !metrics.totals.calls}<p class="text-sm text-[var(--app-text-muted)]">{m['code_graph.metrics_empty']()}</p>{/if}
+      <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['code_graph.metrics_estimate_help']()}</p>
+      <dl class="space-y-2 border-t border-[var(--app-border)] pt-4 text-sm">
+        <div class="flex justify-between gap-4"><dt>{m['code_graph.metrics_storage']()}</dt><dd class="tabular-nums">{(metrics.databaseBytes / 1024 ** 2).toFixed(1)} MB</dd></div>
+        {#each metrics.projects as project (project.id)}
+          <div class="flex justify-between gap-4"><dt class="min-w-0 truncate">{m['code_graph.metrics_index']()} · {project.name}</dt><dd class="shrink-0 tabular-nums">{(project.lastIndexMs / 1000).toFixed(2)} s</dd></div>
+        {/each}
+      </dl>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={investigationsOpen}>
   <Dialog.Content class="flex max-h-[min(760px,88vh)] flex-col gap-0 overflow-hidden overscroll-contain p-0 sm:max-w-[min(720px,92vw)]">

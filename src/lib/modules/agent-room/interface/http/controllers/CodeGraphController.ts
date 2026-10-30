@@ -1,3 +1,5 @@
+import { instrumentCodeGraphController } from '../../../infrastructure/code-graph/CodeGraphQueryMetrics.js';
+import { codeGraphMetricsService } from '../../../application/services/CodeGraphMetricsService.js';
 import { Controller, type RequestEvent } from '@beeblock/svelar/routing';
 import { ChangeCodeGraphDto, CodeGraphCompareDto, CodeGraphContextDto, CodeGraphContractDto, CodeGraphEvidenceImportDto, CodeGraphHandoffDto, CodeGraphInvestigationCreateDto, CodeGraphInvestigationUpdateDto, CodeGraphLocateDto, CodeGraphQualityDto, CodeGraphRevisionsDto, CodeGraphSemanticSearchDto, IndexCodeGraphDto, OverviewCodeGraphDto, SearchCodeGraphDto, TraverseCodeGraphDto } from '../../../application/dto/CodeGraphDto.js';
 import { indexCodeGraphAction } from '../../../application/actions/IndexCodeGraphAction.js';
@@ -6,13 +8,23 @@ import { codeGraphChangeIntelligenceService } from '../../../application/service
 import { codeGraphHandoffService } from '../../../application/services/CodeGraphHandoffService.js';
 import { codeGraphContractService } from '../../../application/services/CodeGraphContractService.js';
 import { codeGraphQualityService } from '../../../application/services/CodeGraphQualityService.js';
-import { codeGraphSemanticService } from '../../../application/services/CodeGraphSemanticService.js';
+import { CodeGraphSemanticPreparingError, codeGraphSemanticService } from '../../../application/services/CodeGraphSemanticService.js';
 import { codeGraphRuntimeEvidenceService } from '../../../application/services/CodeGraphRuntimeEvidenceService.js';
 import { codeGraphOperationsService } from '../../../application/services/CodeGraphOperationsService.js';
 import { codeGraphInvestigationRepository } from '../../../infrastructure/repositories/CodeGraphInvestigationRepository.js';
 import { ChangeCodeGraphRequest, CodeGraphCompareRequest, CodeGraphContextRequest, CodeGraphContractRequest, CodeGraphEvidenceImportRequest, CodeGraphEvidenceSnapshotRequest, CodeGraphHandoffRequest, CodeGraphInvestigationCreateRequest, CodeGraphInvestigationUpdateRequest, CodeGraphLocateRequest, CodeGraphQualityRequest, CodeGraphRevisionsRequest, CodeGraphSemanticActionRequest, CodeGraphSemanticSearchRequest, IndexCodeGraphRequest, OverviewCodeGraphRequest, SearchCodeGraphRequest, TraverseCodeGraphRequest } from '../requests/CodeGraphRequests.js';
 
 export class CodeGraphController extends Controller {
+  constructor() {
+    super();
+    instrumentCodeGraphController(this, 'user', ['search', 'symbol', 'overview', 'graph', 'changes', 'contracts', 'quality', 'semantic', 'evidence', 'context', 'operations', 'explain', 'locate', 'revisions', 'compare']);
+  }
+
+  async metrics(event: RequestEvent) {
+    try { return this.json({ data: await codeGraphMetricsService.snapshot(event.params.id) }); }
+    catch (error) { return this.failure(error, 'Could not load graph metrics.'); }
+  }
+
   async status(event: RequestEvent) {
     try {
       return this.json({ data: await codeGraphIndexService.status(event.params.id) });
@@ -118,7 +130,7 @@ export class CodeGraphController extends Controller {
     try {
       await codeGraphIndexService.assertAvailable(event.params.id);
       const query = event.url.searchParams.get('q');
-      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(event.params.id) });
+      if (!query) return this.json({ data: await codeGraphSemanticService.ensureFresh(event.params.id, false) });
       const input = await CodeGraphSemanticSearchRequest.validate(event);
       const dto = CodeGraphSemanticSearchDto.from(event.params.id, input);
       return this.json({ data: await codeGraphSemanticService.search(dto.workspaceId, dto.options) });
@@ -273,6 +285,7 @@ export class CodeGraphController extends Controller {
   }
 
   private failure(error: unknown, fallback: string) {
+    if (error instanceof CodeGraphSemanticPreparingError) return this.json({ error: error.message, code: error.code }, error.status);
     return this.json(
       { error: error instanceof Error ? error.message : fallback },
       error instanceof CodeGraphAccessError ? error.status : 400,

@@ -71,6 +71,44 @@ function graphNodePoints(image: Buffer): Array<{ x: number; y: number }> {
 }
 
 test.describe('code graph UI', () => {
+  test('refreshes measured usage in the open panel in both themes', async ({ page, request }) => {
+    const directory = mkdtempSync(join(tmpdir(), 'orkestrai-graph-metrics-ui-'));
+    writeFileSync(join(directory, 'index.ts'), 'export function greet() { return true; }\n');
+    const workspace = (await (await request.post('/api/agent-room/workspaces', {
+      data: { name: 'Graph metrics', workingDir: directory, codeIntelligenceMode: 'manual' },
+    })).json()).data;
+    const node = (await (await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, {
+      data: { type: 'codeGraph', title: 'Code graph', x: 100, y: 80, width: 780, height: 580, payload: {} },
+    })).json()).data;
+    try {
+      for (const appTheme of ['orkestrai-light', 'orkestrai-dark']) {
+        await request.put('/api/agent-room/settings', { data: { ...settingsBeforeTest, appTheme, uiLanguage: 'en' } });
+        await page.goto(`/canvas?workspace=${workspace.id}&node=${node.id}`);
+        const graph = page.getByRole('region', { name: 'Code graph' });
+        await graph.getByRole('button', { name: 'Index code', exact: true }).click();
+        await expect(page.getByText('Code graph indexed.', { exact: true })).toBeVisible();
+        // The metrics control belongs to the node header, outside its body region.
+        await page.getByRole('button', { name: 'Usage and performance', exact: true }).click();
+        const metrics = page.getByRole('dialog', { name: 'Usage and performance' });
+        await expect(metrics.getByText('Your queries', { exact: true })).toBeVisible();
+        await expect(metrics.getByText('Returned context tokens (estimated)', { exact: true })).toBeVisible();
+        const counter = metrics.getByText('Your queries', { exact: true }).locator('..').locator('dd');
+        await expect.poll(async () => Number((await counter.innerText()).replace(/\D/g, ''))).toBeGreaterThan(0);
+        const before = Number((await counter.innerText()).replace(/\D/g, ''));
+        const response = await request.get(`/api/agent-room/workspaces/${workspace.id}/code-graph/search?q=greet`);
+        expect(response.ok()).toBe(true);
+        await expect.poll(async () => Number((await counter.innerText()).replace(/\D/g, '')), { timeout: 10_000 }).toBeGreaterThan(before);
+        await metrics.screenshot({ path: test.info().outputPath(`graph-metrics-${appTheme}.png`) });
+        await page.keyboard.press('Escape');
+        await expect(metrics).not.toBeVisible();
+      }
+    } finally {
+      await page.goto('about:blank').catch(() => undefined);
+      await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test('keeps graph controls actionable and readable in light and dark themes', async ({ page, request }) => {
     const directory = mkdtempSync(join(tmpdir(), 'orkestrai-code-graph-ui-'));
     writeFileSync(join(directory, 'package.json'), '{"name":"code-graph-ui"}\n');

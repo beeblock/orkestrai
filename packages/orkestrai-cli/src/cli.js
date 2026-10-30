@@ -86,7 +86,7 @@ Uso:
   orkestrai integration list [--json] | integration events [integrationId] [--limit <n>] [--json] | integration execute <integrationId> <action> --input <json> --task <taskId> --idempotency <key> [--json]
   orkestrai tool list [--json] | tool propose --name <nome> --slug <slug> --manifest <json> --task <taskId> | tool update <toolId> --manifest <json> --task <taskId> | tool execute <toolId> --input <json> --task <taskId> --idempotency <key> [--dry-run]
   orkestrai git status [--json] | git preview <operation> [--ref <ref>] [--name <name>] [--remote <remote>] [--force] [--set-upstream] | git execute <operation> --revision <sha256> --task <taskId> [--ref <ref>] [--name <name>] [--remote <remote>] [--confirm] [--force] [--set-upstream] [--json]
-  orkestrai graph status | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
+  orkestrai graph status | graph metrics | graph index [--project <uuid>] | graph changes | graph contracts | graph quality | graph semantic <status|build|clear|search> [consulta] | graph evidence [import <projectId> <path>] | graph context [symbolIds-csv] [--scope <id>] [--finding <id>] [--purpose investigate|implement|review|test] [--tokens <n>] | graph operations | graph explain <edgeId> | graph locate <path> <line> | graph revisions [projectId] | graph compare <projectId> [fromRevision] [toRevision] | graph investigation <list|read|save|delete> ... | graph handoff <review|task|leader|agent|council> ... | graph search <consulta> | graph symbol <symbolId> | graph neighbors <symbolId> [--json]
   orkestrai memory list [consulta] [--history] [--json]
   orkestrai knowledge <create|search|read|attach|refresh|tags> [value] [--file command.json]
   orkestrai learning <search|reflect|skip> [--file lesson.json]
@@ -333,6 +333,9 @@ async function bridge(config, method, path, body) {
   }
   // Messages that arrived while this agent works ride along with any bridge
   // call, so a busy agent reads them now instead of at its next turn.
+  const graph = payload.meta?.graph;
+  const graphSink = config[INBOX_SINK];
+  if (graphSink && ['committed', 'refreshing', 'outdated'].includes(graph?.state) && Array.isArray(graph.revisionIds) && graph.revisionIds.length <= 16 && graph.revisionIds.every(/** @param {unknown} id */ id => typeof id === 'string' && /^[a-f0-9-]{36}$/i.test(id))) graphSink.graph = graph;
   const pending = Number(response.headers?.get?.('x-orkestrai-inbox') ?? 0);
   const sink = config[INBOX_SINK];
   if (pending > 0 && sink && config[BRIDGE_AGENT_TOKEN] && !path.startsWith('/api/agent-room/bridge/inbox')) {
@@ -384,12 +387,18 @@ function apiCollectionFromDocument(document) {
   ].filter((key) => Object.prototype.hasOwnProperty.call(source, key)).map((key) => [key, source[key]]));
 }
 
+/** @typedef {{state: string, revisionIds: string[]}} GraphSnapshot */
+/** @param {GraphSnapshot | null | undefined} graph */
+function formatGraphSnapshot(graph) {
+  return graph && graph.state !== 'committed' ? `[orkestrai:graph] ${graph.state === 'refreshing' ? 'Background refresh in progress; results use the last committed graph.' : graph.state === 'outdated' ? 'The committed graph is out of date; refresh may be pending or deferred. Check graph status before relying on freshness.' : 'Results use a committed graph snapshot.'} Observed revisions at request start: ${graph.revisionIds.join(', ')}.` : '';
+}
+
 export async function run(argv, options = {}) {
-  const sink = { items: [], remaining: 0 };
+  const sink = { items: [], remaining: 0, graph: /** @type {GraphSnapshot | null} */ (null) };
   try {
     return await runCommand(argv, options, sink);
   } finally {
-    const digest = formatInbox(sink.items, sink.remaining);
+    const digest = [formatInbox(sink.items, sink.remaining), formatGraphSnapshot(sink.graph)].filter(Boolean).join('\n');
     // stderr keeps --json output parseable while the agent still sees it.
     if (digest) (options.err ?? console.error)(digest);
   }
@@ -451,13 +460,14 @@ async function runCommand(argv, options, sink) {
   // o handshake nunca morre por falta de .orkestrai/workspace.json.
   if (command === 'mcp') {
     const { runMcpServer } = await import('./mcp.js');
-    const mcpSink = { items: [], remaining: 0 };
+    const mcpSink = { items: [], remaining: 0, graph: /** @type {GraphSnapshot | null} */ (null) };
     await runMcpServer({
       input: options.input ?? process.stdin,
       write: options.write ?? ((chunk) => process.stdout.write(chunk)),
       bridge: (method, path, body) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, method, path, body),
       drainInbox: () => {
-        const digest = formatInbox(mcpSink.items, mcpSink.remaining);
+        const digest = [formatInbox(mcpSink.items, mcpSink.remaining), formatGraphSnapshot(mcpSink.graph)].filter(Boolean).join('\n');
+        mcpSink.graph = null;
         mcpSink.items = [];
         mcpSink.remaining = 0;
         return digest;
@@ -819,6 +829,11 @@ async function runCommand(argv, options, sink) {
     }
     case 'graph': {
       const [action, value, ...queryParts] = rest;
+      if (action === 'metrics') {
+        out(JSON.stringify(await bridge(config, 'GET', '/api/agent-room/bridge/code-graph/metrics'), null, 2));
+        return 0;
+      }
+
       if (action === 'status') {
         const data = await bridge(config, 'GET', '/api/agent-room/bridge/code-graph');
         if (flags.json) out(JSON.stringify(data, null, 2));

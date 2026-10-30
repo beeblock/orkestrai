@@ -248,4 +248,27 @@ describe('atomic desktop startup migrations', () => {
     expect(phases).toEqual(['backup', 'migrating']);
     expect((await readdir(directory)).filter((name) => name.startsWith('database.db.bak-'))).toEqual(backups);
   });
+
+  it('verifies and retains a matching graph backup before pruning the previous pair', async () => {
+    await Connection.disconnect();
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-migration-paired-backup-'));
+    directories.push(directory);
+    const databasePath = join(directory, 'database.db');
+    Connection.configure({ default: 'sqlite', connections: { sqlite: { driver: 'sqlite', filename: databasePath } } });
+    await new Schema().createTable('agent_workspaces', table => { table.uuid('id').primary(); table.string('name'); });
+    await Connection.raw('INSERT INTO agent_workspaces (id, name) VALUES (?, ?)', ['workspace', 'Preserve conversation']);
+    const graphPath = databasePath + '.code-graph.sqlite';
+    const graph = new Database(graphPath);
+    graph.exec('CREATE TABLE annotations (id TEXT PRIMARY KEY, body TEXT); INSERT INTO annotations VALUES (\'annotation\', \'Preserve investigation\')');
+    graph.close();
+    await runStartupMigrations(migrations, { databasePath, existingDatabase: true });
+    const files = await readdir(directory);
+    const mainBackup = files.find(file => file.startsWith('database.db.bak-'))!;
+    const graphBackup = files.find(file => file.startsWith('database.db.code-graph.sqlite.bak-'))!;
+    expect(mainBackup).toBeTruthy();
+    expect(graphBackup.split('.bak-')[1]).toBe(mainBackup.split('.bak-')[1]);
+    const snapshot = new Database(join(directory, graphBackup), { readonly: true });
+    try { expect(snapshot.prepare('SELECT body FROM annotations').all()).toEqual([{ body: 'Preserve investigation' }]); }
+    finally { snapshot.close(); }
+  });
 });

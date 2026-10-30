@@ -1,11 +1,11 @@
+import { buildCodeGraphProject } from '../../infrastructure/code-graph/CodeGraphBuildEngine.js';
+import { codeGraphConnectionName, buildGraphInWorker } from '$lib/database/code-graph-storage.js';
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import type { Stats } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { basename, relative, resolve, sep } from 'node:path';
-import { promisify } from 'node:util';
 import { watch, type FSWatcher } from 'chokidar';
-import type { CodeGraphProjectRoot, CodeGraphWriteEdge, CodeGraphWriteFile, CodeGraphWriteSymbol } from '../ports/CodeGraphStore.js';
+import type { CodeGraphProjectRoot } from '../ports/CodeGraphStore.js';
 import type {
   CodeGraphDiagnostic,
   CodeGraphIndexOptions,
@@ -18,17 +18,11 @@ import type {
   CodeGraphTraversalOptions,
 } from '../../domain/code-graph.js';
 import type { Workspace } from '../../domain/types.js';
-import { codeGraphFileScanner } from '../../infrastructure/code-graph/CodeGraphFileScanner.js';
-import { codeGraphParser } from '../../infrastructure/code-graph/CodeGraphParser.js';
-import { codeGraphResolver } from '../../infrastructure/code-graph/CodeGraphResolver.js';
-import type { ParsedCodeFile } from '../../infrastructure/code-graph/types.js';
 import { codeGraphRepository } from '../../infrastructure/repositories/CodeGraphRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { codeGraphSemanticService } from './CodeGraphSemanticService.js';
 
-const execFileAsync = promisify(execFile);
 const INDEXER_VERSION = 5;
-const PARSE_CONCURRENCY = 4;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
 const WATCHED_SOURCE = /\.(?:[cm]?[jt]sx?|svelte|php)$/i;
 const WATCHED_CONTRACT = /(?:^|[._-])(openapi|swagger)(?:[._-]|$).*\.(?:json|ya?ml)$/i;
@@ -54,7 +48,9 @@ type IndexState = {
   pollingProjects: Set<string>;
   staleTimers: Map<string, ReturnType<typeof setTimeout>>;
   semanticTimers: Map<string, ReturnType<typeof setTimeout>>;
-  parseCache: Map<string, Map<string, { contentHash: string; file: ParsedCodeFile }>>;
+  backgroundFailures: Map<string, number>;
+  backgroundRetryAt: Map<string, number>;
+  backgroundRetryTimers: Map<string, ReturnType<typeof setTimeout>>;
   changeVersions: Map<string, number>;
   indexedChangeVersions: Map<string, number>;
   autoReindexing: Map<string, Promise<void>>;
@@ -72,14 +68,18 @@ function indexState(): IndexState {
     pollingProjects: new Set(),
     staleTimers: new Map(),
     semanticTimers: new Map(),
-    parseCache: new Map(),
+    backgroundFailures: new Map(),
+    backgroundRetryAt: new Map(),
+    backgroundRetryTimers: new Map(),
     changeVersions: new Map(),
     indexedChangeVersions: new Map(),
     autoReindexing: new Map(),
     freshnessCheckedProjects: new Set(),
   };
   // Preserve development HMR state created by an older module shape.
-  global.__orkestraiCodeGraphIndexState.parseCache ??= new Map();
+  global.__orkestraiCodeGraphIndexState.backgroundFailures ??= new Map();
+  global.__orkestraiCodeGraphIndexState.backgroundRetryAt ??= new Map();
+  global.__orkestraiCodeGraphIndexState.backgroundRetryTimers ??= new Map();
   global.__orkestraiCodeGraphIndexState.watcherRetryAt ??= new Map();
   global.__orkestraiCodeGraphIndexState.watcherFailures ??= new Map();
   global.__orkestraiCodeGraphIndexState.watcherClosing ??= new Map();
@@ -116,18 +116,10 @@ async function exists(path: string): Promise<boolean> {
   return access(path).then(() => true).catch(() => false);
 }
 
-async function mapConcurrent<T, R>(items: T[], concurrency: number, work: (item: T) => Promise<R>): Promise<R[]> {
-  const output = new Array<R>(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      output[index] = await work(items[index]);
-    }
-  });
-  await Promise.all(workers);
-  return output;
+export class CodeGraphPreparingError extends Error {
+  readonly code = 'graph_preparing';
+  readonly status = 425;
+  constructor() { super('The first code graph is preparing in the background. Continue with bounded file search now; do not wait or repeatedly rebuild the index.'); }
 }
 
 export class CodeGraphIndexService {
@@ -140,7 +132,7 @@ export class CodeGraphIndexService {
     return codeGraphRepository.snapshot(workspaceId);
   }
 
-  /** Agent reads use this gate so a known-stale graph is never returned. */
+  /** Explicit freshness requests wait for the structural index. Interactive reads use availableSnapshot. */
   async ensureFresh(workspaceId: string): Promise<CodeGraphSnapshot> {
     const workspace = await this.assertWorkspace(workspaceId, true);
     const projects = await this.syncWorkspaceProjects(workspace.id);
@@ -159,6 +151,17 @@ export class CodeGraphIndexService {
     }
     this.scheduleSemanticRefresh(workspace.id, true);
     return codeGraphRepository.snapshot(workspace.id);
+  }
+
+  /** Interactive reads keep using a committed snapshot while freshness work runs in the background. */
+  async availableSnapshot(workspaceId: string): Promise<CodeGraphSnapshot> {
+    await this.assertWorkspace(workspaceId, true);
+    const snapshot = await codeGraphRepository.snapshot(workspaceId);
+    void this.ensureFresh(workspaceId).catch(error => {
+      console.warn(`[code-graph] Background refresh failed for ${workspaceId}: ${error instanceof Error ? error.message.slice(0, 240) : 'Unknown error'}`);
+    });
+    if (!snapshot.projects.some(project => project.currentRevisionId)) throw new CodeGraphPreparingError();
+    return snapshot;
   }
 
   async applyWorkspaceMode(workspace: Workspace): Promise<void> {
@@ -250,142 +253,35 @@ export class CodeGraphIndexService {
     const pending = this.buildRevision(project, force);
     this.state.inFlight.set(project.id, pending);
     try {
-      return await pending;
+      const result = await pending;
+      this.state.backgroundFailures.delete(project.id);
+      this.state.backgroundRetryAt.delete(project.id);
+      const timer = this.state.backgroundRetryTimers.get(project.id);
+      if (timer) clearTimeout(timer);
+      this.state.backgroundRetryTimers.delete(project.id);
+      return result;
+    } catch (error) {
+      const failures = (this.state.backgroundFailures.get(project.id) ?? 0) + 1;
+      const delay = Math.min(30_000 * 2 ** Math.min(failures - 1, 4), 300_000);
+      this.state.backgroundFailures.set(project.id, failures);
+      this.state.backgroundRetryAt.set(project.id, Date.now() + delay);
+      const previous = this.state.backgroundRetryTimers.get(project.id);
+      if (previous) clearTimeout(previous);
+      const timer = setTimeout(() => {
+        this.state.backgroundRetryTimers.delete(project.id);
+        void this.runAutoReindex(project.workspaceId, project.id).catch(() => undefined);
+      }, delay);
+      timer.unref?.();
+      this.state.backgroundRetryTimers.set(project.id, timer);
+      throw error;
     } finally {
       if (this.state.inFlight.get(project.id) === pending) this.state.inFlight.delete(project.id);
     }
   }
 
   private async buildRevision(project: CodeGraphProject, force: boolean): Promise<CodeGraphProject> {
-    const startedAt = Date.now();
-    const gitHead = await this.gitHead(project.rootPath);
-    const scanStartedAt = Date.now();
-    const scan = await codeGraphFileScanner.scan(project.rootPath);
-    const scanMs = Date.now() - scanStartedAt;
-    const sourceHash = hash(JSON.stringify(scan.files.map((file) => [file.relativePath, file.contentHash])));
-    const currentSourceHash = await codeGraphRepository.currentSourceHash(project.id);
-    if (!force && project.status === 'ready' && sourceHash === currentSourceHash) {
-      return project;
-    }
-    const revision = await codeGraphRepository.beginRevision(project.workspaceId, project.id, gitHead);
-    try {
-      const previousCache = this.state.parseCache.get(project.id);
-      const nextCache = new Map<string, { contentHash: string; file: ParsedCodeFile }>();
-      let cacheHits = 0;
-      let cacheMisses = 0;
-      const parseStartedAt = Date.now();
-      const parsed = await mapConcurrent(scan.files, PARSE_CONCURRENCY, async (file) => {
-        const cached = previousCache?.get(file.relativePath);
-        if (cached?.contentHash === file.contentHash) cacheHits += 1;
-        else cacheMisses += 1;
-        const parsedFile = cached?.contentHash === file.contentHash
-          ? cached.file
-          : await codeGraphParser.parse(file);
-        nextCache.set(file.relativePath, { contentHash: file.contentHash, file: parsedFile });
-        return parsedFile;
-      });
-      const parseMs = Date.now() - parseStartedAt;
-      const resolveStartedAt = Date.now();
-      const graph = codeGraphResolver.resolve(parsed);
-      const fileKeyByPath = new Map(graph.files.map((file) => [file.relativePath, `file:${file.contentHash}:${file.relativePath}`]));
-      const fileKeyBySymbol = new Map<string, string>();
-      for (const file of graph.files) {
-        const fileKey = fileKeyByPath.get(file.relativePath)!;
-        for (const symbol of file.symbols) fileKeyBySymbol.set(symbol.key, fileKey);
-      }
-
-      const edgesByFile = new Map<string, number>();
-      for (const edge of graph.edges) {
-        edgesByFile.set(edge.sitePath, (edgesByFile.get(edge.sitePath) ?? 0) + 1);
-      }
-      const files: CodeGraphWriteFile[] = graph.files.map((file) => ({
-        key: fileKeyByPath.get(file.relativePath)!,
-        path: file.relativePath,
-        language: file.language,
-        contentHash: file.contentHash,
-        byteSize: file.byteSize,
-        generated: file.generated,
-        symbolCount: file.symbols.length,
-        edgeCount: edgesByFile.get(file.relativePath) ?? 0,
-        modifiedAt: file.modifiedAt,
-      }));
-      const symbols: CodeGraphWriteSymbol[] = graph.symbols.map((symbol) => ({
-        key: symbol.key,
-        fileKey: fileKeyBySymbol.get(symbol.key) ?? null,
-        parentKey: symbol.parentKey,
-        kind: symbol.kind,
-        name: symbol.name,
-        qualifiedName: symbol.qualifiedName,
-        signature: symbol.signature,
-        documentation: symbol.documentation,
-        modifiers: symbol.modifiers,
-        metadata: symbol.metadata,
-        exported: symbol.exported,
-        startLine: symbol.startLine,
-        startColumn: symbol.startColumn,
-        endLine: symbol.endLine,
-        endColumn: symbol.endColumn,
-        fingerprint: symbol.fingerprint,
-      }));
-      const edges: CodeGraphWriteEdge[] = graph.edges.map((edge) => ({
-        sourceKey: edge.sourceKey,
-        targetKey: edge.targetKey,
-        siteFileKey: fileKeyByPath.get(edge.sitePath) ?? null,
-        kind: edge.kind,
-        confidence: edge.confidence,
-        siteLine: edge.siteLine,
-        siteColumn: edge.siteColumn,
-        metadata: edge.metadata,
-        fingerprint: edge.fingerprint,
-      }));
-      const diagnostics = [...scan.diagnostics, ...graph.diagnostics].slice(0, 500);
-      const resolveMs = Date.now() - resolveStartedAt;
-      const removedFiles = previousCache
-        ? [...previousCache.keys()].filter((path) => !nextCache.has(path)).length
-        : 0;
-      const languages = graph.files.reduce<Record<string, number>>((counts, file) => {
-        counts[file.language] = (counts[file.language] ?? 0) + 1;
-        return counts;
-      }, {});
-      const committed = await codeGraphRepository.commitRevision({
-        workspaceId: project.workspaceId,
-        projectId: project.id,
-        revisionId: revision.id,
-        sourceHash,
-        fullReplace: force || (project.status === 'stale' && sourceHash === currentSourceHash),
-        gitHead,
-        stats: {
-          files: files.length,
-          symbols: symbols.length,
-          edges: edges.length,
-          skipped: scan.skipped,
-          durationMs: Date.now() - startedAt,
-          languages,
-          timings: { scanMs, parseMs, resolveMs, persistMs: 0 },
-          indexing: {
-            strategy: previousCache ? (force ? 'full' : 'incremental') : 'cold',
-            cacheHits,
-            cacheMisses,
-            changedFiles: cacheMisses + removedFiles,
-          },
-        },
-        diagnostics,
-        files,
-        symbols,
-        edges,
-      });
-      this.state.parseCache.set(project.id, nextCache);
-      return committed;
-    } catch (error) {
-      const diagnostics: CodeGraphDiagnostic[] = [{
-        path: null,
-        severity: 'error',
-        code: 'index_failed',
-        message: error instanceof Error ? error.message.slice(0, 300) : 'Code graph indexing failed.',
-      }];
-      await codeGraphRepository.failRevision(project.workspaceId, project.id, revision.id, diagnostics).catch(() => undefined);
-      throw error;
-    }
+    if (codeGraphConnectionName()) return buildGraphInWorker(project, force);
+    return buildCodeGraphProject(project, force);
   }
 
   private async syncWorkspaceProjects(workspaceId: string): Promise<CodeGraphProject[]> {
@@ -512,6 +408,7 @@ export class CodeGraphIndexService {
   }
 
   private async runAutoReindex(workspaceId: string, projectId: string): Promise<void> {
+    if ((this.state.backgroundRetryAt.get(projectId) ?? 0) > Date.now()) return;
     const existing = this.state.autoReindexing.get(projectId);
     if (existing) return existing;
     const pending = (async () => {
@@ -550,7 +447,11 @@ export class CodeGraphIndexService {
     this.state.freshnessCheckedProjects.delete(projectId);
     const entry = this.state.watchers.get(projectId);
     this.state.watchers.delete(projectId);
-    this.state.parseCache.delete(projectId);
+    const retryTimer = this.state.backgroundRetryTimers.get(projectId);
+    if (retryTimer) clearTimeout(retryTimer);
+    this.state.backgroundRetryTimers.delete(projectId);
+    this.state.backgroundRetryAt.delete(projectId);
+    this.state.backgroundFailures.delete(projectId);
     if (entry) {
       const closing = entry.watcher.close();
       entry.watcher.on('error', () => undefined);
@@ -600,19 +501,6 @@ export class CodeGraphIndexService {
   private async looksLikeRepository(root: string): Promise<boolean> {
     const results = await Promise.all(REPOSITORY_MARKERS.map((marker) => exists(resolve(root, marker))));
     return results.some(Boolean);
-  }
-
-  private async gitHead(root: string): Promise<string | null> {
-    try {
-      const { stdout } = await execFileAsync('git', ['-C', root, 'rev-parse', 'HEAD'], {
-        timeout: 5_000,
-        maxBuffer: 128 * 1024,
-        windowsHide: true,
-      });
-      return /^[0-9a-f]{40,64}$/i.test(stdout.trim()) ? stdout.trim() : null;
-    } catch {
-      return null;
-    }
   }
 
   private broadcast(workspaceId: string): void {

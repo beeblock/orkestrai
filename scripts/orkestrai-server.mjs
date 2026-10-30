@@ -14,9 +14,11 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { Connection } from '@beeblock/svelar/database';
 import { installOrkestraiShim, writeOrkestraiRuntimeFile } from './install-orkestrai-shim.mjs';
 import { holdBackgroundStartup } from '../src/lib/modules/agent-room/infrastructure/background-startup.ts';
 import { compactStartupDatabase, runStartupMigrations } from './run-startup-migrations.mjs';
+import { prepareCodeGraphStorage } from './prepare-code-graph-storage.mjs';
 import { createMobileGateway } from './mobile-gateway.mjs';
 
 // App Electron aberto pelo Finder recebe um PATH minimo do macOS; sem os
@@ -171,6 +173,14 @@ const { handler } = await import('../build/handler.js');
     migrations.push({ name: file.replace(/\.ts$/, ''), migration: new mod.default() });
   }
   await runStartupMigrations(migrations, { databasePath: dbFile, existingDatabase, onPhase: announceStartup });
+  if (Connection.getDriver() === 'sqlite') {
+    try {
+      await prepareCodeGraphStorage(dbFile, { onPhase: announceStartup });
+    } catch (error) {
+      // Index preparation must never prevent opening conversations or delivering messages.
+      console.warn(`[code-graph] Storage preparation deferred; existing data preserved: ${error instanceof Error ? error.message : error}`);
+    }
+  }
   try {
     const stats = await statfs(dirname(dbFile)).catch(() => null);
     const result = await compactStartupDatabase({ freeDiskBytes: stats ? Number(stats.bavail) * Number(stats.bsize) : null, onPhase: announceStartup });

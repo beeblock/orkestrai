@@ -122,6 +122,21 @@ describe('Code graph operational intelligence', () => {
     });
   });
 
+  it('omits modified and oversized source excerpts while the committed graph remains usable', async () => {
+    const { workspace, directory, symbol } = await fixture();
+    await codeGraphIndexService.pauseWorkspace(workspace.id);
+    const options = { selection: { symbolIds: [symbol.id] }, purpose: 'review' as const, maxTokens: 4_000, includeSource: true };
+    expect((await codeGraphOperationsService.context(workspace.id, options)).excerpts.some(item => item.path === 'src/service.ts')).toBe(true);
+    await writeFile(join(directory, 'src', 'service.ts'), '\n\nexport function replacement() { return "different source"; }\n');
+    const changed = await codeGraphOperationsService.context(workspace.id, options);
+    expect(changed.symbols.some(item => item.id === symbol.id)).toBe(true);
+    expect(changed.excerpts.some(item => item.path === 'src/service.ts')).toBe(false);
+    expect(changed.excerpts.some(item => item.path === 'src/math.ts')).toBe(true);
+    await writeFile(join(directory, 'src', 'service.ts'), Buffer.alloc(2_000_001, 65));
+    expect((await codeGraphOperationsService.context(workspace.id, options)).excerpts.some(item => item.path === 'src/service.ts')).toBe(false);
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
+
   it('compares retained revision manifests and restores named investigations in isolation', async () => {
     const { directory, workspace, symbol } = await fixture();
     const first = (await codeGraphIndexService.revisions(workspace.id))[0];

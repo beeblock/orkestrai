@@ -8,6 +8,7 @@
 
 import { Connection } from '@beeblock/svelar/database';
 import { isolateSqliteTransactions } from '$lib/database/sqlite-transactions.js';
+import { CODE_GRAPH_CONNECTION, CODE_GRAPH_READER_CONNECTION, installCodeGraphStorage, routeCodeGraphQueries } from '$lib/database/code-graph-storage.js';
 import { config } from '@beeblock/svelar/config';
 import { Hash } from '@beeblock/svelar/hashing';
 import { AuthManager } from '@beeblock/svelar/auth';
@@ -42,6 +43,14 @@ Connection.configure({
       driver: 'sqlite',
       filename: config.get('database.connections.sqlite.filename', process.env.DB_PATH ?? 'database.db'),
     },
+    [CODE_GRAPH_CONNECTION]: {
+      driver: 'sqlite',
+      filename: `${config.get('database.connections.sqlite.filename', process.env.DB_PATH ?? 'database.db')}.code-graph.sqlite`,
+    },
+    [CODE_GRAPH_READER_CONNECTION]: {
+      driver: 'sqlite',
+      filename: `${config.get('database.connections.sqlite.filename', process.env.DB_PATH ?? 'database.db')}.code-graph.sqlite`,
+    },
     postgres: {
       driver: 'postgres',
       url: config.get('database.connections.postgres.url', process.env.DATABASE_URL),
@@ -67,7 +76,9 @@ Connection.configure({
   },
 });
 // Other requests' statements must never join (and roll back with) an open SQLite transaction.
+installCodeGraphStorage();
 isolateSqliteTransactions();
+routeCodeGraphQueries();
 
 // ── Hashing (scrypt, zero dependencies) ───────────────────
 Hash.configure({ driver: 'scrypt' });

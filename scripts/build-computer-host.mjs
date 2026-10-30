@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+await import('./build-code-graph.mjs');
 await build({
   configFile: false,
   root,

@@ -4470,7 +4470,7 @@
   "code_graph.semantic_stale": "Reconstrução necessária",
   "code_graph.semantic_empty": "Ainda não construído",
   "code_graph.semantic_updating": "Atualizando automaticamente",
-  "code_graph.semantic_preparing": "Preparando automaticamente",
+  "code_graph.semantic_preparing": "O índice de intenção está sendo preparado em segundo plano. A busca por nome já está disponível.",
   "code_graph.semantic_symbols": "{indexed} de {total} símbolos indexados",
   "code_graph.semantic_build": "Construir",
   "code_graph.semantic_rebuild": "Reconstruir",
@@ -6090,5 +6090,17 @@
   "model_access.reconnecting": "Reconectando…",
   "model_access.sync_error": "As atualizações ao vivo estão indisponíveis. Confira a conexão ou atualize.",
   "model_access.scope_required": "Escolha ao menos um modelo e um nível de effort em cada conta com restrições.",
-  "model_access.models_selection_help": "Escolha um ou mais modelos. Só os selecionados ficarão disponíveis."
+  "model_access.models_selection_help": "Escolha um ou mais modelos. Só os selecionados ficarão disponíveis.",
+  "code_graph.metrics_title": "Uso e desempenho",
+  "code_graph.metrics_description": "Consultas medidas nos últimos 30 dias. Atualiza a cada cinco segundos enquanto este painel estiver aberto.",
+  "code_graph.metrics_agents": "Consultas dos agentes",
+  "code_graph.metrics_users": "Suas consultas",
+  "code_graph.metrics_p95": "95% das consultas em até",
+  "code_graph.metrics_tokens": "Tokens de contexto retornado (estimativa)",
+  "code_graph.metrics_estimate_help": "São estimativas do contexto retornado, não uma medição de tokens economizados. A contagem começa nesta atualização; consultas e código não são gravados na telemetria.",
+  "code_graph.metrics_empty": "Nenhuma consulta registrada ainda.",
+  "code_graph.metrics_error": "Não foi possível carregar as métricas do grafo.",
+  "code_graph.metrics_storage": "Banco do grafo em todos os workspaces",
+  "code_graph.metrics_failures": "Falhas",
+  "code_graph.metrics_index": "Última indexação"
 }

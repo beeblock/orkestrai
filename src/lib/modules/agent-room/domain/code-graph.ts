@@ -42,6 +42,7 @@ export type CodeGraphStats = {
     cacheHits: number;
     cacheMisses: number;
     changedFiles: number;
+    configurationHash?: string;
   };
 };
 
@@ -302,6 +303,7 @@ export const CODE_GRAPH_SEMANTIC_DIMENSIONS = 384;
 export type CodeGraphSemanticState = 'empty' | 'ready' | 'stale';
 
 export type CodeGraphSemanticStatus = {
+  refreshing?: boolean;
   state: CodeGraphSemanticState;
   model: string;
   dimensions: number;

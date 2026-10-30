@@ -4470,7 +4470,7 @@
   "code_graph.semantic_stale": "Rebuild required",
   "code_graph.semantic_empty": "Not built yet",
   "code_graph.semantic_updating": "Updating automatically",
-  "code_graph.semantic_preparing": "Preparing automatically",
+  "code_graph.semantic_preparing": "The intent index is preparing in the background. Name search is available now.",
   "code_graph.semantic_symbols": "{indexed} of {total} symbols indexed",
   "code_graph.semantic_build": "Build",
   "code_graph.semantic_rebuild": "Rebuild",
@@ -6090,5 +6090,17 @@
   "model_access.reconnecting": "Reconnecting…",
   "model_access.sync_error": "Live updates are unavailable. Check your connection or refresh.",
   "model_access.scope_required": "Choose at least one model and effort for each restricted account.",
-  "model_access.models_selection_help": "Choose one or more models. Only those selected will be available."
+  "model_access.models_selection_help": "Choose one or more models. Only those selected will be available.",
+  "code_graph.metrics_title": "Usage and performance",
+  "code_graph.metrics_description": "Measured queries from the last 30 days. Updates every five seconds while this panel is open.",
+  "code_graph.metrics_agents": "Agent queries",
+  "code_graph.metrics_users": "Your queries",
+  "code_graph.metrics_p95": "95% of queries up to",
+  "code_graph.metrics_tokens": "Returned context tokens (estimated)",
+  "code_graph.metrics_estimate_help": "These are estimates of context returned, not measured token savings. Counts start with this update; queries and source code are never stored in telemetry.",
+  "code_graph.metrics_empty": "No queries recorded yet.",
+  "code_graph.metrics_error": "Could not load graph metrics.",
+  "code_graph.metrics_storage": "Graph database across all workspaces",
+  "code_graph.metrics_failures": "Failures",
+  "code_graph.metrics_index": "Latest index"
 }

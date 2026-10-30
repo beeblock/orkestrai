@@ -1,7 +1,7 @@
-import { Connection } from '@beeblock/svelar/database';
+import { encodeRevisionChunks, pruneRevisionChunks, revisionChunkHeader, revisionEntries } from '../code-graph/CodeGraphRevisionChunks.js';
+import { codeGraphConnectionName, runCodeGraphOperation, CodeGraphConnection as Connection } from '$lib/database/code-graph-storage.js';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { createHash } from 'node:crypto';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 import type {
   CodeGraphCommit,
   CodeGraphProjectRoot,
@@ -32,7 +32,6 @@ type PersistedRevisionIndex = {
   revisionId: string;
   files: Map<string, RawRow>;
   symbols: Map<string, RawRow>;
-  edges: Map<string, RawRow>;
 };
 
 function persistenceCache(): Map<string, PersistedRevisionIndex> {
@@ -96,7 +95,7 @@ function mapSymbol(row: RawRow): CodeGraphSymbol {
     projectId: String(row.project_id),
     projectName: row.project_name ? String(row.project_name) : null,
     projectRelativePath: row.project_relative_path ? String(row.project_relative_path) : null,
-    revisionId: String(row.revision_id),
+    revisionId: String(row.published_revision_id ?? row.revision_id),
     fileId: row.file_id ? String(row.file_id) : null,
     path: row.path ? String(row.path) : null,
     language: row.language ? row.language as CodeGraphSymbol['language'] : null,
@@ -121,7 +120,7 @@ function mapEdge(row: RawRow): CodeGraphEdge {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     projectId: String(row.project_id),
-    revisionId: String(row.revision_id),
+    revisionId: String(row.published_revision_id ?? row.revision_id),
     sourceSymbolId: String(row.source_symbol_id),
     targetSymbolId: String(row.target_symbol_id),
     kind: row.kind as CodeGraphEdge['kind'],
@@ -148,6 +147,10 @@ async function insertRows(table: string, columns: string[], rows: unknown[][], b
   }
 }
 
+async function insertMappedRows<T>(table: string, columns: string[], items: T[], project: (item: T) => unknown[][]): Promise<void> {
+  for (let offset = 0; offset < items.length; offset += 800) await insertRows(table, columns, items.slice(offset, offset + 800).flatMap(project));
+}
+
 async function deleteRowsByIds(table: string, column: string, ids: string[], batchSize = 800): Promise<void> {
   for (let offset = 0; offset < ids.length; offset += batchSize) {
     const batch = ids.slice(offset, offset + batchSize);
@@ -158,51 +161,6 @@ async function deleteRowsByIds(table: string, column: string, ids: string[], bat
 function ftsQuery(value: string): string {
   const tokens = value.normalize('NFKC').match(/[\p{L}\p{N}_.$\\/-]+/gu)?.slice(0, 10) ?? [];
   return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(' AND ');
-}
-
-function revisionManifest(input: CodeGraphCommit): CodeGraphRevisionManifestData {
-  const paths = new Map(input.files.map((file) => [file.key, file.path]));
-  const hashes = new Map(input.files.map((file) => [file.key, file.contentHash]));
-  const fingerprints = new Map(input.symbols.map((symbol) => [symbol.key, symbol.fingerprint]));
-  return {
-    version: 1,
-    files: input.files.map((file) => ({ path: file.path, contentHash: file.contentHash })),
-    symbols: input.symbols.map((symbol) => ({
-      fingerprint: symbol.fingerprint,
-      name: symbol.name,
-      qualifiedName: symbol.qualifiedName,
-      kind: symbol.kind,
-      path: symbol.fileKey ? paths.get(symbol.fileKey) ?? null : null,
-      startLine: symbol.startLine,
-      endLine: symbol.endLine,
-      contentHash: createHash('sha256').update(JSON.stringify({
-        file: symbol.fileKey ? hashes.get(symbol.fileKey) ?? null : null,
-        signature: symbol.signature,
-        documentation: symbol.documentation,
-        modifiers: symbol.modifiers,
-        metadata: symbol.metadata,
-      })).digest('hex'),
-    })),
-    relationships: input.edges.flatMap((edge) => {
-      const sourceFingerprint = fingerprints.get(edge.sourceKey);
-      const targetFingerprint = fingerprints.get(edge.targetKey);
-      if (!sourceFingerprint || !targetFingerprint) return [];
-      return [{
-        fingerprint: edge.fingerprint,
-        sourceFingerprint,
-        targetFingerprint,
-        kind: edge.kind,
-        sitePath: edge.siteFileKey ? paths.get(edge.siteFileKey) ?? null : null,
-        siteLine: edge.siteLine,
-        siteColumn: edge.siteColumn,
-        confidence: edge.confidence,
-        contentHash: createHash('sha256').update(JSON.stringify({
-          confidence: edge.confidence,
-          metadata: edge.metadata,
-        })).digest('hex'),
-      }];
-    }),
-  };
 }
 
 function decodeRevisionManifest(value: unknown): CodeGraphRevisionManifestData | null {
@@ -228,6 +186,13 @@ export class CodeGraphRepository implements CodeGraphStore {
     const byRoot = new Map(existing.map((project) => [String(project.getAttribute('root_path')), project]));
     const desired = new Set(roots.map((root) => root.rootPath));
     const now = new Date().toISOString();
+
+    const unchanged = roots.length === existing.length && roots.every(root => {
+      const project = byRoot.get(root.rootPath);
+      return project && project.getAttribute('config_hash') === root.configHash
+        && project.getAttribute('name') === root.name && project.getAttribute('relative_path') === root.relativePath;
+    });
+    if (unchanged) return existing.map(mapProject);
 
     await Connection.transaction(async () => {
       for (const root of roots) {
@@ -374,25 +339,20 @@ export class CodeGraphRepository implements CodeGraphStore {
     }
     const fileIds = new Map(input.files.map((file) => [file.key, uuidv7()]));
     const symbolIds = new Map(input.symbols.map((symbol) => [symbol.key, uuidv7()]));
-    const edgeIds = new Map(input.edges.map((edge) => [edge.fingerprint, uuidv7()]));
-    const filePathByKey = new Map(input.files.map((file) => [file.key, file.path]));
 
     await Connection.transaction(async () => {
       if (previousRevisionId && previousRevisionId !== input.revisionId) {
         await AgentCodeGraphRevision.query().where('id', previousRevisionId).update({ state: 'superseded', updated_at: now });
-        await Connection.raw('DELETE FROM agent_code_graph_symbol_search WHERE project_id = ?', [input.projectId]);
-        await AgentCodeGraphEdge.query().where('revision_id', previousRevisionId).delete();
-        await AgentCodeGraphSymbol.query().where('revision_id', previousRevisionId).delete();
-        await AgentCodeGraphFile.query().where('revision_id', previousRevisionId).delete();
+
       }
 
       await insertRows('agent_code_graph_files', [
         'id', 'workspace_id', 'project_id', 'revision_id', 'path', 'language',
-        'content_hash', 'byte_size', 'generated', 'symbol_count', 'edge_count',
+        'content_hash', 'resolution_hash', 'byte_size', 'generated', 'symbol_count', 'edge_count',
         'source_modified_at', 'created_at', 'updated_at',
       ], input.files.map((file) => [
         fileIds.get(file.key), input.workspaceId, input.projectId, input.revisionId,
-        file.path, file.language, file.contentHash, file.byteSize, file.generated,
+        file.path, file.language, file.contentHash, file.resolutionHash ?? null, file.byteSize, file.generated,
         file.symbolCount, file.edgeCount, file.modifiedAt, now, now,
       ]));
 
@@ -411,30 +371,28 @@ export class CodeGraphRepository implements CodeGraphStore {
         symbol.fingerprint, now, now,
       ]));
 
-      await insertRows('agent_code_graph_edges', [
+      await insertMappedRows('agent_code_graph_edges', [
         'id', 'workspace_id', 'project_id', 'revision_id', 'source_symbol_id',
         'target_symbol_id', 'site_file_id', 'kind', 'confidence', 'site_line',
         'site_column', 'metadata_json', 'fingerprint', 'created_at', 'updated_at',
-      ], input.edges.flatMap((edge) => {
+      ], input.edges, (edge) => {
         const source = symbolIds.get(edge.sourceKey);
         const target = symbolIds.get(edge.targetKey);
         if (!source || !target) return [];
         return [[
-          edgeIds.get(edge.fingerprint), input.workspaceId, input.projectId, input.revisionId, source, target,
+          uuidv7(), input.workspaceId, input.projectId, input.revisionId, source, target,
           edge.siteFileKey ? fileIds.get(edge.siteFileKey) ?? null : null,
           edge.kind, edge.confidence, edge.siteLine, edge.siteColumn,
           JSON.stringify(edge.metadata), edge.fingerprint, now, now,
         ]];
-      }));
+      });
 
-      await insertRows('agent_code_graph_symbol_search', [
-        'symbol_id', 'revision_id', 'workspace_id', 'project_id', 'name',
-        'qualified_name', 'path', 'documentation', 'signature',
-      ], input.symbols.map((symbol) => [
-        symbolIds.get(symbol.key), input.revisionId, input.workspaceId, input.projectId,
-        symbol.name, symbol.qualifiedName, symbol.fileKey ? filePathByKey.get(symbol.fileKey) ?? '' : '',
-        symbol.documentation ?? '', symbol.signature ?? '',
-      ]));
+      await Connection.raw(`INSERT INTO agent_code_graph_symbol_search
+        (rowid, symbol_id, revision_id, workspace_id, project_id, name, qualified_name, path, documentation, signature)
+        SELECT s.rowid, s.id, s.revision_id, s.workspace_id, s.project_id, s.name, s.qualified_name,
+          COALESCE(f.path, ''), COALESCE(s.documentation, ''), COALESCE(s.signature, '')
+        FROM agent_code_graph_symbols s LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
+        WHERE s.project_id = ? AND s.revision_id = ?`, [input.projectId, input.revisionId]);
 
       const persistMs = Date.now() - commitStartedAt;
       committedStats.durationMs += persistMs;
@@ -453,7 +411,9 @@ export class CodeGraphRepository implements CodeGraphStore {
       });
       await project.update({
         status: 'ready',
+        indexed_config_hash: project.getAttribute('config_hash'),
         current_revision_id: input.revisionId,
+        storage_revision_id: input.revisionId,
         git_head: input.gitHead,
         stats_json: JSON.stringify(committedStats),
         diagnostics_json: JSON.stringify(input.diagnostics.slice(0, 500)),
@@ -462,10 +422,18 @@ export class CodeGraphRepository implements CodeGraphStore {
       });
 
       await this.persistRevisionManifest(input, committedStats, now);
+      const completeAt = new Date().toISOString();
+      const completePersistMs = Date.now() - commitStartedAt;
+      committedStats.durationMs = input.stats.durationMs + completePersistMs;
+      if (committedStats.timings) committedStats.timings.persistMs = completePersistMs;
+      const publication = { stats_json: JSON.stringify(committedStats), updated_at: completeAt };
+      await project.update({ ...publication, last_indexed_at: completeAt });
+      await revision.update({ ...publication, completed_at: completeAt });
+      await Connection.raw('UPDATE agent_code_graph_revision_manifests SET stats_json = ?, completed_at = ?, updated_at = ? WHERE revision_id = ?', [publication.stats_json, completeAt, completeAt, input.revisionId]);
 
     });
 
-    this.cacheCommittedRevision(input, fileIds, symbolIds, edgeIds);
+    this.cacheCommittedRevision(input, fileIds, symbolIds);
     return mapProject((await AgentCodeGraphProject.find(input.projectId))!);
   }
 
@@ -477,27 +445,13 @@ export class CodeGraphRepository implements CodeGraphStore {
     now: string,
     commitStartedAt: number,
   ): Promise<CodeGraphProject | null> {
+    const storageRevisionId = String(project.getAttribute('storage_revision_id') ?? previousRevisionId);
     const cached = persistenceCache().get(input.projectId);
-    const [fileRows, symbolRows, edgeRows] = cached?.revisionId === previousRevisionId
-      ? [[...cached.files.values()], [...cached.symbols.values()], [...cached.edges.values()]]
+    const [fileRows, symbolRows] = cached?.revisionId === previousRevisionId
+      ? [[...cached.files.values()], [...cached.symbols.values()]]
       : await Promise.all([
-          Connection.raw(`
-            SELECT id, path, content_hash
-            FROM agent_code_graph_files
-            WHERE revision_id = ?
-          `, [previousRevisionId]) as Promise<RawRow[]>,
-          Connection.raw(`
-            SELECT s.id, s.fingerprint, f.path AS file_path
-            FROM agent_code_graph_symbols s
-            LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
-            WHERE s.revision_id = ?
-          `, [previousRevisionId]) as Promise<RawRow[]>,
-          Connection.raw(`
-            SELECT e.id, e.fingerprint, f.path AS site_path
-            FROM agent_code_graph_edges e
-            LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
-            WHERE e.revision_id = ?
-          `, [previousRevisionId]) as Promise<RawRow[]>,
+          Connection.raw('SELECT id, path, content_hash, resolution_hash FROM agent_code_graph_files WHERE revision_id = ?', [storageRevisionId]) as Promise<RawRow[]>,
+          Connection.raw(`SELECT s.id, s.fingerprint FROM agent_code_graph_symbols s WHERE s.revision_id = ?`, [storageRevisionId]) as Promise<RawRow[]>,
         ]);
 
     const existingFileByPath = new Map(fileRows.map((row) => [String(row.path), row]));
@@ -536,33 +490,45 @@ export class CodeGraphRepository implements CodeGraphStore {
     const addedSymbols = refreshedSymbols.filter((symbol) => !existingSymbolByFingerprint.has(symbol.fingerprint));
     const updatedSymbols = refreshedSymbols.filter((symbol) => existingSymbolByFingerprint.has(symbol.fingerprint));
 
+    const resolvedPaths = new Set(input.files.filter(file => {
+      const existing = existingFileByPath.get(file.path);
+      return !existing || !file.resolutionHash || String(existing.resolution_hash ?? '') !== file.resolutionHash;
+    }).map(file => file.path));
+    for (const file of removedFiles) resolvedPaths.add(String(file.path));
+    // A global rebinding can change an unchanged caller. Its resolved-edge hash
+    // participates independently of the source hash, so these callers are refreshed too.
+    if (resolvedPaths.size > Math.max(500, input.files.length * 0.2)) return null;
+    const affectedFiles = fileRows.filter(row => resolvedPaths.has(String(row.path))).map(row => String(row.id));
+    const edgeRows: RawRow[] = [];
+    for (let offset = 0; offset < Math.max(1, affectedFiles.length); offset += 400) {
+      const ids = affectedFiles.slice(offset, offset + 400);
+      const nullClause = offset === 0 ? 'e.site_file_id IS NULL' : '0';
+      edgeRows.push(...await Connection.raw(`SELECT e.id, e.fingerprint FROM agent_code_graph_edges e
+        WHERE e.revision_id = ? AND (${nullClause}${ids.length ? ` OR e.site_file_id IN (${placeholders(ids.length)})` : ''})`, [storageRevisionId, ...ids]));
+    }
+    const affectedEdges = input.edges.filter(edge => !edge.siteFileKey || resolvedPaths.has(filePathByKey.get(edge.siteFileKey) ?? ''));
     const existingEdgeByFingerprint = new Map(edgeRows.map((row) => [String(row.fingerprint), row]));
-    const edgeIds = new Map(input.edges.map((edge) => [
+    const edgeIds = new Map(affectedEdges.map((edge) => [
       edge.fingerprint,
       existingEdgeByFingerprint.get(edge.fingerprint)?.id
         ? String(existingEdgeByFingerprint.get(edge.fingerprint)!.id)
         : uuidv7(),
     ]));
-    const inputEdgeFingerprints = new Set(input.edges.map((edge) => edge.fingerprint));
+    const inputEdgeFingerprints = new Set(affectedEdges.map((edge) => edge.fingerprint));
     const removedEdges = edgeRows.filter((row) => !inputEdgeFingerprints.has(String(row.fingerprint)));
-    const addedEdges = input.edges.filter((edge) => !existingEdgeByFingerprint.has(edge.fingerprint));
-    const updatedEdges = input.edges.filter((edge) => {
-      if (!existingEdgeByFingerprint.has(edge.fingerprint) || !edge.siteFileKey) return false;
-      const path = filePathByKey.get(edge.siteFileKey);
-      return Boolean(path && changedPaths.has(path));
+    const addedEdges = affectedEdges.filter((edge) => !existingEdgeByFingerprint.has(edge.fingerprint));
+    const updatedEdges = affectedEdges.filter((edge) => {
+      return existingEdgeByFingerprint.has(edge.fingerprint);
     });
 
     const committedStats = { ...input.stats };
     await Connection.transaction(async () => {
       await AgentCodeGraphRevision.query().where('id', previousRevisionId).update({ state: 'superseded', updated_at: now });
-      await Connection.raw('UPDATE agent_code_graph_files SET revision_id = ?, updated_at = ? WHERE revision_id = ?', [input.revisionId, now, previousRevisionId]);
-      await Connection.raw('UPDATE agent_code_graph_symbols SET revision_id = ?, updated_at = ? WHERE revision_id = ?', [input.revisionId, now, previousRevisionId]);
-      await Connection.raw('UPDATE agent_code_graph_edges SET revision_id = ?, updated_at = ? WHERE revision_id = ?', [input.revisionId, now, previousRevisionId]);
 
       await deleteRowsByIds('agent_code_graph_edges', 'id', removedEdges.map((row) => String(row.id)));
       const refreshedSymbolIds = refreshedSymbols.map((symbol) => symbolIds.get(symbol.key)!);
       const removedSymbolIds = removedSymbols.map((row) => String(row.id));
-      await deleteRowsByIds('agent_code_graph_symbol_search', 'symbol_id', [...new Set([...refreshedSymbolIds, ...removedSymbolIds])]);
+      await this.deleteSearchSymbols([...new Set([...refreshedSymbolIds, ...removedSymbolIds])]);
       await deleteRowsByIds('agent_code_graph_symbols', 'id', removedSymbolIds);
       await deleteRowsByIds('agent_code_graph_files', 'id', removedFiles.map((row) => String(row.id)));
 
@@ -571,21 +537,21 @@ export class CodeGraphRepository implements CodeGraphStore {
         if (!existing) continue;
         await Connection.raw(`
           UPDATE agent_code_graph_files
-          SET revision_id = ?, language = ?, content_hash = ?, byte_size = ?, generated = ?,
+          SET revision_id = ?, language = ?, content_hash = ?, resolution_hash = ?, byte_size = ?, generated = ?,
               symbol_count = ?, edge_count = ?, source_modified_at = ?, updated_at = ?
           WHERE id = ?
         `, [
-          input.revisionId, file.language, file.contentHash, file.byteSize, file.generated,
+          storageRevisionId, file.language, file.contentHash, file.resolutionHash ?? null, file.byteSize, file.generated,
           file.symbolCount, file.edgeCount, file.modifiedAt, now, String(existing.id),
         ]);
       }
       await insertRows('agent_code_graph_files', [
         'id', 'workspace_id', 'project_id', 'revision_id', 'path', 'language',
-        'content_hash', 'byte_size', 'generated', 'symbol_count', 'edge_count',
+        'content_hash', 'resolution_hash', 'byte_size', 'generated', 'symbol_count', 'edge_count',
         'source_modified_at', 'created_at', 'updated_at',
       ], addedFiles.map((file) => [
-        fileIds.get(file.key), input.workspaceId, input.projectId, input.revisionId,
-        file.path, file.language, file.contentHash, file.byteSize, file.generated,
+        fileIds.get(file.key), input.workspaceId, input.projectId, storageRevisionId,
+        file.path, file.language, file.contentHash, file.resolutionHash ?? null, file.byteSize, file.generated,
         file.symbolCount, file.edgeCount, file.modifiedAt, now, now,
       ]));
 
@@ -597,7 +563,7 @@ export class CodeGraphRepository implements CodeGraphStore {
               metadata_json = ?, exported = ?, start_line = ?, start_column = ?, end_line = ?, end_column = ?, updated_at = ?
           WHERE id = ?
         `, [
-          input.revisionId, symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
+          storageRevisionId, symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
           symbol.parentKey ? symbolIds.get(symbol.parentKey) ?? null : null,
           symbol.kind, symbol.name, symbol.qualifiedName, symbol.signature, symbol.documentation,
           JSON.stringify(symbol.modifiers), JSON.stringify(symbol.metadata), symbol.exported, symbol.startLine, symbol.startColumn,
@@ -610,7 +576,7 @@ export class CodeGraphRepository implements CodeGraphStore {
         'documentation', 'modifiers_json', 'metadata_json', 'exported', 'start_line',
         'start_column', 'end_line', 'end_column', 'fingerprint', 'created_at', 'updated_at',
       ], addedSymbols.map((symbol) => [
-        symbolIds.get(symbol.key), input.workspaceId, input.projectId, input.revisionId,
+        symbolIds.get(symbol.key), input.workspaceId, input.projectId, storageRevisionId,
         symbol.fileKey ? fileIds.get(symbol.fileKey) ?? null : null,
         symbol.parentKey ? symbolIds.get(symbol.parentKey) ?? null : null,
         symbol.kind, symbol.name, symbol.qualifiedName, symbol.signature,
@@ -627,7 +593,7 @@ export class CodeGraphRepository implements CodeGraphStore {
               kind = ?, confidence = ?, site_line = ?, site_column = ?, metadata_json = ?, updated_at = ?
           WHERE id = ?
         `, [
-          input.revisionId, symbolIds.get(edge.sourceKey), symbolIds.get(edge.targetKey),
+          storageRevisionId, symbolIds.get(edge.sourceKey), symbolIds.get(edge.targetKey),
           edge.siteFileKey ? fileIds.get(edge.siteFileKey) ?? null : null,
           edge.kind, edge.confidence, edge.siteLine, edge.siteColumn,
           JSON.stringify(edge.metadata), now, String(existing.id),
@@ -642,26 +608,32 @@ export class CodeGraphRepository implements CodeGraphStore {
         const target = symbolIds.get(edge.targetKey);
         if (!source || !target) return [];
         return [[
-          edgeIds.get(edge.fingerprint), input.workspaceId, input.projectId, input.revisionId, source, target,
+          edgeIds.get(edge.fingerprint), input.workspaceId, input.projectId, storageRevisionId, source, target,
           edge.siteFileKey ? fileIds.get(edge.siteFileKey) ?? null : null,
           edge.kind, edge.confidence, edge.siteLine, edge.siteColumn,
           JSON.stringify(edge.metadata), edge.fingerprint, now, now,
         ]];
       }));
 
-      await insertRows('agent_code_graph_symbol_search', [
-        'symbol_id', 'revision_id', 'workspace_id', 'project_id', 'name',
-        'qualified_name', 'path', 'documentation', 'signature',
-      ], refreshedSymbols.map((symbol) => [
-        symbolIds.get(symbol.key), input.revisionId, input.workspaceId, input.projectId,
-        symbol.name, symbol.qualifiedName, symbol.fileKey ? filePathByKey.get(symbol.fileKey) ?? '' : '',
-        symbol.documentation ?? '', symbol.signature ?? '',
-      ]));
+      for (let offset = 0; offset < refreshedSymbolIds.length; offset += 500) {
+        const ids = refreshedSymbolIds.slice(offset, offset + 500);
+        await Connection.raw(`INSERT INTO agent_code_graph_symbol_search
+          (rowid, symbol_id, revision_id, workspace_id, project_id, name, qualified_name, path, documentation, signature)
+          SELECT s.rowid, s.id, s.revision_id, s.workspace_id, s.project_id, s.name, s.qualified_name,
+            COALESCE(f.path, ''), COALESCE(s.documentation, ''), COALESCE(s.signature, '')
+          FROM agent_code_graph_symbols s LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
+          WHERE s.id IN (${placeholders(ids.length)})`, ids);
+      }
 
+      for (const file of input.files) {
+        if (!changedPaths.has(file.path) && resolvedPaths.has(file.path)) {
+          await Connection.raw('UPDATE agent_code_graph_files SET resolution_hash = ? WHERE id = ?', [file.resolutionHash ?? null, fileIds.get(file.key)]);
+        }
+      }
       const persistMs = Date.now() - commitStartedAt;
       committedStats.durationMs += persistMs;
       if (committedStats.timings) committedStats.timings.persistMs = persistMs;
-      if (committedStats.indexing) committedStats.indexing.strategy = 'incremental';
+      if (committedStats.indexing) { committedStats.indexing.strategy = 'incremental'; committedStats.indexing.changedFiles = changedFileCount; }
       await revision.update({
         state: 'ready',
         source_hash: input.sourceHash,
@@ -673,7 +645,9 @@ export class CodeGraphRepository implements CodeGraphStore {
       });
       await project.update({
         status: 'ready',
+        indexed_config_hash: project.getAttribute('config_hash'),
         current_revision_id: input.revisionId,
+        storage_revision_id: storageRevisionId,
         git_head: input.gitHead,
         stats_json: JSON.stringify(committedStats),
         diagnostics_json: JSON.stringify(input.diagnostics.slice(0, 500)),
@@ -681,9 +655,17 @@ export class CodeGraphRepository implements CodeGraphStore {
         updated_at: now,
       });
       await this.persistRevisionManifest(input, committedStats, now);
+      const completeAt = new Date().toISOString();
+      const completePersistMs = Date.now() - commitStartedAt;
+      committedStats.durationMs = input.stats.durationMs + completePersistMs;
+      if (committedStats.timings) committedStats.timings.persistMs = completePersistMs;
+      const publication = { stats_json: JSON.stringify(committedStats), updated_at: completeAt };
+      await project.update({ ...publication, last_indexed_at: completeAt });
+      await revision.update({ ...publication, completed_at: completeAt });
+      await Connection.raw('UPDATE agent_code_graph_revision_manifests SET stats_json = ?, completed_at = ?, updated_at = ? WHERE revision_id = ?', [publication.stats_json, completeAt, completeAt, input.revisionId]);
     });
 
-    this.cacheCommittedRevision(input, fileIds, symbolIds, edgeIds);
+    this.cacheCommittedRevision(input, fileIds, symbolIds);
     return mapProject((await AgentCodeGraphProject.find(input.projectId))!);
   }
 
@@ -691,26 +673,22 @@ export class CodeGraphRepository implements CodeGraphStore {
     input: CodeGraphCommit,
     fileIds: Map<string, string>,
     symbolIds: Map<string, string>,
-    edgeIds: Map<string, string>,
   ): void {
-    const filePathByKey = new Map(input.files.map((file) => [file.key, file.path]));
+    // Retain at most the active project's id index; other workspaces reload it on demand.
+    persistenceCache().clear();
     persistenceCache().set(input.projectId, {
       revisionId: input.revisionId,
       files: new Map(input.files.map((file) => [file.path, {
         id: fileIds.get(file.key),
         path: file.path,
         content_hash: file.contentHash,
+        resolution_hash: file.resolutionHash,
       }])),
       symbols: new Map(input.symbols.map((symbol) => [symbol.fingerprint, {
         id: symbolIds.get(symbol.key),
         fingerprint: symbol.fingerprint,
-        file_path: symbol.fileKey ? filePathByKey.get(symbol.fileKey) ?? null : null,
       }])),
-      edges: new Map(input.edges.map((edge) => [edge.fingerprint, {
-        id: edgeIds.get(edge.fingerprint),
-        fingerprint: edge.fingerprint,
-        site_path: edge.siteFileKey ? filePathByKey.get(edge.siteFileKey) ?? null : null,
-      }])),
+
     });
   }
 
@@ -743,7 +721,7 @@ export class CodeGraphRepository implements CodeGraphStore {
     const clauses = [
       'agent_code_graph_symbol_search MATCH ?',
       's.workspace_id = ?',
-      's.revision_id = p.current_revision_id',
+      's.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)',
     ];
     if (options.projectId) {
       clauses.push('s.project_id = ?');
@@ -754,15 +732,27 @@ export class CodeGraphRepository implements CodeGraphStore {
       bindings.push(...options.kinds);
     }
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
-    bindings.push(limit);
+    // Rank a bounded, fully scoped candidate set before loading file metadata.
+    // CROSS JOIN keeps FTS as the outer loop: SQLite otherwise rescans the
+    // virtual table for each workspace symbol. Its hidden rank column also
+    // enables FTS5's own top-k optimization instead of sorting every match.
+    bindings.push(Math.max(200, limit * 8), limit);
     const rows = await Connection.raw(`
-      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path,
-             bm25(agent_code_graph_symbol_search, 2.0, 1.2, 0.7, 0.5, 0.4) AS rank
-      FROM agent_code_graph_symbol_search
-      JOIN agent_code_graph_symbols s ON s.id = agent_code_graph_symbol_search.symbol_id
+      WITH matches AS MATERIALIZED (
+        SELECT s.id, agent_code_graph_symbol_search.rank AS rank
+        FROM agent_code_graph_symbol_search
+        CROSS JOIN agent_code_graph_symbols s ON s.rowid = agent_code_graph_symbol_search.rowid
+        JOIN agent_code_graph_projects p ON p.id = s.project_id
+        WHERE ${clauses.join(' AND ')}
+        ORDER BY agent_code_graph_symbol_search.rank
+        LIMIT ?
+      )
+      SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path,
+             matches.rank AS rank
+      FROM matches
+      JOIN agent_code_graph_symbols s ON s.id = matches.id
       JOIN agent_code_graph_projects p ON p.id = s.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
-      WHERE ${clauses.join(' AND ')}
       ORDER BY rank, s.exported DESC, s.name
       LIMIT ?
     `, bindings) as RawRow[];
@@ -774,13 +764,23 @@ export class CodeGraphRepository implements CodeGraphStore {
     return rows[0] ?? null;
   }
 
+  async sourceContentHash(workspaceId: string, symbolId: string, revisionId: string): Promise<string | null> {
+    const rows = await Connection.raw(`SELECT f.content_hash FROM agent_code_graph_symbols s
+      JOIN agent_code_graph_projects p ON p.id = s.project_id
+      JOIN agent_code_graph_files f ON f.id = s.file_id
+      WHERE s.workspace_id = ? AND s.id = ? AND p.current_revision_id = ?
+        AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
+        AND f.revision_id = s.revision_id LIMIT 1`, [workspaceId, symbolId, revisionId]);
+    return rows[0]?.content_hash ? String(rows[0].content_hash) : null;
+  }
+
   async edge(workspaceId: string, edgeId: string): Promise<CodeGraphEdge | null> {
     const rows = await Connection.raw(`
-      SELECT e.*, f.path AS site_path
+      SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
       FROM agent_code_graph_edges e
       JOIN agent_code_graph_projects p ON p.id = e.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
-      WHERE e.workspace_id = ? AND e.id = ? AND e.revision_id = p.current_revision_id
+      WHERE e.workspace_id = ? AND e.id = ? AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
       LIMIT 1
     `, [workspaceId, edgeId]) as RawRow[];
     return rows[0] ? mapEdge(rows[0]) : null;
@@ -788,11 +788,11 @@ export class CodeGraphRepository implements CodeGraphStore {
 
   async symbolAt(workspaceId: string, projectId: string, path: string, line: number): Promise<CodeGraphSymbol | null> {
     const rows = await Connection.raw(`
-      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
       FROM agent_code_graph_symbols s
       JOIN agent_code_graph_projects p ON p.id = s.project_id
       JOIN agent_code_graph_files f ON f.id = s.file_id
-      WHERE s.workspace_id = ? AND s.project_id = ? AND s.revision_id = p.current_revision_id
+      WHERE s.workspace_id = ? AND s.project_id = ? AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
         AND f.path = ? AND COALESCE(s.start_line, 1) <= ? AND COALESCE(s.end_line, s.start_line, 1) >= ?
       ORDER BY (COALESCE(s.end_line, s.start_line, 1) - COALESCE(s.start_line, 1)) ASC,
         CASE WHEN s.kind = 'module' THEN 1 ELSE 0 END ASC
@@ -811,6 +811,7 @@ export class CodeGraphRepository implements CodeGraphStore {
     paths: string[],
     requestedLimit = 2_000,
   ): Promise<CodeGraphSymbol[]> {
+    return Connection.snapshot(async () => {
     const uniquePaths = [...new Set(paths)].slice(0, 500);
     const limit = Math.min(Math.max(requestedLimit, 1), 2_000);
     if (!uniquePaths.length) return [];
@@ -818,13 +819,13 @@ export class CodeGraphRepository implements CodeGraphStore {
     for (let offset = 0; offset < uniquePaths.length && output.length < limit; offset += 150) {
       const batch = uniquePaths.slice(offset, offset + 150);
       const rows = await Connection.raw(`
-        SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+        SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
         FROM agent_code_graph_symbols s
         JOIN agent_code_graph_projects p ON p.id = s.project_id
         JOIN agent_code_graph_files f ON f.id = s.file_id
         WHERE s.workspace_id = ?
           AND s.project_id = ?
-          AND s.revision_id = p.current_revision_id
+          AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
           AND f.path IN (${placeholders(batch.length)})
         ORDER BY f.path, s.start_line, s.kind
         LIMIT ?
@@ -832,18 +833,20 @@ export class CodeGraphRepository implements CodeGraphStore {
       output.push(...rows.map(mapSymbol));
     }
     return output;
+    });
   }
 
   async contractGraph(workspaceId: string, requestedLimit = 500): Promise<CodeGraphSubgraph> {
+    return Connection.snapshot(async () => {
     const limit = Math.min(Math.max(requestedLimit, 50), 1_000);
     const kinds = ['endpoint', 'apiRequest', 'schema', 'gateway'];
     const rows = await Connection.raw(`
-      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
       FROM agent_code_graph_symbols s
       JOIN agent_code_graph_projects p ON p.id = s.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
       WHERE s.workspace_id = ?
-        AND s.revision_id = p.current_revision_id
+        AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
         AND s.kind IN (${placeholders(kinds.length)})
       ORDER BY p.name, f.path, s.start_line, s.kind
       LIMIT ?
@@ -856,12 +859,12 @@ export class CodeGraphRepository implements CodeGraphStore {
     for (let offset = 0; offset < contractIds.length && edgeRows.length < limit * 4; offset += 350) {
       const batch = contractIds.slice(offset, offset + 350);
       const rows = await Connection.raw(`
-        SELECT e.*, f.path AS site_path
+        SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
         FROM agent_code_graph_edges e
         JOIN agent_code_graph_projects p ON p.id = e.project_id
         LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
         WHERE e.workspace_id = ?
-          AND e.revision_id = p.current_revision_id
+          AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
           AND (e.source_symbol_id IN (${placeholders(batch.length)})
             OR e.target_symbol_id IN (${placeholders(batch.length)}))
         ORDER BY e.confidence DESC, e.kind
@@ -883,30 +886,33 @@ export class CodeGraphRepository implements CodeGraphStore {
       depth: 1,
       centerSymbolId: null,
     };
+    });
   }
 
   async analysisGraph(workspaceId: string, requestedNodeLimit = 30_000, requestedEdgeLimit = 150_000): Promise<CodeGraphSubgraph> {
+    if (codeGraphConnectionName()) return runCodeGraphOperation('analysis-graph', [workspaceId, requestedNodeLimit, requestedEdgeLimit], true);
+    return Connection.snapshot(async () => {
     const nodeLimit = Math.min(Math.max(requestedNodeLimit, 1_000), 40_000);
     const edgeLimit = Math.min(Math.max(requestedEdgeLimit, 5_000), 180_000);
     const nodeRows = await Connection.raw(`
-      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
       FROM agent_code_graph_symbols s
       JOIN agent_code_graph_projects p ON p.id = s.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
       WHERE s.workspace_id = ?
-        AND s.revision_id = p.current_revision_id
+        AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
       ORDER BY p.name, f.path, s.start_line, s.kind
       LIMIT ?
     `, [workspaceId, nodeLimit + 1]) as RawRow[];
     const nodes = nodeRows.slice(0, nodeLimit).map(mapSymbol);
     const visible = new Set(nodes.map((node) => node.id));
     const edgeRows = await Connection.raw(`
-      SELECT e.*, f.path AS site_path
+      SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
       FROM agent_code_graph_edges e
       JOIN agent_code_graph_projects p ON p.id = e.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
       WHERE e.workspace_id = ?
-        AND e.revision_id = p.current_revision_id
+        AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
       ORDER BY e.project_id, e.kind, e.source_symbol_id
       LIMIT ?
     `, [workspaceId, edgeLimit + 1]) as RawRow[];
@@ -920,21 +926,23 @@ export class CodeGraphRepository implements CodeGraphStore {
       depth: 0,
       centerSymbolId: null,
     };
+    });
   }
 
   async overview(workspaceId: string, projectId?: string, requestedLimit = 220): Promise<CodeGraphSubgraph> {
+    return Connection.snapshot(async () => {
     const limit = Math.min(Math.max(requestedLimit, 20), 400);
     const bindings: unknown[] = [workspaceId];
     const projectClause = projectId ? 'AND s.project_id = ?' : '';
     if (projectId) bindings.push(projectId);
     bindings.push(limit + 1);
     const rows = await Connection.raw(`
-      SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+      SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
       FROM agent_code_graph_symbols s
       JOIN agent_code_graph_projects p ON p.id = s.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
       WHERE s.workspace_id = ?
-        AND s.revision_id = p.current_revision_id
+        AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
         AND s.kind = 'module'
         ${projectClause}
       ORDER BY p.name, f.path
@@ -945,12 +953,12 @@ export class CodeGraphRepository implements CodeGraphStore {
     const ids = nodes.map((node) => node.id);
     if (!ids.length) return { nodes: [], edges: [], truncated, depth: 0, centerSymbolId: null };
     const edgeRows = await Connection.raw(`
-      SELECT e.*, f.path AS site_path
+      SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
       FROM agent_code_graph_edges e
       JOIN agent_code_graph_projects p ON p.id = e.project_id
       LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
       WHERE e.workspace_id = ?
-        AND e.revision_id = p.current_revision_id
+        AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
         AND e.source_symbol_id IN (${placeholders(ids.length)})
         AND e.target_symbol_id IN (${placeholders(ids.length)})
       ORDER BY e.confidence DESC, e.kind
@@ -963,9 +971,11 @@ export class CodeGraphRepository implements CodeGraphStore {
       depth: 0,
       centerSymbolId: null,
     };
+    });
   }
 
   async subgraph(workspaceId: string, options: CodeGraphTraversalOptions): Promise<CodeGraphSubgraph> {
+    return Connection.snapshot(async () => {
     const center = await this.symbol(workspaceId, options.symbolId);
     if (!center) throw new Error('Code graph symbol not found.');
     const depth = Math.min(Math.max(options.depth ?? 2, 1), 4);
@@ -993,12 +1003,12 @@ export class CodeGraphRepository implements CodeGraphStore {
       if (options.kinds?.length) bindings.push(...options.kinds);
       bindings.push(limit * 3);
       const rows = await Connection.raw(`
-        SELECT e.*, f.path AS site_path
+        SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
         FROM agent_code_graph_edges e
         JOIN agent_code_graph_projects p ON p.id = e.project_id
         LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
         WHERE e.workspace_id = ?
-          AND e.revision_id = p.current_revision_id
+          AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
           AND (${directions.join(' OR ')})
           ${kindClause}
         ORDER BY e.confidence DESC, e.kind
@@ -1032,6 +1042,7 @@ export class CodeGraphRepository implements CodeGraphStore {
       depth,
       centerSymbolId: center.id,
     };
+    });
   }
 
   async impact(
@@ -1040,6 +1051,7 @@ export class CodeGraphRepository implements CodeGraphStore {
     requestedDepth = 2,
     requestedLimit = 500,
   ): Promise<CodeGraphSubgraph> {
+    return Connection.snapshot(async () => {
     const depth = Math.min(Math.max(requestedDepth, 1), 3);
     const limit = Math.min(Math.max(requestedLimit, 10), 750);
     const seeds = await this.loadSymbols(workspaceId, [...new Set(symbolIds)].slice(0, limit));
@@ -1050,12 +1062,12 @@ export class CodeGraphRepository implements CodeGraphStore {
 
     for (let level = 0; level < depth && frontier.length; level += 1) {
       const rows = await Connection.raw(`
-        SELECT e.*, f.path AS site_path
+        SELECT e.*, p.current_revision_id AS published_revision_id, f.path AS site_path
         FROM agent_code_graph_edges e
         JOIN agent_code_graph_projects p ON p.id = e.project_id
         LEFT JOIN agent_code_graph_files f ON f.id = e.site_file_id
         WHERE e.workspace_id = ?
-          AND e.revision_id = p.current_revision_id
+          AND e.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
           AND e.target_symbol_id IN (${placeholders(frontier.length)})
         ORDER BY e.confidence DESC, e.kind
         LIMIT ?
@@ -1086,6 +1098,7 @@ export class CodeGraphRepository implements CodeGraphStore {
       depth,
       centerSymbolId: seeds.length === 1 ? seeds[0].id : null,
     };
+    });
   }
 
   async revisionSummaries(workspaceId: string, projectId?: string, requestedLimit = 30): Promise<CodeGraphRevisionSummary[]> {
@@ -1117,48 +1130,62 @@ export class CodeGraphRepository implements CodeGraphStore {
 
   async revisionManifest(workspaceId: string, revisionId: string): Promise<CodeGraphRevisionManifestData | null> {
     const rows = await Connection.raw(`
-      SELECT manifest FROM agent_code_graph_revision_manifests
+      SELECT manifest, project_id FROM agent_code_graph_revision_manifests
       WHERE workspace_id = ? AND revision_id = ? LIMIT 1
     `, [workspaceId, revisionId]) as RawRow[];
-    return rows[0] ? decodeRevisionManifest(rows[0].manifest) : null;
+    if (!rows[0]) return null;
+    const header = revisionChunkHeader(rows[0].manifest);
+    if (!header) return decodeRevisionManifest(rows[0].manifest);
+    const result: CodeGraphRevisionManifestData = { version: 1, files: header.files, symbols: [], relationships: [] };
+    for await (const entry of revisionEntries(workspaceId, String(rows[0].project_id), rows[0].manifest)) {
+      if (entry.section === 'symbols') result.symbols.push(entry.value);
+      else result.relationships.push(entry.value);
+    }
+    return result;
   }
 
   async deleteWorkspace(workspaceId: string): Promise<void> {
     const projects = await AgentCodeGraphProject.query().where('workspace_id', workspaceId).get();
     await Connection.transaction(async () => {
       for (const project of projects) await this.deleteProject(String(project.getAttribute('id')));
+      await Connection.raw('DELETE FROM agent_code_graph_investigations WHERE workspace_id = ?', [workspaceId]);
+      await Connection.raw('DELETE FROM agent_code_graph_semantic_indexes WHERE workspace_id = ?', [workspaceId]);
+      if (codeGraphConnectionName()) await Connection.raw('DELETE FROM agent_workspaces WHERE id = ?', [workspaceId]);
     });
   }
 
   private async loadSymbols(workspaceId: string, ids: string[]): Promise<CodeGraphSymbol[]> {
+    return Connection.snapshot(async () => {
     if (!ids.length) return [];
     const output: CodeGraphSymbol[] = [];
     for (let offset = 0; offset < ids.length; offset += 400) {
       const batch = ids.slice(offset, offset + 400);
       const rows = await Connection.raw(`
-        SELECT s.*, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
+        SELECT s.*, p.current_revision_id AS published_revision_id, f.path, f.language, p.name AS project_name, p.relative_path AS project_relative_path
         FROM agent_code_graph_symbols s
         JOIN agent_code_graph_projects p ON p.id = s.project_id
         LEFT JOIN agent_code_graph_files f ON f.id = s.file_id
         WHERE s.workspace_id = ?
-          AND s.revision_id = p.current_revision_id
+          AND s.revision_id = COALESCE(p.storage_revision_id, p.current_revision_id)
           AND s.id IN (${placeholders(batch.length)})
       `, [workspaceId, ...batch]) as RawRow[];
       output.push(...rows.map(mapSymbol));
     }
     return output;
+    });
   }
 
   private async persistRevisionManifest(input: CodeGraphCommit, stats: CodeGraphStats, now: string): Promise<void> {
-    const compressed = gzipSync(Buffer.from(JSON.stringify(revisionManifest(input))), { level: 6 });
+    const compressed = await encodeRevisionChunks(input);
     await Connection.raw(`
       INSERT INTO agent_code_graph_revision_manifests
-        (id, workspace_id, project_id, revision_id, source_hash, git_head, manifest, stats_json, completed_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, workspace_id, project_id, revision_id, source_hash, git_head, manifest, stats_json, completed_at, created_at, updated_at, format)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2)
       ON CONFLICT(revision_id) DO UPDATE SET
         source_hash = excluded.source_hash,
         git_head = excluded.git_head,
         manifest = excluded.manifest,
+        format = excluded.format,
         stats_json = excluded.stats_json,
         completed_at = excluded.completed_at,
         updated_at = excluded.updated_at
@@ -1171,6 +1198,15 @@ export class CodeGraphRepository implements CodeGraphStore {
       WHERE project_id = ? ORDER BY completed_at DESC LIMIT -1 OFFSET 30
     `, [input.projectId]) as RawRow[];
     await deleteRowsByIds('agent_code_graph_revision_manifests', 'id', expired.map((row) => String(row.id)));
+    await pruneRevisionChunks(input.projectId);
+  }
+
+  private async deleteSearchSymbols(ids: string[]): Promise<void> {
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const batch = ids.slice(offset, offset + 500);
+      await Connection.raw(`DELETE FROM agent_code_graph_symbol_search WHERE rowid IN (
+        SELECT rowid FROM agent_code_graph_symbols WHERE id IN (${placeholders(batch.length)}))`, batch);
+    }
   }
 
   private async deleteProject(projectId: string): Promise<void> {

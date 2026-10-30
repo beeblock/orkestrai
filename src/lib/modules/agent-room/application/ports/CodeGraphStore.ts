@@ -34,6 +34,7 @@ export type CodeGraphWriteFile = {
   path: string;
   language: CodeGraphLanguage;
   contentHash: string;
+  resolutionHash?: string;
   byteSize: number;
   generated: boolean;
   symbolCount: number;

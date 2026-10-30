@@ -4470,7 +4470,7 @@
   "code_graph.semantic_stale": "Es necesario reconstruir",
   "code_graph.semantic_empty": "Aún no construido",
   "code_graph.semantic_updating": "Actualizando automáticamente",
-  "code_graph.semantic_preparing": "Preparando automáticamente",
+  "code_graph.semantic_preparing": "El índice de intención se está preparando en segundo plano. La búsqueda por nombre ya está disponible.",
   "code_graph.semantic_symbols": "{indexed} de {total} símbolos indexados",
   "code_graph.semantic_build": "Construir",
   "code_graph.semantic_rebuild": "Reconstruir",
@@ -6090,5 +6090,17 @@
   "model_access.reconnecting": "Reconectando…",
   "model_access.sync_error": "Las actualizaciones en vivo no están disponibles. Comprueba la conexión o actualiza.",
   "model_access.scope_required": "Elige al menos un modelo y un nivel de effort en cada cuenta con restricciones.",
-  "model_access.models_selection_help": "Elige uno o más modelos. Solo los seleccionados estarán disponibles."
+  "model_access.models_selection_help": "Elige uno o más modelos. Solo los seleccionados estarán disponibles.",
+  "code_graph.metrics_title": "Uso y rendimiento",
+  "code_graph.metrics_description": "Consultas medidas de los últimos 30 días. Se actualiza cada cinco segundos mientras este panel está abierto.",
+  "code_graph.metrics_agents": "Consultas de los agentes",
+  "code_graph.metrics_users": "Tus consultas",
+  "code_graph.metrics_p95": "95% de las consultas en hasta",
+  "code_graph.metrics_tokens": "Tokens de contexto devuelto (estimación)",
+  "code_graph.metrics_estimate_help": "Son estimaciones del contexto devuelto, no una medición de tokens ahorrados. El conteo empieza con esta actualización; las consultas y el código nunca se guardan en la telemetría.",
+  "code_graph.metrics_empty": "Todavía no hay consultas registradas.",
+  "code_graph.metrics_error": "No se pudieron cargar las métricas del grafo.",
+  "code_graph.metrics_storage": "Base del grafo en todos los espacios",
+  "code_graph.metrics_failures": "Fallos",
+  "code_graph.metrics_index": "Última indexación"
 }

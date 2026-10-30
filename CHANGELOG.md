@@ -7,6 +7,18 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.50.0 - 2026-10-30
+
+### Added
+- Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
+
+### Fixed
+- Include source excerpts only when bounded file reads match their indexed hashes, so committed graph reads cannot attach changed source to old line references.
+- Keep graph scans, parsing, persistence, semantic indexing and historical comparisons off the Core event loop and outside the conversation database. Interactive graph reads retain a committed snapshot during background refreshes.
+- Avoid retagging every unchanged row or rebuilding an unchanged stale index; rank scoped FTS candidates before metadata joins, process semantic symbols in bounded pages, and reuse content-addressed history chunks.
+- Reuse bounded parser and semantic-search caches, preserve exact vector scores, avoid full symbol recounts on unchanged semantic-status polls, and back off automatic retries after resource failures.
+- Automatically migrate and back up separate graph storage, preserve source data on preparation failure, and reclaim the retired primary copy at startup. Historical comparison streams large legacy manifests instead of materializing them in Core.
+
 ## 0.49.1 - 2026-10-29
 
 ### Fixed

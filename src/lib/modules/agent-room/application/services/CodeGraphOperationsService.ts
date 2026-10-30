@@ -1,5 +1,7 @@
+import { compareGraphRevisions } from '../../infrastructure/code-graph/CodeGraphRevisionCompare.js';
+import { codeGraphConnectionName, runCodeGraphOperation } from '$lib/database/code-graph-storage.js';
 import { createHash } from 'node:crypto';
-import { readFile, realpath } from 'node:fs/promises';
+import { open, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type {
   CodeGraphAgentConflict,
@@ -300,64 +302,9 @@ export class CodeGraphOperationsService {
   }
 
   async compare(workspaceId: string, projectId: string, fromId?: string, toId?: string): Promise<CodeGraphRevisionComparison> {
-    const summaries = await codeGraphRepository.revisionSummaries(workspaceId, projectId, 30);
-    if (summaries.length < 2) throw new Error('Index this project at least twice before comparing revisions.');
-    const to = toId ? summaries.find((item) => item.id === toId) : summaries[0];
-    const from = fromId ? summaries.find((item) => item.id === fromId) : summaries.find((item) => item.id !== to?.id);
-    if (!from || !to) throw new Error('The selected revisions were not found for this project.');
-    if (from.id === to.id) throw new Error('Select two different revisions to compare.');
-    const [fromManifest, toManifest] = await Promise.all([
-      codeGraphRepository.revisionManifest(workspaceId, from.id),
-      codeGraphRepository.revisionManifest(workspaceId, to.id),
-    ]);
-    if (!fromManifest || !toManifest) throw new Error('A selected revision no longer has a comparison manifest.');
-    const before = new Map(fromManifest.symbols.map((symbol) => [symbol.fingerprint, symbol]));
-    const after = new Map(toManifest.symbols.map((symbol) => [symbol.fingerprint, symbol]));
-    const added: CodeGraphRevisionSymbol[] = [];
-    const removed: CodeGraphRevisionSymbol[] = [];
-    const modified: Array<{ before: CodeGraphRevisionSymbol; after: CodeGraphRevisionSymbol }> = [];
-    let unchanged = 0;
-    for (const [fingerprint, symbol] of after) {
-      const previous = before.get(fingerprint);
-      if (!previous) added.push(symbol);
-      else if (previous.contentHash !== symbol.contentHash) modified.push({ before: previous, after: symbol });
-      else unchanged += 1;
-    }
-    for (const [fingerprint, symbol] of before) if (!after.has(fingerprint)) removed.push(symbol);
-    const beforeRelationships = new Map(fromManifest.relationships.map((relationship) => [relationship.fingerprint, relationship]));
-    const afterRelationships = new Map(toManifest.relationships.map((relationship) => [relationship.fingerprint, relationship]));
-    const relationshipAdded: CodeGraphRevisionRelationship[] = [];
-    const relationshipRemoved: CodeGraphRevisionRelationship[] = [];
-    const relationshipModified: Array<{ before: CodeGraphRevisionRelationship; after: CodeGraphRevisionRelationship }> = [];
-    let relationshipUnchanged = 0;
-    for (const [fingerprint, relationship] of afterRelationships) {
-      const previous = beforeRelationships.get(fingerprint);
-      if (!previous) relationshipAdded.push(relationship);
-      else if (previous.contentHash !== relationship.contentHash) relationshipModified.push({ before: previous, after: relationship });
-      else relationshipUnchanged += 1;
-    }
-    for (const [fingerprint, relationship] of beforeRelationships) {
-      if (!afterRelationships.has(fingerprint)) relationshipRemoved.push(relationship);
-    }
-    const limit = 2_000;
-    return {
-      projectId,
-      projectName: to.projectName,
-      from,
-      to,
-      added: added.slice(0, limit),
-      removed: removed.slice(0, limit),
-      modified: modified.slice(0, limit),
-      unchanged,
-      relationships: {
-        added: relationshipAdded.slice(0, limit),
-        removed: relationshipRemoved.slice(0, limit),
-        modified: relationshipModified.slice(0, limit),
-        unchanged: relationshipUnchanged,
-      },
-      truncated: added.length > limit || removed.length > limit || modified.length > limit
-        || relationshipAdded.length > limit || relationshipRemoved.length > limit || relationshipModified.length > limit,
-    };
+    return codeGraphConnectionName()
+      ? runCodeGraphOperation('compare', [workspaceId, projectId, fromId, toId], true)
+      : compareGraphRevisions(workspaceId, projectId, fromId, toId);
   }
 
   async operations(workspaceId: string): Promise<CodeGraphOperationsSnapshot> {
@@ -443,6 +390,8 @@ export class CodeGraphOperationsService {
 
   private async sourceExcerpt(workspaceId: string, symbol: CodeGraphSymbol): Promise<CodeGraphSourceExcerpt | null> {
     if (!symbol.path || symbol.startLine === null) return null;
+    const expectedHash = await codeGraphRepository.sourceContentHash(workspaceId, symbol.id, symbol.revisionId);
+    if (!expectedHash) return null;
     const project = (await codeGraphRepository.listProjects(workspaceId)).find((item) => item.id === symbol.projectId);
     if (!project) return null;
     const root = await realpath(project.rootPath);
@@ -450,8 +399,22 @@ export class CodeGraphOperationsService {
     const resolved = await realpath(candidate);
     const rel = relative(root, resolved);
     if (!rel || rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) return null;
-    const source = await readFile(resolved, 'utf8');
-    if (source.length > 2_000_000) return null;
+    const handle = await open(resolved, 'r');
+    let source: string;
+    try {
+      const size = (await handle.stat()).size;
+      if (size > 2_000_000) return null;
+      const buffer = Buffer.alloc(Math.min(size + 1, 2_000_001));
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      const data = buffer.subarray(0, length);
+      if (length > 2_000_000 || createHash('sha256').update(data).digest('hex') !== expectedHash) return null;
+      source = data.toString('utf8');
+    } finally { await handle.close(); }
     const lines = source.split(/\r?\n/);
     const startLine = Math.max(1, symbol.startLine - 8);
     const requestedEnd = symbol.endLine ?? symbol.startLine + 40;

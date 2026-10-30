@@ -1,3 +1,5 @@
+import { AgentCodeGraphCleanupRequest } from '../../domain/models/AgentCodeGraphCleanupRequest.js';
+import { codeGraphConnectionName, scheduleCodeGraphCleanup } from '$lib/database/code-graph-storage.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { Connection } from '@beeblock/svelar/database';
 import type {
@@ -284,12 +286,13 @@ export class WorkspaceRepository {
     await controlCenterRepository.deleteWorkspaceHistory(id);
     await reviewCenterRepository.deleteWorkspaceHistory(id);
     await councilRepository.deleteWorkspaceHistory(id);
-    await codeGraphRepository.deleteWorkspace(id);
     const secretIds = await AgentSecretRef.query().where('workspace_id', id).where('provider', 'desktop').pluck('id');
     for (const secretId of secretIds) {
       await desktopSecretService.delete(`automation:secret-ref:${id}:${secretId}`);
     }
+    const isolatedGraph = Boolean(codeGraphConnectionName());
     const deleted = await Connection.transaction(async () => {
+      if (!isolatedGraph) await codeGraphRepository.deleteWorkspace(id);
       // Policy reads create workspace-bound rows too; remove every dependency before its parent.
       await AgentIntegrationEvent.query().where('workspace_id', id).delete();
       await AgentWorkspaceToolRun.query().where('workspace_id', id).delete();
@@ -321,8 +324,14 @@ export class WorkspaceRepository {
       await AgentAdventureItem.query().where('workspace_id', id).delete();
       await AgentAdventureHero.query().where('workspace_id', id).delete();
       await AgentAdventure.query().where('workspace_id', id).delete();
-      return (await AgentWorkspace.query().where('id', id).delete()) > 0;
+      const removed = (await AgentWorkspace.query().where('id', id).delete()) > 0;
+      if (removed && isolatedGraph) {
+        await AgentCodeGraphCleanupRequest.query().where('workspace_id', id).delete();
+        await AgentCodeGraphCleanupRequest.create({ id: uuidv7(), workspace_id: id, requested_at: new Date().toISOString() });
+      }
+      return removed;
     });
+    if (deleted && isolatedGraph) scheduleCodeGraphCleanup();
     return deleted;
   }
 

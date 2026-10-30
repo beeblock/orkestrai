@@ -1,4 +1,4 @@
-import { Model } from '@beeblock/svelar/orm';
+import { CodeGraphModel as Model } from '$lib/database/CodeGraphModel.js';
 
 export class AgentCodeGraphProject extends Model {
   static table = 'agent_code_graph_projects';
@@ -7,7 +7,7 @@ export class AgentCodeGraphProject extends Model {
   static timestamps = false;
   static fillable = [
     'id', 'workspace_id', 'name', 'root_path', 'relative_path', 'status',
-    'current_revision_id', 'git_head', 'config_hash', 'stats_json',
+    'current_revision_id', 'storage_revision_id', 'indexed_config_hash', 'git_head', 'config_hash', 'stats_json',
     'diagnostics_json', 'last_indexed_at', 'created_at', 'updated_at',
   ];
 
@@ -24,6 +24,7 @@ export class AgentCodeGraphProject extends Model {
   declare relative_path: string | null;
   declare status: string;
   declare current_revision_id: string | null;
+  declare storage_revision_id: string | null;
   declare git_head: string | null;
   declare config_hash: string | null;
   declare stats_json: string | null;

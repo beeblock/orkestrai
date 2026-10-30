@@ -8,6 +8,7 @@ import { codeGraphIndexService } from '$lib/modules/agent-room/application/servi
 import { codeGraphRuntimeEvidenceService } from '$lib/modules/agent-room/application/services/CodeGraphRuntimeEvidenceService.js';
 import { codeGraphSemanticService } from '$lib/modules/agent-room/application/services/CodeGraphSemanticService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
+import { codeGraphIntelligenceRepository } from '$lib/modules/agent-room/infrastructure/repositories/CodeGraphIntelligenceRepository.js';
 
 const directories: string[] = [];
 
@@ -17,6 +18,43 @@ afterEach(async () => {
 
 describe('Code graph semantic and runtime intelligence', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('does not hold an agent query behind the first background graph build', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-first-graph-'));
+    directories.push(directory);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Preparing graph', workingDir: directory });
+    let finish!: () => void;
+    const active = new Promise<void>(resolve => { finish = resolve; });
+    const refresh = vi.spyOn(codeGraphIndexService, 'ensureFresh').mockImplementation(async () => {
+      await active;
+      return { projects: [], totals: {} } as any;
+    });
+    try {
+      await expect(Promise.race([
+        codeGraphIndexService.availableSnapshot(workspace.id),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Query waited for indexing.')), 500)),
+      ])).rejects.toMatchObject({ code: 'graph_preparing', status: 425 });
+      expect(refresh).toHaveBeenCalledOnce();
+    } finally { finish(); refresh.mockRestore(); }
+  });
+
+  it('backs off failed automatic semantic work while allowing an explicit recovery', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-semantic-backoff-'));
+    directories.push(directory);
+    await writeFile(join(directory, 'service.ts'), 'export function acceptOrder() { return true; }');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Semantic backoff', workingDir: directory });
+    await codeGraphIndexService.index(workspace.id);
+    await codeGraphIndexService.pauseWorkspace(workspace.id);
+    const page = vi.spyOn(codeGraphIntelligenceRepository, 'semanticSymbolsPage').mockRejectedValue(new Error('Storage pressure'));
+    try {
+      await expect(codeGraphSemanticService.ensureFresh(workspace.id)).rejects.toThrow('Storage pressure');
+      await codeGraphSemanticService.ensureFresh(workspace.id, false);
+      await expect(codeGraphSemanticService.search(workspace.id, { query: 'accept order' })).rejects.toMatchObject({ code: 'semantic_preparing' });
+      expect(page).toHaveBeenCalledOnce();
+    } finally { page.mockRestore(); }
+    expect(await codeGraphSemanticService.build(workspace.id)).toMatchObject({ state: 'ready' });
+    await codeGraphIndexService.removeWorkspace(workspace.id);
+  });
 
   it('builds an offline semantic index and searches code by intent', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-semantic-'));
@@ -44,6 +82,12 @@ describe('Code graph semantic and runtime intelligence', () => {
       score: expect.any(Number),
       reasons: expect.arrayContaining(['semantic']),
     });
+    // The bounded accelerator must preserve the exhaustive scorer's complete
+    // result order, scores and reasons, including kind/project restrictions.
+    const scoped = { query: 'compute shopping cart amount', projectId: matches[0].symbol.projectId, kinds: ['function'] as const };
+    const accelerated = await codeGraphSemanticService.search(workspace.id, { ...scoped, kinds: [...scoped.kinds] });
+    await Connection.raw('UPDATE agent_code_graph_semantic_indexes SET search_data = NULL, built_at = ? WHERE workspace_id = ?', [new Date(Date.now() + 1_000).toISOString(), workspace.id]);
+    expect(await codeGraphSemanticService.search(workspace.id, { ...scoped, kinds: [...scoped.kinds] })).toEqual(accelerated);
     await writeFile(join(directory, 'src', 'checkout.ts'), `
       export function calculateCheckoutTotal() { return 84; }
       export function authenticateSession() { return true; }

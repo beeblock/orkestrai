@@ -1904,6 +1904,7 @@ export const TOURS_EN: Tour[] = [
       },
     ],
   },
+  {"id": "code-graph-performance", "icon": "Activity", "title": "Measure code intelligence on a large project", "tagline": "Keep code indexing independent of conversations and expose measured graph usage.", "steps": [{"id": "open-usage", "title": "Inspect real usage", "body": "The activity button in the Code Graph header opens Usage and performance. Agent counts demonstrate actual tool calls, while zero means no recorded calls. Latency is measured in buckets; context tokens are estimates of returned context, not proven savings. The panel refreshes only while open."}, {"id": "query-as-an-agent", "title": "CLI / MCP", "body": "orkestrai graph metrics · code_graph_metrics"}, {"id": "keep-messages-moving", "title": "Refresh without blocking delivery", "body": "Change a source file and keep talking to the leader. Queries use a committed graph snapshot while the worker refreshes it. Inspect the latest index duration after completion; an index error must not suspend independent tasks."}]},
   {
     id: 'code-intelligence-graph',
     icon: 'Waypoints',
@@ -1927,7 +1928,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'choose-code-intelligence-mode',
         title: 'Choose freshness and access',
-        body: 'Edit the workspace to choose Assisted, Manual, or Disabled. Assisted watches settled file changes, refreshes incrementally, and makes agent reads wait for the newest revision. Manual leaves indexing to you and blocks agents. Disabled stops watchers and blocks the graph while preserving its local history.',
+        body: "Assisted watches approved repositories and refreshes changed code in a background worker. Agent reads use the last committed graph without waiting for the next index; response metadata distinguishes a committed snapshot from an active refresh and includes its revision ids. Explicit indexing still waits for completion. Manual keeps the visual graph available to you, marks settled file changes as outdated and blocks agent graph tools. Disabled stops watchers and blocks the graph while retaining local data. Runtime evidence remains tied to its imported revision.",
       },
       {
         id: 'explore-symbol-impact',
@@ -1947,7 +1948,7 @@ export const TOURS_EN: Tour[] = [
       {
         id: 'build-semantic-index',
         title: 'Search by intent, locally',
-        body: 'Open Insights → Semantic. Assisted mode prepares the compact local index automatically, reuses unchanged vectors after code edits, and lets Refresh now force an immediate pass. Turn on the sparkle beside search, then describe the behavior you need instead of guessing a symbol name. The index requires no API key or model download, never sends repository code outside the device, and agent searches wait for the latest revision. Manual mode retains explicit Build and Rebuild controls.',
+        body: "Open Insights → Semantic. Assisted mode prepares the local intent index in the background and reuses verified vectors after edits. While preparing, use name search; an agent intent query returns immediately with that guidance instead of waiting for a build. No API key or model download is needed. Manual mode keeps explicit Build and Rebuild controls.",
       },
       {
         id: 'overlay-runtime-evidence',

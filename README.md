@@ -405,7 +405,7 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   secret values, payloads, hosts, query strings, or source bodies. A local
   offline semantic index adds intent search with compact vectors and no model
   download or API key; Assisted mode keeps it synchronized incrementally and
-  agent searches wait for the latest graph revision. Runtime evidence imports
+  agent searches use the last committed graph revision while refreshes run. Intent search reports preparation explicitly so agents can continue with lexical search instead of waiting. Runtime evidence imports
   confined LCOV, JUnit, traceback,
   or structured JSON files and overlays coverage, failures, observed calls, and
   runtime-only relationships without persisting raw test output. Operational
@@ -995,3 +995,13 @@ The in-app manual and guided tour cover this flow in Portuguese, English and Spa
 Orkestrai is licensed under the [Apache License 2.0](LICENSE). Third-party
 components and downloaded models remain subject to the licenses listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Code graph isolation and measured usage
+
+Code indexing uses a private worker and a separate embedded SQLite database; conversations and task delivery retain their own connection and transaction gate. Interactive reads use a committed graph snapshot while refreshes run. Source excerpts require a bounded file read matching the indexed hash; changed files are omitted until the matching revision is available. No additional server, Python installation, model download or graph-engine binary is required. Explicit indexing still waits for completion. An agent query made before the first committed graph receives `graph_preparing` promptly and can continue with bounded file search. Unchanged files reuse a parser cache capped at 128 MiB across workspaces. Semantic searches reuse a derived accelerator capped at 128 MiB decoded (64 MiB compressed across workspaces), with identical vector scoring and a paged fallback; the analysis worker exits after 30 seconds idle.
+
+Open **Usage and performance** in the Code Graph header, or run `orkestrai graph metrics` / MCP `code_graph_metrics`. Counters distinguish agent and owner queries, report latency buckets and estimated context returned, and retain up to 30 days from this update. Estimated context is not measured token savings. Query text, prompts, credentials and source bodies are not telemetry.
+
+The first boot moves verified graph data to `<database>.code-graph.sqlite` before compacting the retired primary rows. Migration failure preserves the original data and does not prevent conversations from opening. Future migration backups are a pair: restore the main `.bak-<timestamp>` together with the matching `.code-graph.sqlite.bak-<timestamp>`. New history shares unchanged chunks instead of copying the entire graph every revision; retained legacy history is preserved.
+
+For a production-size concurrency check, explicitly set `ORKESTRAI_GRAPH_BENCH_SOURCE` (a read-only SQLite source), `ORKESTRAI_GRAPH_BENCH_WORKSPACE`, and optionally `ORKESTRAI_GRAPH_BENCH_RESULT`, then run `vitest run --config vitest.graph-runtime.config.ts`. The benchmark copies only graph metadata into an isolated database, never opens a live provider, and measures message persistence during the real indexing engine. These are service measurements; desktop interaction and HTTP overhead require separate production-build checks.

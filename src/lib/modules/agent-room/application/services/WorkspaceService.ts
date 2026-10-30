@@ -280,6 +280,7 @@ export class WorkspaceService {
   async remove(id: string) {
     const { creativeMediaRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js');
     if (await creativeMediaRepository.activeForWorkspace(id)) throw new Error('creative_workflow_busy');
+    await codeGraphIndexService.pauseWorkspace(id);
     ptySessionManager.killWorkspace(id);
     await controlCenterService.settleWorkspace(id);
     const deleted = await workspaceRepository.deleteWorkspace(id);
