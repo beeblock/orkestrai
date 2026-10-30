@@ -5,7 +5,7 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import type { AdventureCatalog } from '$lib/i18n/adventure/index.js';
   import { BIOMES, type BiomeId, type HeroClassId } from '$lib/modules/agent-room/domain/adventure/catalog.js';
-  import { ACT_COUNT, DIFFICULTIES, STAGES_PER_ACT, difficultyUnlocked, regionLevel, stageIndex, stageUnlocked, type Difficulty } from '$lib/modules/agent-room/domain/adventure/world.js';
+  import { ACT_COUNT, DIFFICULTIES, STAGE_COUNT, STAGES_PER_ACT, difficultyUnlocked, regionLevel, stageIndex, stageUnlocked, type Difficulty } from '$lib/modules/agent-room/domain/adventure/world.js';
   import * as m from '$lib/paraglide/messages.js';
   import type { AdventureAction, AdventureOutcome, AdventureSnapshot } from '../adventure-client.js';
   import type { HeroView } from '../adventure-party.js';
@@ -77,6 +77,10 @@
       />
       <span class="hint">{difficultyUnlocked(account.cleared, difficulty) ? m['adventure.camp_map_hint']() : m['adventure.camp_difficulty_locked']()}</span>
     </header>
+
+    {#if account.cleared.torment >= STAGE_COUNT - 1}
+      <p class="hint" data-testid="camp-paragon-hint">{m['adventure.camp_paragon_hint']()}</p>
+    {/if}
 
     <!-- The realm: five regions from left to right, one per act. -->
     <div class="world" class:painted={Boolean(worldMap)} style:--map={worldMap ? `url(${worldMap})` : undefined}>

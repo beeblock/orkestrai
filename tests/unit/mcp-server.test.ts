@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { runMcpServer, MCP_TOOLS } from '../../packages/orkestrai-cli/src/mcp.js';
 import { bridgeCanvasCommandSchema } from '$lib/modules/agent-room/contracts/schemas/bridge-canvas.schema.js';
+import { bridgeAdventureActionSchema } from '$lib/modules/agent-room/contracts/schemas/adventure.schema.js';
 
 /** Roda o servidor MCP com streams em memoria + bridge fake (captura o body). */
 function startMcp(bridgeResult = { ok: true }, selfAgent = 'n1') {
@@ -109,6 +110,13 @@ describe('servidor MCP (orkestrai mcp)', () => {
       const action = { type: 'auto-equip', heroId: 'h1' };
       server.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'adventure_act', arguments: { action } } });
       expect(JSON.parse((await server.waitFor(2)).result.content[0].text)).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/adventure/actions', body: { action, from: 'n1' } });
+      for (const [index, location] of ['inventory', 'stash'].entries()) {
+        const bulk = { type: 'move-all', location };
+        server.send({ jsonrpc: '2.0', id: index + 3, method: 'tools/call', params: { name: 'adventure_act', arguments: { action: bulk } } });
+        const result = JSON.parse((await server.waitFor(index + 3)).result.content[0].text);
+        expect(result).toMatchObject({ method: 'POST', path: '/api/agent-room/bridge/adventure/actions', body: { action: bulk, from: 'n1' } });
+        expect(bridgeAdventureActionSchema.safeParse(result.body).success).toBe(true);
+      }
     } finally { server.input.end(); await server.done; }
   });
 

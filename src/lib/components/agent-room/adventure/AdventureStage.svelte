@@ -348,6 +348,9 @@
           announce(event.travelling ? m['adventure.difficulty_onward']({ difficulty }) : m['adventure.difficulty_open']({ difficulty }), 'gold');
           break;
         }
+        case 'torment-complete':
+          announce(event.travelling ? m['adventure.torment_onward']() : m['adventure.torment_complete'](), 'gold');
+          break;
         case 'stage-fail':
           announce(m['adventure.stage_failed']({ stage: stageLabel(event.position) }), 'danger');
           playSound('fail');

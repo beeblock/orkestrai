@@ -5,6 +5,7 @@ import type { ActiveAction, LearnedActive } from './skills.js';
 import { armorMitigation, type CombatProfile } from './stats.js';
 import {
   START_POSITION,
+  STAGE_COUNT,
   WAVES_PER_STAGE,
   advancePosition,
   biomeOf,
@@ -176,6 +177,7 @@ export type AdventureEvent =
   | { type: 'stage-clear'; position: StagePosition; actClear: boolean }
   /** The last boss of a difficulty fell: the next one is open, and an advancing party heads there. */
   | { type: 'difficulty-open'; difficulty: Difficulty; travelling: boolean }
+  | { type: 'torment-complete'; travelling: boolean }
   | { type: 'stage-fail'; position: StagePosition }
   | { type: 'quest'; title: string | null }
   | { type: 'join'; heroId: string }
@@ -863,6 +865,9 @@ function finishWave(state: AdventureState): void {
   const travelling = state.rules.autoAdvance && next !== null;
   if (next && next.difficulty !== position.difficulty && (travelling || firstClear)) {
     state.events.push({ type: 'difficulty-open', difficulty: next.difficulty, travelling });
+  }
+  if (position.difficulty === 'torment' && stageIndex(position) === STAGE_COUNT - 1 && (travelling || firstClear)) {
+    state.events.push({ type: 'torment-complete', travelling });
   }
   if (state.rules.autoAdvance && next) state.position = next;
   state.wave = 0;

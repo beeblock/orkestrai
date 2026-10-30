@@ -37,6 +37,7 @@ function readAccount(raw: unknown, now: string): AdventureAccount {
     position: { ...START_POSITION, ...stored.position },
     cleared: { ...NO_CLEARS, ...stored.cleared },
     soulstones: { ...base.soulstones, ...stored.soulstones },
+    bossChestRecoveryVersion: typeof stored.bossChestRecoveryVersion === 'number' && Number.isInteger(stored.bossChestRecoveryVersion) ? stored.bossChestRecoveryVersion : 0,
     settings: readSettings(stored.settings),
     cube: { ...base.cube, ...stored.cube },
     chests: Array.isArray(stored.chests) ? stored.chests : [],

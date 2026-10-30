@@ -36,6 +36,7 @@
   let picking = $state(false);
   let picked = $state<string[]>([]);
   let revealed = $state<Item[]>([]);
+  let transferSummary = $state('');
   // What became of each revealed item: put on by a hero (id) or salvaged.
   let fate = $state<Record<string, { heroId?: string; salvaged?: boolean }>>({});
   const heroNames = $derived(Object.fromEntries(snapshot.heroes.map((hero) => [hero.id, hero.name])));
@@ -50,6 +51,8 @@
     inventory: snapshot.items.filter((item) => item.location === 'inventory').length,
     stash: snapshot.items.filter((item) => item.location === 'stash').length,
   });
+  const transferTo = $derived(place === 'inventory' ? 'stash' : 'inventory');
+  const transferRoom = $derived(Math.max(0, snapshot.limits[transferTo] - counts[transferTo]));
   const focus = $derived(snapshot.items.find((item) => item.id === focused) ?? null);
   const chestsByTier = $derived(Object.fromEntries(CHEST_TIERS.map((tier) => [tier, snapshot.account.chests.filter((chest) => chest.tier === tier).length])) as Record<ChestTier, number>);
   const able = $derived(focus ? heroes.filter((hero) => canEquip(focus, { classId: hero.classId, level: hero.level }) === 'ok') : []);
@@ -100,6 +103,19 @@
     picked = [];
     if (focused && ids.includes(focused)) focused = null;
   }
+
+  async function moveAll() {
+    const location = transferTo;
+    const outcome = await act({ type: 'move-all', location });
+    const result = outcome?.result;
+    if (!result || typeof result !== 'object' || !('moved' in result) || !('remaining' in result)
+      || typeof result.moved !== 'number' || typeof result.remaining !== 'number') return;
+    transferSummary = location === 'stash'
+      ? m['adventure.camp_stored_all']({ count: result.moved, remaining: result.remaining })
+      : m['adventure.camp_withdrew_all']({ count: result.moved, remaining: result.remaining });
+    focused = null;
+    picked = [];
+  }
 </script>
 
 <div class="inventory">
@@ -140,6 +156,8 @@
       {/each}
     </div>
   </section>
+
+  <p class="camp-muted">{m['adventure.camp_soulstone_source']()}</p>
 
   {#if revealed.length}
     <section class="reveal camp-panel ornate" aria-live="polite">
@@ -182,12 +200,15 @@
         <SegmentedControl
           label={m['adventure.camp_place']()}
           value={place}
-          onValueChange={(value: string) => { place = value as 'inventory' | 'stash'; focused = null; }}
+          onValueChange={(value: string) => { place = value as 'inventory' | 'stash'; focused = null; transferSummary = ''; }}
           options={[
             { value: 'inventory', label: m['adventure.camp_bag']({ count: counts.inventory, max: snapshot.limits.inventory }) },
             { value: 'stash', label: m['adventure.camp_stash']({ count: counts.stash, max: snapshot.limits.stash }) },
           ]}
         />
+        <Button size="sm" variant="outline" disabled={busy || !counts[place] || !transferRoom} onclick={() => void moveAll()} title={transferRoom ? m['adventure.camp_move_all_hint']() : m['adventure.camp_move_all_full']()} data-testid="camp-move-all">
+          <Archive size={14} aria-hidden="true" />{place === 'inventory' ? m['adventure.camp_store_all']() : m['adventure.camp_withdraw_all']()}
+        </Button>
         <NativeSelect.Root size="sm" class="w-[130px]" value={slotFilter} onchange={(event: Event) => (slotFilter = (event.currentTarget as HTMLSelectElement).value as Slot | '')} aria-label={m['adventure.camp_filter_slot']()}>
           <NativeSelect.Option value="">{m['adventure.camp_all_slots']()}</NativeSelect.Option>
           {#each SLOTS as slot (slot)}<NativeSelect.Option value={slot}>{catalog.slots[slot]}</NativeSelect.Option>{/each}
@@ -203,6 +224,7 @@
           <Button size="sm" variant="ghost" disabled={busy} onclick={() => void salvage(junk.map((item) => item.id))}><Trash2 size={14} aria-hidden="true" />{m['adventure.camp_salvage_junk']({ count: junk.length })}</Button>
         {/if}
       </header>
+      <p class="camp-muted" aria-live="polite" data-testid="camp-transfer-summary">{transferSummary || (transferRoom ? m['adventure.camp_move_all_hint']() : m['adventure.camp_move_all_full']())}</p>
       {#if items.length || emptyWells}
         <div class="grid" role="list">
           {#each items as item (item.id)}

@@ -66,6 +66,8 @@ export type AdventureAccount = {
   /** Chests thrown away because their storage was full. */
   lostChests: number;
   soulstones: Record<Difficulty, number>;
+  /** One-time recovery of keys missing from boss chests saved before guaranteed boss drops. */
+  bossChestRecoveryVersion: number;
   coins: number;
   /** By material key: the id for runes, glyphs and Normal gems, `gem:quality` for the other cuts. */
   materials: Record<string, number>;
@@ -114,6 +116,7 @@ export function newAccount(now: string): AdventureAccount {
     chests: [],
     lostChests: 0,
     soulstones: { normal: 0, nightmare: 0, hell: 0, torment: 0 },
+    bossChestRecoveryVersion: 1,
     coins: 0,
     materials: {},
     elixirs: {},

@@ -85,10 +85,10 @@ export function nextPosition(position: StagePosition): StagePosition | null {
   return index + 1 < STAGE_COUNT ? positionAt(position.difficulty, index + 1) : null;
 }
 
-/** Where an advancing party goes: the next stage, past the last boss the next difficulty's first stage, null after Torment. */
-export function advancePosition(position: StagePosition): StagePosition | null {
+/** Advance through difficulties, then repeat Torment's road for experience and Paragon. */
+export function advancePosition(position: StagePosition): StagePosition {
   const following = DIFFICULTIES[DIFFICULTIES.indexOf(position.difficulty) + 1];
-  return nextPosition(position) ?? (following ? positionAt(following, 0) : null);
+  return nextPosition(position) ?? positionAt(following ?? 'torment', 0);
 }
 
 export function previousPosition(position: StagePosition): StagePosition {

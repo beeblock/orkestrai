@@ -195,6 +195,7 @@ export class AdventureService {
       const before = await adventureRepository.load(workspaceId);
       const save: AdventureSave = before ? structuredClone(before) : { account: newAccount(now), heroes: {}, items: [] };
       engine.bindRoster(save, ctx);
+      engine.recoverBossChestKeys(save.account);
       const quests = engine.payQuests(save, ctx, done);
       if (offlineWork && save.account.lastReportAt === lastReport) {
         engine.payOffline(save, ctx, offlineWork);
@@ -306,6 +307,7 @@ export class AdventureService {
       case 'auto-equip': return engine.autoEquip(save, ctx, action.heroId);
       case 'lock': return engine.setLocked(save, action.itemId, action.locked);
       case 'move': return engine.moveItem(save, action.itemId, action.location);
+      case 'move-all': return engine.moveAllItems(save, action.location);
       case 'salvage': return { gold: engine.salvage(save, action.itemIds) };
       case 'synthesize': return { item: engine.synthesizeItems(save, ctx, action.itemIds) };
       case 'craft': return { item: engine.craftItem(save, ctx, { slot: action.slot, level: action.level, classId: action.classId ?? null, gems: action.gems }) };

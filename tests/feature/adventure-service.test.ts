@@ -14,7 +14,8 @@ import { AgentAdventure } from '$lib/modules/agent-room/domain/models/AgentAdven
 import { AgentAdventureHero } from '$lib/modules/agent-room/domain/models/AgentAdventureHero.js';
 import { AgentAdventureItem } from '$lib/modules/agent-room/domain/models/AgentAdventureItem.js';
 import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
-import { xpToNext } from '$lib/modules/agent-room/domain/adventure/world.js';
+import { paragonXpToNext, xpToNext } from '$lib/modules/agent-room/domain/adventure/world.js';
+import { adventureActionSchema } from '$lib/modules/agent-room/contracts/schemas/adventure.schema.js';
 import type { AdventureReportInput } from '$lib/modules/agent-room/contracts/schemas/adventure.schema.js';
 import type { AdventureSnapshot } from '$lib/modules/agent-room/application/services/AdventureService.js';
 import { adventureRepository } from '$lib/modules/agent-room/infrastructure/repositories/AdventureRepository.js';
@@ -59,6 +60,72 @@ function request(body: unknown, id: string) {
 describe('AdventureService', () => {
   useSvelarTest({ refreshDatabase: true });
   afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+
+  it('recovers pre-update saved boss chests once across concurrent reads and later reloads', async () => {
+    const { ws } = await team();
+    await adventureService.state(ws.id);
+    const account = (await adventureRepository.load(ws.id))!.account;
+    const { bossChestRecoveryVersion: _version, ...legacy } = account;
+    legacy.settings.autoOpen = false;
+    legacy.firstBossClears = ['normal:5'];
+    legacy.chests = Array.from({ length: 3 }, (_, index) => ({ id: `old-${index}`, tier: 'red', level: 1, difficulty: 'normal', act: 5 }));
+    await AgentAdventure.query().where('workspace_id', ws.id).update({ account_json: JSON.stringify(legacy) });
+    expect((await adventureRepository.load(ws.id))!.account.bossChestRecoveryVersion).toBe(0);
+    const reads = await Promise.all([1, 2, 3].map(() => adventureService.state(ws.id, { offline: false })));
+    for (const { snapshot } of reads) expect(snapshot.account.soulstones.normal).toBe(3);
+    expect((await adventureRepository.load(ws.id))!.account.bossChestRecoveryVersion).toBe(1);
+    expect((await adventureService.state(ws.id)).snapshot.account.soulstones.normal).toBe(3);
+    const opened = await adventureService.act(ws.id, { type: 'open-chests', tier: 'red', limit: 3 });
+    expect(opened.opened).toHaveLength(3);
+    expect(opened.snapshot.account.chests).toEqual([]);
+  });
+
+  it('persists both bulk-transfer directions once under concurrent calls and preserves guild scope', async () => {
+    const { ws, lead, qa } = await team();
+    await adventureService.state(ws.id);
+    const before = (await adventureRepository.load(ws.id))!;
+    const save = structuredClone(before);
+    save.account.settings.autoOpen = false;
+    const additions = Array.from({ length: 3 }, (_, index) => ({
+      ...rollItem(() => 0.5, { level: 3, rarity: 'rare', slot: 'helmet' }),
+      id: uuidv7(), location: 'inventory' as const, heroId: null, locked: index === 0, createdAt: new Date().toISOString(),
+    }));
+    save.items.push(...additions);
+    await adventureRepository.persist(ws.id, before, save);
+    const persisted = (await adventureRepository.load(ws.id))!;
+    const action = adventureActionSchema.parse({ type: 'move-all', location: 'stash' });
+    expect(adventureActionSchema.safeParse({ ...action, location: 'equipped' }).success).toBe(false);
+    await expect(adventureService.actAs(ws.id, { nodeId: qa.id, leader: false }, action)).rejects.toThrow('leader-only');
+    const outcomes = await Promise.all([1, 2].map(() => adventureService.actAs(ws.id, { nodeId: lead.id, leader: true }, action)));
+    expect(outcomes.map((entry) => (entry.result as { moved: number }).moved).sort()).toEqual([0, 3]);
+    const stored = (await adventureRepository.load(ws.id))!;
+    for (const item of persisted.items) expect(stored.items.find((candidate) => candidate.id === item.id)).toEqual({ ...item, location: item.location === 'inventory' ? 'stash' : item.location });
+    const withdrawn = await adventureService.act(ws.id, { type: 'move-all', location: 'inventory' });
+    expect(withdrawn.result).toEqual({ moved: 3, remaining: 0 });
+    expect(new Map(withdrawn.snapshot.items.map((item) => [item.id, item]))).toEqual(new Map(persisted.items.map((item) => [item.id, item])));
+  });
+
+  it('accepts Torment restarting from 1-1 while retaining clears, XP and Paragon progress', async () => {
+    const { ws, lead } = await team();
+    const snapshot = (await adventureService.state(ws.id)).snapshot;
+    const maestro = heroOf(snapshot, lead.id);
+    const before = (await adventureRepository.load(ws.id))!;
+    const save = structuredClone(before);
+    save.account.cleared = { normal: 49, nightmare: 49, hell: 49, torment: 49 };
+    save.account.position = { difficulty: 'torment', act: 5, stage: 10 };
+    save.heroes[maestro.id].level = 100;
+    save.heroes[maestro.id].xp = paragonXpToNext(0) - 1;
+    await adventureRepository.persist(ws.id, before, save);
+    const outcome = await adventureService.report(ws.id, report({
+      position: { difficulty: 'torment', act: 1, stage: 1 }, xp: { [maestro.id]: 10 },
+      kills: { 'outage-kraken': 1 }, bosses: [{ difficulty: 'torment', act: 5, monsterId: 'outage-kraken' }],
+      stages: [{ difficulty: 'torment', act: 5, stage: 10, result: 'clear' }],
+    }));
+    expect(outcome.snapshot.account.position).toEqual({ difficulty: 'torment', act: 1, stage: 1 });
+    expect(outcome.snapshot.account.cleared).toEqual(save.account.cleared);
+    expect(heroOf(outcome.snapshot, lead.id)).toMatchObject({ level: 100, paragon: 1, xp: 9 });
+    expect(outcome.snapshot.account.soulstones.torment).toBe(1);
+  });
 
   it('turns every agent into a named guild hero with a starter kit, leader first as the Maestro', async () => {
     const { ws, lead, qa } = await team();

@@ -46,6 +46,7 @@ export const adventureActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('auto-equip'), heroId: id }),
   z.object({ type: z.literal('lock'), itemId: id, locked: z.boolean() }),
   z.object({ type: z.literal('move'), itemId: id, location: z.enum(['inventory', 'stash']) }),
+  z.object({ type: z.literal('move-all'), location: z.enum(['inventory', 'stash']) }),
   z.object({ type: z.literal('salvage'), itemIds: itemIds.min(1) }),
   z.object({ type: z.literal('synthesize'), itemIds: z.array(id).length(9) }),
   z.object({ type: z.literal('craft'), slot: z.enum(tuple<Slot>(SLOTS)), level: z.number().int().min(1).max(MAX_REGION_LEVEL), classId: z.enum(tuple<HeroClassId>(HERO_CLASS_IDS)).nullable().optional(), gems: z.array(z.enum(tuple<MaterialId>(MATERIAL_IDS))).length(2) }),

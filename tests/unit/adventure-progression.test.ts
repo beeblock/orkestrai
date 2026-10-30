@@ -6,14 +6,14 @@ import { craft, synthesisRarity } from '$lib/modules/agent-room/domain/adventure
 import { SETS, SET_PIECES, UNIQUES, elixirStats, setBonuses, type SetId } from '$lib/modules/agent-room/domain/adventure/artifacts.js';
 import {
   AdventureError, applyReport, autoOpenChests, balanceGuild, buyRune, craftItem, settleLoot, updateSettings, drinkElixir, equipItem, fuseGems, makeOffering, openChests, partyBuilds, payOffline, payQuests, salvage, socketItem,
-  synthesizeItems, bindRoster, heroOfAgent, setHeroClass, soulstoneFor, travel, unsocketItem, type AdventureSave, type EngineContext, type RosterEntry,
+  synthesizeItems, bindRoster, heroOfAgent, setHeroClass, soulstoneFor, travel, unsocketItem, moveAllItems, recoverBossChestKeys, type AdventureSave, type EngineContext, type RosterEntry,
 } from '$lib/modules/agent-room/domain/adventure/engine.js';
 import {
   RARITIES, RARITY_RULES, canEquip, gemQualityFor, itemBaseKey, itemIcon, itemStats, materialKey, materialStats, parseMaterialKey, rollItem,
   type Item, type Rarity, type Slot,
 } from '$lib/modules/agent-room/domain/adventure/items.js';
 import { BASE_CHEST_CAPACITY, openChest, rollRarity, rollUnique } from '$lib/modules/agent-room/domain/adventure/loot.js';
-import { canBuyRune, formationSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
+import { canBuyRune, formationSlots, inventorySlots, stashSlots } from '$lib/modules/agent-room/domain/adventure/runes.js';
 import type { ChestDrop } from '$lib/modules/agent-room/domain/adventure/simulation.js';
 import { SKILL_TREES, autoAllocate, canRaise, pointsSpent, sanitizeRanks } from '$lib/modules/agent-room/domain/adventure/skills.js';
 import { NO_CLEARS, addXp, advancePosition, positionAt, regionLevel, stageUnlocked, xpToNext, difficultyUnlocked, MAX_HERO_LEVEL } from '$lib/modules/agent-room/domain/adventure/world.js';
@@ -64,11 +64,11 @@ describe('adventure world', () => {
     expect(difficultyUnlocked({ ...NO_CLEARS, normal: 49 }, 'nightmare')).toBe(true);
   });
 
-  it('advances stage by stage, then past the last boss into the next difficulty, and stops after Torment', () => {
+  it('advances through difficulties and repeats Torment instead of trapping the party at its last boss', () => {
     expect(advancePosition(positionAt('normal', 8))).toEqual(positionAt('normal', 9));
     expect(advancePosition(positionAt('normal', 49))).toEqual(positionAt('nightmare', 0));
     expect(advancePosition(positionAt('hell', 49))).toEqual(positionAt('torment', 0));
-    expect(advancePosition(positionAt('torment', 49))).toBeNull();
+    expect(advancePosition(positionAt('torment', 49))).toEqual(positionAt('torment', 0));
   });
 
   it('levels heroes up to 100 on a growing curve', () => {
@@ -732,5 +732,124 @@ describe('adventure battle clock', () => {
     // Time that never passed is not paid: past the half hour, only the timers' minute of slack.
     applyReport(save, fight(1_000, 'extra'), later);
     expect(save.account.kills).toBe(600 + 310);
+  });
+});
+
+describe('Adventure endgame and bulk storage', () => {
+  function looseItem(ctx: EngineContext, location: 'inventory' | 'stash', locked = false): Item {
+    return { ...rollItem(ctx.rng, { level: 10, rarity: 'rare', slot: 'helmet' }), id: ctx.newId(), location, heroId: null, locked, createdAt: ctx.now };
+  }
+
+  it('recovers enough keys to open a legacy backlog of 34 boss chests exactly once', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.bossChestRecoveryVersion = 0;
+    save.account.firstBossClears = ['normal:5', 'nightmare:5', 'torment:5'];
+    save.account.chests = [
+      ...Array.from({ length: 12 }, (_, i) => ({ id: `normal-${i}`, tier: 'red' as const, difficulty: 'normal' as const, act: 5, level: 50 })),
+      ...Array.from({ length: 14 }, (_, i) => ({ id: `nightmare-${i}`, tier: 'red' as const, difficulty: 'nightmare' as const, act: i < 10 ? 5 : i - 9, level: 75 })),
+      ...Array.from({ length: 8 }, (_, i) => ({ id: `torment-${i}`, tier: 'red' as const, difficulty: 'torment' as const, act: 5, level: 110 })),
+    ];
+    recoverBossChestKeys(save.account);
+    expect(save.account.soulstones).toEqual({ normal: 12, nightmare: 10, hell: 0, torment: 8 });
+    const recovered = structuredClone(save.account);
+    recoverBossChestKeys(save.account);
+    expect(save.account).toEqual(recovered);
+    const opened: string[] = [];
+    while (save.account.chests.length) {
+      // Keep capacity out of this key-recovery test: the owner can move loot
+      // between openings; no full bag should be mistaken for a missing key.
+      save.items = [];
+      opened.push(openChests(save, ctx, { tier: 'red', limit: 1 })[0].chestId);
+    }
+    expect(new Set(opened).size).toBe(34);
+  });
+
+  it('recovers only missing keys, counting free first chests and preserving harder keys for harder chests', () => {
+    const account = newAccount(context().now);
+    account.bossChestRecoveryVersion = 0;
+    account.firstBossClears = ['normal:5', 'torment:5'];
+    account.soulstones.torment = 1;
+    account.chests = [
+      { id: 'normal-paid', tier: 'red', difficulty: 'normal', act: 5, level: 50 },
+      { id: 'torment-paid', tier: 'red', difficulty: 'torment', act: 5, level: 110 },
+      { id: 'normal-free', tier: 'red', difficulty: 'normal', act: 1, level: 10 },
+      { id: 'normal-next', tier: 'red', difficulty: 'normal', act: 1, level: 10 },
+      { id: 'blue', tier: 'blue', difficulty: 'hell', act: 1, level: 60 },
+    ];
+    recoverBossChestKeys(account);
+    expect(account.soulstones).toEqual({ normal: 2, nightmare: 0, hell: 0, torment: 1 });
+    expect(account.firstBossClears).toEqual(['normal:5', 'torment:5']);
+    expect(account.bossChestRecoveryVersion).toBe(1);
+    const fresh = newAccount(context().now);
+    fresh.chests = structuredClone(account.chests);
+    recoverBossChestKeys(fresh);
+    expect(Object.values(fresh.soulstones).every((count) => count === 0)).toBe(true);
+  });
+
+  it('reserves five slots for Torment boss loot without consuming a key, while smaller chests still fit', () => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.account.firstBossClears = ['torment:5'];
+    save.account.soulstones.torment = 1;
+    save.account.chests = [
+      { id: 'boss', tier: 'red', difficulty: 'torment', act: 5, level: 110 },
+      { id: 'small', tier: 'white', difficulty: 'normal', act: 1, level: 1 },
+    ];
+    save.items.push(...Array.from({ length: inventorySlots(save.account.runes) - 4 }, () => looseItem(ctx, 'inventory')));
+    expect(() => openChests(save, ctx, { tier: 'red' })).toThrow('inventory-full');
+    expect(save.account.soulstones.torment).toBe(1);
+    expect(autoOpenChests(save, ctx).map((chest) => chest.chestId)).toEqual(['small']);
+    expect(save.account.soulstones.torment).toBe(1);
+    moveAllItems(save, 'stash');
+    // rng=0 always includes the extra boss unique, so this is five actual items.
+    const opened = openChests(save, { ...ctx, rng: () => 0 }, { tier: 'red' });
+    expect(opened[0].items).toHaveLength(5);
+    expect(save.items.filter((item) => item.location === 'inventory').length).toBeLessThanOrEqual(inventorySlots(save.account.runes));
+  });
+
+  it.each(['inventory', 'stash'] as const)('moves all items to %s without altering their data, locks or equipped gear', (location) => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const source = location === 'stash' ? 'inventory' : 'stash';
+    const additions = [looseItem(ctx, source, true), looseItem(ctx, source)];
+    save.items.push(...additions);
+    const before = structuredClone(save.items);
+    expect(moveAllItems(save, location)).toEqual({ moved: 2, remaining: 0 });
+    expect(save.items).toEqual(before.map((item) => item.location === source ? { ...item, location } : item));
+    expect(moveAllItems(save, location)).toEqual({ moved: 0, remaining: 0 });
+  });
+
+  it.each(['inventory', 'stash'] as const)('preserves overflow and reports a full %s without losing items', (location) => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    const source = location === 'stash' ? 'inventory' : 'stash';
+    const capacity = location === 'stash' ? stashSlots(save.account.runes) : inventorySlots(save.account.runes);
+    save.items.push(...Array.from({ length: capacity - 1 }, () => looseItem(ctx, location)));
+    const incoming = Array.from({ length: 3 }, () => looseItem(ctx, source));
+    save.items.push(...incoming);
+    const identities = save.items.map((item) => item.id);
+    expect(moveAllItems(save, location)).toEqual({ moved: 1, remaining: 2 });
+    expect(save.items.filter((item) => item.location === location)).toHaveLength(capacity);
+    expect(save.items.filter((item) => item.location === source).map((item) => item.id)).toEqual(incoming.slice(1).map((item) => item.id));
+    expect(moveAllItems(save, location)).toEqual({ moved: 0, remaining: 2 });
+    expect(save.items.map((item) => item.id)).toEqual(identities);
+  });
+
+  it.each(['normal', 'nightmare', 'hell', 'torment'] as const)('credits a %s boss soulstone directly with full bags, once per credited report', (difficulty) => {
+    const ctx = context();
+    const save = freshSave(ctx);
+    save.items.push(...Array.from({ length: inventorySlots(save.account.runes) }, () => looseItem(ctx, 'inventory')));
+    save.account.chests = Array.from({ length: 34 }, (_, i) => ({ id: `waiting-${i}`, tier: 'red', difficulty, act: 5, level: 50 }));
+    const input = { reportId: `boss-${difficulty}`, elapsedMs: 60_000, position: positionAt(difficulty, 49), wave: 0, xp: {}, gold: 0, kills: { 'outage-kraken': 1 }, chests: [], bosses: [{ difficulty, act: 5, monsterId: 'outage-kraken' as const }], stages: [] };
+    applyReport(save, input, ctx);
+    expect(save.account.soulstones[difficulty]).toBe(1);
+    expect(applyReport(save, input, ctx).duplicate).toBe(true);
+    expect(save.account.soulstones[difficulty]).toBe(1);
+    expect(autoOpenChests(save, ctx)).toEqual([]);
+    moveAllItems(save, 'stash');
+    save.account.firstBossClears = [`${difficulty}:5`];
+    expect(openChests(save, ctx, { tier: 'red', limit: 1 })[0].chestId).toBe('waiting-0');
+    expect(save.account.chests).toHaveLength(33);
   });
 });

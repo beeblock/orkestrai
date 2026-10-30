@@ -72,6 +72,17 @@ export type ChestContents = {
   coins: number;
 };
 
+function chestItemCount(context: Pick<ChestContext, 'tier' | 'difficulty' | 'bonusItems'>): number {
+  return ITEMS_PER_CHEST[context.tier]
+    + (context.tier === 'red' && (context.difficulty === 'hell' || context.difficulty === 'torment') ? 1 : 0)
+    + (context.bonusItems ?? 0);
+}
+
+/** Reserve space for the largest possible loot, including the optional boss unique. */
+export function maxChestItems(context: Pick<ChestContext, 'tier' | 'difficulty' | 'bonusItems'>): number {
+  return chestItemCount(context) + (context.tier === 'red' ? 1 : 0);
+}
+
 /** Chance a red chest holds its act boss's unique (one of three), by difficulty. */
 export const UNIQUE_CHANCE: Record<Difficulty, number> = { normal: 0.06, nightmare: 0.09, hell: 0.12, torment: 0.16 };
 /** Chance a red chest on Hell or Torment holds one of the wandering uniques. */
@@ -114,9 +125,8 @@ function pickMaterial(rng: Rng, kinds: Array<'decoration' | 'engraving' | 'inscr
 
 export function openChest(rng: Rng, context: ChestContext): ChestContents {
   const contents: ChestContents = { items: [], gold: 0, materials: {}, elixirs: {}, soulstones: 0, coins: 0 };
-  const extra = (context.tier === 'red' && (context.difficulty === 'hell' || context.difficulty === 'torment') ? 1 : 0) + (context.bonusItems ?? 0);
   const itemLevel = () => Math.max(1, Math.min(MAX_REGION_LEVEL, context.level + Math.floor(rng() * 4) - 2));
-  for (let index = 0; index < ITEMS_PER_CHEST[context.tier] + extra; index += 1) {
+  for (let index = 0; index < chestItemCount(context); index += 1) {
     const rarity = rollRarity(rng, context.tier, context.magicFind, context.difficulty);
     const level = itemLevel();
     if (context.level >= SET_MIN_LEVEL && rng() < SET_CHANCE[context.tier]) {

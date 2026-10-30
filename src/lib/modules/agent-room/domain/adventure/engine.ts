@@ -12,7 +12,7 @@ import {
   canEquip, gemFusionCost, isGem, itemScore, materialKey,
   type GemQuality, type Item, type ItemData, type ItemLocation, type MaterialId, type Rng, type Slot,
 } from './items.js';
-import { BASE_CHEST_CAPACITY, CHEST_TIERS, openChest, type ChestTier } from './loot.js';
+import { BASE_CHEST_CAPACITY, CHEST_TIERS, maxChestItems, openChest, type ChestTier } from './loot.js';
 import { PETS, tamedPets, type PetId } from './pets.js';
 import { activeSlots, canBuyRune, formationSlots, inventorySlots, runeCost, runeRule, stashSlots } from './runes.js';
 import { autoAllocate, canRaise, learnedActives, sanitizeRanks } from './skills.js';
@@ -336,6 +336,33 @@ export function soulstoneFor(soulstones: Record<Difficulty, number>, difficulty:
   return DIFFICULTIES.slice(DIFFICULTIES.indexOf(difficulty)).find((candidate) => soulstones[candidate] > 0) ?? null;
 }
 
+/**
+ * Recover only the keys missing from the old saved backlog, once. Existing
+ * keys and first-free boss chests count first; harder keys are reserved for
+ * harder chests before they can be used on easier ones. The version and the
+ * credit are persisted by the same save transaction, including on retries.
+ */
+export function recoverBossChestKeys(account: AdventureAccount): void {
+  if (account.bossChestRecoveryVersion >= 1) return;
+  const first = new Set(account.firstBossClears);
+  const needed: Record<Difficulty, number> = { normal: 0, nightmare: 0, hell: 0, torment: 0 };
+  for (const chest of account.chests) {
+    if (chest.tier !== 'red' || !DIFFICULTIES.includes(chest.difficulty)) continue;
+    const boss = `${chest.difficulty}:${chest.act}`;
+    if (!first.has(boss)) first.add(boss);
+    else needed[chest.difficulty] += 1;
+  }
+  const available = { ...account.soulstones };
+  for (const difficulty of [...DIFFICULTIES].reverse()) {
+    for (let count = 0; count < needed[difficulty]; count += 1) {
+      const key = soulstoneFor(available, difficulty);
+      if (key) available[key] -= 1;
+      else account.soulstones[difficulty] += 1;
+    }
+  }
+  account.bossChestRecoveryVersion = 1;
+}
+
 /** A red chest after its boss's first stays closed until a soulstone can open it. */
 function awaitsSoulstone(account: AdventureAccount, chest: ChestEntry): boolean {
   return chest.tier === 'red' && account.firstBossClears.includes(`${chest.difficulty}:${chest.act}`) && !soulstoneFor(account.soulstones, chest.difficulty);
@@ -390,6 +417,9 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
   }
   for (const boss of report.bosses) {
     account.bosses += 1;
+    // Opening a chest must never be the only way to obtain its key. The
+    // credited kill pays directly, even when the bag/chest storage is full.
+    account.soulstones[boss.difficulty] += 1;
     journal(save, { at: ctx.now, kind: 'boss', difficulty: boss.difficulty, act: boss.act, monsterId: boss.monsterId });
   }
   for (const stage of report.stages) {
@@ -417,6 +447,15 @@ export function applyReport(save: AdventureSave, input: ReportInput, ctx: Engine
 /** Chests a save opens by itself at a time; the rest wait for the next look. */
 const AUTO_OPEN_BATCH = 6;
 
+function chestBonusItems(account: AdventureAccount, chest: ChestEntry): number {
+  return chest.tier === 'white' ? runeRule(account.runes, 'white-bonus')
+    : chest.tier === 'blue' ? runeRule(account.runes, 'blue-bonus') : 0;
+}
+
+function chestSlotsNeeded(account: AdventureAccount, chest: ChestEntry): number {
+  return maxChestItems({ ...chest, bonusItems: chestBonusItems(account, chest) });
+}
+
 /**
  * Chests open themselves as they arrive, unless the owner turned it off:
  * a few at a time while the inventory has room. A red chest after an act's
@@ -428,8 +467,9 @@ export function autoOpenChests(save: AdventureSave, ctx: EngineContext): OpenRes
   const account = save.account;
   const opened: OpenResult[] = [];
   for (const chest of [...account.chests]) {
-    if (opened.length >= AUTO_OPEN_BATCH || freeInventory(save) < 4) break;
+    if (opened.length >= AUTO_OPEN_BATCH) break;
     if (awaitsSoulstone(account, chest)) continue;
+    if (freeInventory(save) < chestSlotsNeeded(account, chest)) continue;
     opened.push(openChestEntry(save, ctx, chest));
   }
   settleLoot(save, ctx, opened);
@@ -524,7 +564,7 @@ function openChestEntry(save: AdventureSave, ctx: EngineContext, chest: ChestEnt
   const contents = openChest(ctx.rng, {
     tier: chest.tier, level: chest.level, difficulty: chest.difficulty, act: chest.act,
     magicFind: luck.magicFind, goldMultiplier: luck.goldMultiplier, partyClasses: partyClasses(save),
-    bonusItems: chest.tier === 'white' ? runeRule(account.runes, 'white-bonus') : chest.tier === 'blue' ? runeRule(account.runes, 'blue-bonus') : 0,
+    bonusItems: chestBonusItems(account, chest),
   });
   account.chests = account.chests.filter((entry) => entry.id !== chest.id);
   account.gold += contents.gold;
@@ -550,18 +590,20 @@ export function openChests(save: AdventureSave, ctx: EngineContext, options: { i
   const limit = options.limit ?? 20;
   const opened: OpenResult[] = [];
   let waiting = false;
+  let inventoryFull = false;
   for (const chest of wanted) {
     if (opened.length >= limit) break;
     if (awaitsSoulstone(save.account, chest)) {
       waiting = true;
       continue;
     }
-    if (freeInventory(save) < 4) {
-      if (!opened.length) fail('inventory-full');
-      break;
+    if (freeInventory(save) < chestSlotsNeeded(save.account, chest)) {
+      inventoryFull = true;
+      continue;
     }
     opened.push(openChestEntry(save, ctx, chest));
   }
+  if (!opened.length && inventoryFull) fail('inventory-full');
   if (!opened.length && waiting) fail('soulstone');
   settleLoot(save, ctx, opened);
   return opened;
@@ -717,6 +759,18 @@ export function moveItem(save: AdventureSave, itemId: string, location: 'invento
   if (location === 'stash' && stashCount(save) >= stashSlots(save.account.runes)) fail('stash-full');
   if (location === 'inventory' && freeInventory(save) <= 0) fail('inventory-full');
   item.location = location;
+}
+
+/** Move as many unworn items as fit, preserving overflow and every item's identity. */
+export function moveAllItems(save: AdventureSave, location: 'inventory' | 'stash'): { moved: number; remaining: number } {
+  const source = location === 'stash' ? 'inventory' : 'stash';
+  const items = save.items.filter((item) => item.location === source);
+  const available = location === 'stash'
+    ? Math.max(0, stashSlots(save.account.runes) - stashCount(save))
+    : Math.max(0, freeInventory(save));
+  const moved = Math.min(items.length, available);
+  for (const item of items.slice(0, moved)) item.location = location;
+  return { moved, remaining: items.length - moved };
 }
 
 function consumable(save: AdventureSave, itemIds: string[]): Item[] {

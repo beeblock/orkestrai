@@ -72,4 +72,10 @@ describe('orkestrai adventure', () => {
     expect(await run(['adventure', 'act', JSON.stringify(action)], capture().options)).toBe(0);
     expect(requests.at(-1)).toMatchObject({ body: { action, from: 'web' } });
   });
+
+  it.each(['stash', 'inventory'])('exposes bulk transfer to %s through the same bridge action', async (location) => {
+    const action = { type: 'move-all', location };
+    expect(await run(['adventure', 'act', JSON.stringify(action)], capture().options)).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ body: { action, from: 'web' } });
+  });
 });

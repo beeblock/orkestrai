@@ -10,10 +10,13 @@ pt-BR, English, and Spanish translations.
 ## 0.50.0 - 2026-10-30
 
 ### Added
+- Add atomic Adventure bag/stash bulk transfers in the Camp and the native CLI/MCP, preserving capacity, overflow, locks and equipped gear.
 - Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
 
 ### Fixed
 - Contain socket and WebSocket errors to the failed collaboration/model-access relay connection, cleaning up the peer without interrupting other rooms.
+- Restart an advancing Adventure party from Torment 1-1 after its final boss instead of looping that boss; preserve experience and clears, and explain that hero Paragon begins at level 100.
+- Grant a soulstone directly for each credited act-boss kill, including with full bags or chest storage, so repeat boss chests no longer depend solely on random chest drops for their keys. Report retries never duplicate the reward. Recover the missing keys for already-saved boss chests exactly once on upgrade, accounting for existing keys and first-free chests. Reserve bag space for each chest's maximum loot, including a possible fifth item from a Torment boss, while allowing smaller chests to use remaining slots.
 - Include source excerpts only when bounded file reads match their indexed hashes, so committed graph reads cannot attach changed source to old line references.
 - Keep graph scans, parsing, persistence, semantic indexing and historical comparisons off the Core event loop and outside the conversation database. Interactive graph reads retain a committed snapshot during background refreshes.
 - Avoid retagging every unchanged row or rebuilding an unchanged stale index; rank scoped FTS candidates before metadata joins, process semantic symbols in bounded pages, and reuse content-addressed history chunks.

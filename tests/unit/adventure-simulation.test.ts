@@ -100,6 +100,22 @@ describe('adventure battle', () => {
     expect(actions.has('anthem')).toBe(true);
   });
 
+  it.each([true, false])('handles a previously cleared Torment finale with autoAdvance=%s', (autoAdvance) => {
+    const state = createAdventure({ position: positionAt('torment', 49), rules: { autoAdvance, cleared: 49 } }, 52);
+    const members = party(['knight', 'ranger', 'cleric', 'maestro'], 100, 'mythic');
+    const events: AdventureEvent[] = [];
+    for (let elapsed = 0; elapsed < 240_000; elapsed += 100) {
+      events.push(...stepAdventure(state, members, 100));
+      if (events.some((event) => event.type === 'stage-clear')) break;
+    }
+    expect(events.some((event) => event.type === 'stage-clear')).toBe(true);
+    expect(state.position).toEqual(positionAt('torment', autoAdvance ? 0 : 49));
+    expect(events.filter((event) => event.type === 'torment-complete')).toEqual(autoAdvance ? [{ type: 'torment-complete', travelling: true }] : []);
+    const report = drainReport(state);
+    expect(Object.values(report.xp).some((xp) => xp > 0)).toBe(true);
+    expect(report.stages[0]).toMatchObject({ difficulty: 'torment', act: 5, stage: 10, result: 'clear' });
+  });
+
   it('lets every working hero of a large party fight, the knight included', () => {
     const members = party(['knight', 'artificer', 'ranger', 'sorceress', 'cleric', 'maestro'], 5, 'uncommon');
     const state = createAdventure({}, 7);
