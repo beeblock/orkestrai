@@ -92,8 +92,19 @@ intact, while a smaller chest can still use the remaining room.
   that separately; both new relay regressions failed before the fix and pass after,
   along with the received-access tests. No unexpected socket errors are suppressed
   by the test runner.
-- Production-browser checks, final desktop build and the updated RPG preview
-  installation are pending. They must pass before declaring the work ready.
+- Final production build passed, including the Computer host and desktop message
+  bundles. The initial ordinary build was stopped by the 4 GiB free-space guard;
+  after additional cache cleanup, the same production Vite configuration completed
+  with `--optimize-for-size --heap-growing-percent=10` and the existing 12 GiB
+  ceiling, followed by the normal postbuild lifecycle. No application setting or
+  runtime memory limit was changed.
+- Final focused checks: 220 passed. Production Playwright: 3 passed without
+  retries, covering bulk transfer despite filters and the strip's two HUD modes.
+  Light/dark inspection changes the actual `appTheme` setting and asserts different
+  Camp color tokens, avoiding a false theme test based only on the `dark` class.
+  Both captures were reviewed at 1024 px; controls and help text fit and are legible.
+- The updated RPG preview installation is pending. Its signed bundle and healthy
+  Core must be verified before declaring the delivery complete.
 
 ## Disk hygiene
 

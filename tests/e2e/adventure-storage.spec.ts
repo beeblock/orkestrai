@@ -54,14 +54,20 @@ test('Camp transfers the complete bag and stash despite filters, with controls t
     expect(withdrawn.items.filter((item: { location: string }) => item.location === 'inventory').map((item: { id: string }) => item.id).sort()).toEqual(items.map((item: { id: string }) => item.id).sort());
     await page.getByRole('radio', { name: /^Bag / }).click();
     await page.getByLabel('Filter by rarity').selectOption('');
+    const backgrounds: string[] = [];
     for (const theme of ['light', 'dark']) {
-      await page.evaluate(theme => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
+      expect((await request.put('/api/agent-room/settings', { data: { ...original, uiLanguage: 'en', appTheme: `orkestrai-${theme}` } })).ok()).toBe(true);
+      await page.reload();
+      await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${theme}\\b`));
+      await move.scrollIntoViewIfNeeded();
       await expect(move).toBeInViewport();
+      backgrounds.push(await page.locator('.camp').evaluate(element => getComputedStyle(element).getPropertyValue('--camp-bg').trim()));
       const box = await move.boundingBox();
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(1024);
       await page.screenshot({ path: testInfo.outputPath(`adventure-storage-${theme}.png`), fullPage: true, animations: 'disabled' });
     }
+    expect(new Set(backgrounds).size).toBe(2);
     expect(errors).toEqual([]);
   } finally {
     if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
