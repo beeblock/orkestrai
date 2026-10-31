@@ -2,11 +2,12 @@
 // All databases, bridge discovery, provider homes and shims stay temporary.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:net';
+import { createInterface } from 'node:readline';
 import assert from 'node:assert/strict';
 import { reportedGroupsDDL } from './reported-workspace-schema.mjs';
 import { verifyForgeSignatureValidation } from './forge-signature-validation.mjs';
@@ -38,10 +39,13 @@ async function stopChild() {
   await stopped;
   clearTimeout(timer);
 }
+process.once('SIGTERM', () => { void stopChild().finally(() => process.exit(143)); });
 
 try {
   await mkdir(homeRoot);
   await mkdir(projectRoot);
+  await writeFile(join(projectRoot, 'helpers.ts'), 'export function greeting(name: string) { return name.toUpperCase(); }\n');
+  await writeFile(join(projectRoot, 'index.ts'), "import { greeting } from './helpers'; export function run() { return greeting('QA'); }\n");
   configure();
   const directory = join(appRoot, 'src/lib/database/migrations');
   const entries = [];
@@ -78,7 +82,7 @@ try {
   for (const stream of [child.stdout, child.stderr]) stream.on('data', (chunk) => { output = (output + String(chunk)).slice(-16_384); });
   // The steps the desktop waits through instead of stopping a slow preparation.
   const phases = [];
-  child.stdout.on('data', (chunk) => { for (const line of String(chunk).split(/\r?\n/)) { const phase = parseStartupPhase(line); if (phase) phases.push(phase); } });
+  createInterface({ input: child.stdout, crlfDelay: Infinity }).on('line', line => { const phase = parseStartupPhase(line); if (phase) phases.push(phase); });
   const started = Date.now();
   let health;
   while (Date.now() - started < 45_000) {
@@ -90,9 +94,24 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert.equal(health?.data?.status, 'ok', `Packaged startup failed: ${output}`);
+  const progressDeadline = Date.now() + 2_000;
+  while (phases.at(-1) !== 'prepared' && Date.now() < progressDeadline) await new Promise(done => setTimeout(done, 10));
   // Schema migration and isolated graph preparation are separate slow steps.
   // The desktop intentionally keeps the same "migrating" phase for both.
   assert.deepEqual(phases, ['backup', 'migrating', 'migrating', 'prepared']);
+  // Exercise the actual scanner, packaged grammar WASM, analysis/storage workers
+  // and FTS query. A healthy HTTP server alone cannot prove graph availability.
+  const graphUrl = `http://127.0.0.1:${port}/api/agent-room/workspaces/01900000-0000-7000-8000-000000000002/code-graph`;
+  const indexedResponse = await fetch(graphUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ force: true }), signal: AbortSignal.timeout(60_000) });
+  const indexed = await indexedResponse.json();
+  assert.equal(indexedResponse.ok, true, `Packaged code indexing failed: ${JSON.stringify(indexed)} ${output}`);
+  assert.ok(indexed.data.stats.files >= 2);
+  assert.ok(indexed.data.stats.symbols >= 2);
+  assert.ok(indexed.data.projects.every(project => project.status === 'ready'));
+  const searchResponse = await fetch(`${graphUrl}/search?q=greeting`, { signal: AbortSignal.timeout(10_000) });
+  const search = await searchResponse.json();
+  assert.equal(searchResponse.ok, true);
+  assert.ok(search.data.some(symbol => symbol.name === 'greeting'), 'Packaged graph must return the indexed function');
   await stopChild();
   configure();
   assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);
@@ -106,7 +125,7 @@ try {
   try {
     assert.equal(graph.pragma('quick_check', { simple: true }), 'ok');
     assert.equal(graph.prepare('SELECT COUNT(*) AS count FROM __orkestrai_graph_storage').get().count, 1);
-    assert.equal(graph.prepare('SELECT COUNT(*) AS count FROM agent_code_graph_projects').get().count, 0);
+    assert.equal(graph.prepare('SELECT COUNT(*) AS count FROM agent_code_graph_projects').get().count, 1);
   } finally { graph.close(); }
   const backup = new Database(join(scratch, backupFile), { readonly: true });
   try {
@@ -114,7 +133,7 @@ try {
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
   } finally { backup.close(); }
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', packagedCodeGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
 } finally {
   await stopChild();
   await Connection.disconnect();

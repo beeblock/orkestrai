@@ -290,7 +290,13 @@ describe('packaged updater', () => {
     expect(workflow).toContain('unzip -tq');
     expect(workflow).toContain('Verify signed packaged startup with the reported legacy schema');
     expect(workflow).toContain("if: matrix.arch == 'x64'");
-    expect(workflow).toContain('--conditions=import tests/fixtures/packaged-startup-upgrade.mjs');
+    expect(workflow).toContain('node scripts/run-packaged-startup-smoke.mjs release/mac/Orkestrai.app/Contents/MacOS/Orkestrai');
+    const startupRunner = readFileSync(path.resolve('scripts/run-packaged-startup-smoke.mjs'), 'utf8');
+    expect(startupRunner).toContain("'--conditions=import'");
+    expect(startupRunner).toContain('tests/fixtures/packaged-startup-upgrade.mjs');
+    expect(workflow).toContain('Verify packaged Windows startup and code graph');
+    expect(workflow).toContain('Verify packaged Linux startup and code graph');
+    expect(workflow).toContain('node scripts/validate-ripgrep-runtime.mjs');
     expect(workflow.indexOf('Verify signed packaged startup with the reported legacy schema')).toBeLessThan(workflow.indexOf('name: Upload macOS artifacts'));
     expect(workflow).toContain('Require successful CI for tagged commit');
     expect(workflow).toContain('actions/workflows/ci.yml/runs');

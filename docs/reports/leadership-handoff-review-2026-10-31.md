@@ -108,3 +108,15 @@ fixture now requires both migration stages and verifies the prepared graph
 database alongside preserved workspace/group rows and the legacy backup. CI
 executes this same upgrade fixture against the production build before browser
 tests and packaging; the signed packaged check remains mandatory.
+
+
+Post-install validation also found a missing ARM64 ripgrep optional package in
+the Intel-built Apple Silicon artifact. The target package is now provisioned
+from the exact lockfile version, official registry URL and SHA-512. Archives and
+entries are bounded, only runtime files are extracted, target metadata and binary
+headers are verified before copying, and executable resolution/scanning is tested
+inside every native package. Intel hosts verify ARM structure; the Apple Silicon
+hardware job executes both code search and the full packaged graph fixture.
+The upgrade fixture now indexes two TypeScript files and queries a real symbol
+through the HTTP API, exercising scanner, grammar WASM and analysis/storage
+workers instead of inferring graph readiness from server health alone.

@@ -16,6 +16,7 @@ pt-BR, English, and Spanish translations.
 - Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
 
 ### Fixed
+- Include the verified target-specific ripgrep executable in every package, including Apple Silicon builds produced on Intel hosts. Check native executable resolution and real packaged TypeScript indexing/search before publication.
 - Avoid an empty context handoff and a redundant model turn when creating the first leader; keep the existing fresh-launch contract.
 - Update Joi, follow-redirects, Minimatch and modern Glob to patched releases while preserving the legacy CommonJS matcher contract used by the packaging stack. Verify the compatibility patch by exact source hashes and real glob/archive regressions; keep the complete moderate-severity dependency audit unchanged.
 - Keep recorded inbox answers and durable reply forwarding intact when a delayed dispatcher receipt arrives; serialize each state transition and ignore receipts after a reply.

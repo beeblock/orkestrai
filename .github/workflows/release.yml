@@ -235,8 +235,10 @@ jobs:
           test -f "$APP_DIR/Contents/Resources/app/build/desktop-messages/index.cjs"
           test -f "$APP_DIR/Contents/Resources/app/scripts/run-startup-migrations.mjs"
           node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app" darwin "$TARGET_ARCH" --structure-only
+          node scripts/validate-ripgrep-runtime.mjs "$APP_DIR/Contents/Resources/app" darwin "$TARGET_ARCH" --structure-only
           if [[ "$TARGET_ARCH" == "x64" ]]; then
             node scripts/validate-voice-runtime.mjs "$APP_DIR/Contents/Resources/app"
+            node scripts/validate-ripgrep-runtime.mjs "$APP_DIR/Contents/Resources/app"
           fi
           node tests/fixtures/zod-size-validation.mjs "$APP_DIR/Contents/Resources/app"
           verify_trusted_app "$APP_DIR"
@@ -246,11 +248,10 @@ jobs:
 
       - name: Verify signed packaged startup with the reported legacy schema
         # Both packaging runners are Intel. Only execute their native target;
-        # Apple Silicon voice is executed by verify-macos-arm64-voice below.
+        # Apple Silicon voice and graph are executed on native hardware below.
         if: matrix.arch == 'x64'
         run: |
-          ELECTRON_RUN_AS_NODE=1 release/mac/Orkestrai.app/Contents/MacOS/Orkestrai \
-            --conditions=import tests/fixtures/packaged-startup-upgrade.mjs \
+          node scripts/run-packaged-startup-smoke.mjs release/mac/Orkestrai.app/Contents/MacOS/Orkestrai \
             release/mac/Orkestrai.app/Contents/Resources/app
 
       - name: Upload macOS artifacts
@@ -300,6 +301,10 @@ jobs:
           ditto -x -k "release/Orkestrai-$PACKAGE_VERSION-arm64-mac.zip" "$VOICE_QA_DIR"
           codesign --verify --deep --strict "$VOICE_QA_DIR/Orkestrai.app"
           env -u NODE_PATH -u ELECTRON_RUN_AS_NODE node scripts/validate-voice-runtime.mjs \
+            "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
+          env -u NODE_PATH -u ELECTRON_RUN_AS_NODE node scripts/validate-ripgrep-runtime.mjs \
+            "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
+          node scripts/run-packaged-startup-smoke.mjs "$VOICE_QA_DIR/Orkestrai.app/Contents/MacOS/Orkestrai" \
             "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
           node tests/fixtures/zod-size-validation.mjs "$VOICE_QA_DIR/Orkestrai.app/Contents/Resources/app"
 
@@ -375,7 +380,11 @@ jobs:
       - name: Verify packaged native voice
         run: |
           node scripts/validate-voice-runtime.mjs release/win-unpacked/resources/app
+          node scripts/validate-ripgrep-runtime.mjs release/win-unpacked/resources/app
           node tests/fixtures/zod-size-validation.mjs release/win-unpacked/resources/app
+
+      - name: Verify packaged Windows startup and code graph
+        run: node scripts/run-packaged-startup-smoke.mjs release/win-unpacked/Orkestrai.exe release/win-unpacked/resources/app
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -440,7 +449,7 @@ jobs:
         run: node scripts/production-bundle.mjs verify build "${{ needs.validate.outputs.source_sha }}"
 
       - name: Install RPM build tools
-        run: sudo apt-get update && sudo apt-get install -y rpm
+        run: sudo apt-get update && sudo apt-get install -y rpm libgtk-3-0t64 libnss3 libasound2t64 libgbm1
 
       - name: Package Linux installers
         run: npx electron-builder --linux AppImage rpm --x64 --publish never
@@ -451,7 +460,11 @@ jobs:
       - name: Verify packaged native voice
         run: |
           node scripts/validate-voice-runtime.mjs release/linux-unpacked/resources/app
+          node scripts/validate-ripgrep-runtime.mjs release/linux-unpacked/resources/app
           node tests/fixtures/zod-size-validation.mjs release/linux-unpacked/resources/app
+
+      - name: Verify packaged Linux startup and code graph
+        run: node scripts/run-packaged-startup-smoke.mjs release/linux-unpacked/orkestrai release/linux-unpacked/resources/app
 
       - name: Verify RPM does not claim shared build-id paths
         shell: bash
