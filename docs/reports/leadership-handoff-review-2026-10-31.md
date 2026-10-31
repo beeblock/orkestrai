@@ -88,3 +88,16 @@ these local unit counts.
 
 The GitHub issue #73 fix is included separately. That issue remains open until
 the installers are publicly released and validated.
+
+## Browser contract follow-up
+
+The previous full browser run exposed an obsolete checkbox assertion in the
+agent-creation test after role selection became an exclusive segmented control.
+The test now checks the default primary, specialist switching and disabled deputy
+without an existing primary, before verifying the saved primary and model.
+The terminal clipboard scenario uses rendered glyph coordinates for actual
+pointer selection instead of force-clicking replaceable xterm decoration spans.
+Clipboard and paste assertions remain mandatory. CI executes these scenarios and
+the new leadership/review scenario before the full browser suite, retaining
+failure artifacts from either stage. This is a fail-fast check, not a replacement
+for the complete release gate.

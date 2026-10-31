@@ -216,16 +216,39 @@ test.describe('terminais PTY', () => {
       await input.focus();
       await page.keyboard.type(`echo ${marker}`);
       await page.keyboard.press('Enter');
-      const output = terminal.locator('.xterm-rows span').filter({ hasText: marker }).last();
-      await expect(output).toBeVisible({ timeout: 10_000 });
+      await expect(terminal.locator('.xterm-rows')).toContainText(marker, { timeout: 10_000 });
+      // Select the rendered glyphs, not a decoration span that xterm can replace
+      // or hide while the selection is updated. Keep actual pointer routing.
+      const outputPoint = async () => {
+        const point = await terminal.locator('.xterm-rows').evaluate((rows, word) => {
+          const walker = document.createTreeWalker(rows, NodeFilter.SHOW_TEXT);
+          let result: { x: number; y: number } | null = null;
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const start = node.textContent?.indexOf(word) ?? -1;
+            if (start < 0) continue;
+            const range = document.createRange();
+            range.setStart(node, start);
+            range.setEnd(node, start + word.length);
+            const rect = range.getBoundingClientRect();
+            const x = rect.x + rect.width / 2;
+            const y = rect.y + rect.height / 2;
+            if (rect.width > 0 && rect.height > 0 && x > 0 && y > 0 && x < innerWidth && y < innerHeight) result = { x, y };
+          }
+          return result;
+        }, marker);
+        if (!point) throw new Error('Copy marker has no visible rendered glyphs');
+        return point;
+      };
 
-      await output.dblclick({ force: true });
+      let point = await outputPoint();
+      await page.mouse.dblclick(point.x, point.y);
       await page.keyboard.press(process.platform === 'darwin' ? 'Meta+C' : 'Control+C');
       await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(marker);
 
       await page.evaluate(() => navigator.clipboard.writeText(''));
-      await output.dblclick({ force: true });
-      await output.click({ button: 'right', force: true });
+      point = await outputPoint();
+      await page.mouse.dblclick(point.x, point.y);
+      await page.mouse.click(point.x, point.y, { button: 'right' });
       await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(marker);
 
       const pasteMarker = `ORKESTRAI_PASTE_${runId}`;

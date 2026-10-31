@@ -26,7 +26,7 @@ test.describe('dialogo de criacao de agente', () => {
     await expect(dialog).toContainText('Novo agente — Claude');
     await expect(page.locator('.canvas-terminal')).toHaveCount(0);
 
-    // Nome + modelo + esforco. Lider: o checkbox JA vem marcado por padrao
+    // Nome + modelo + esforco. Lider: o papel JA vem marcado por padrao
     // (primeiro agente do workspace = lider, fluxo zero-config) — so confere.
     await dialog.locator('input').first().fill('Arquiteto');
     // When several CLIs are installed the CLI picker comes first; the model and effort follow it.
@@ -40,7 +40,14 @@ test.describe('dialogo de criacao de agente', () => {
       await effortTrigger.click();
       await page.locator('[role="option"]').nth(1).click();
     }
-    await expect(dialog.locator('[role="checkbox"]')).toHaveAttribute('data-state', 'checked');
+    const roles = dialog.getByRole('radiogroup', { name: 'Papel na equipe', exact: true });
+    await expect(roles.getByRole('radio', { name: 'Líder', exact: true })).toBeChecked();
+    await expect(roles.getByRole('radio', { name: 'Especialista', exact: true })).not.toBeChecked();
+    await expect(roles.getByRole('radio', { name: 'Sublíder', exact: true })).toBeDisabled();
+    await roles.getByRole('radio', { name: 'Especialista', exact: true }).click();
+    await expect(roles.getByRole('radio', { name: 'Especialista', exact: true })).toBeChecked();
+    await roles.getByRole('radio', { name: 'Líder', exact: true }).click();
+    await expect(roles.getByRole('radio', { name: 'Líder', exact: true })).toBeChecked();
     const createAgent = dialog.getByRole('button', { name: 'Criar agente' });
     await expect(createAgent).toBeEnabled();
     await createAgent.click();

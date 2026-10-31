@@ -125,6 +125,11 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      - name: Verify leadership and terminal interactions
+        id: interaction_tests
+        timeout-minutes: 5
+        run: npm run test:e2e -- tests/e2e/agent-create.spec.ts tests/e2e/workspace-leadership.spec.ts tests/e2e/terminal.spec.ts --grep 'desenhar terminal|transfers leadership|copia a selecao' --reporter=line,github --max-failures=1
+
       - name: Run end-to-end tests
         id: browser_tests
         timeout-minutes: 45
@@ -146,7 +151,7 @@ jobs:
           include-hidden-files: true
 
       - name: Upload Playwright failure artifacts
-        if: always() && steps.browser_tests.outcome != 'success' && steps.browser_tests.outcome != 'skipped'
+        if: always() && (steps.interaction_tests.outcome == 'failure' || (steps.browser_tests.outcome != 'success' && steps.browser_tests.outcome != 'skipped'))
         uses: actions/upload-artifact@v7
         with:
           name: playwright-failures-${{ github.sha }}
