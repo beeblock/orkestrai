@@ -14,6 +14,7 @@ pt-BR, English, and Spanish translations.
 - Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
 
 ### Fixed
+- Preserve unsent Canvas prompt text per workspace across view changes and reloads in the current tab. Browser Back closes a focused Design before leaving the board, keeping the team visible. Delayed send acknowledgements do not clear newer drafts or another workspace.
 - Contain socket and WebSocket errors to the failed collaboration/model-access relay connection, cleaning up the peer without interrupting other rooms.
 - Restart an advancing Adventure party from Torment 1-1 after its final boss instead of looping that boss; preserve experience and clears, and explain that hero Paragon begins at level 100.
 - Grant a soulstone directly for each credited act-boss kill, including with full bags or chest storage, so repeat boss chests no longer depend solely on random chest drops for their keys. Report retries never duplicate the reward. Recover the missing keys for already-saved boss chests exactly once on upgrade, accounting for existing keys and first-free chests. Reserve bag space for each chest's maximum loot, including a possible fifth item from a Torment boss, while allowing smaller chests to use remaining slots.

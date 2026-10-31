@@ -49,6 +49,12 @@ Managed startup is submitted once per live PTY, including off-screen nodes, and 
 proof that the server is healthy. Explicit pauses and external OS consent remain
 separate. Confirmed Codex terminal `/model` choices survive cold resume and reload.
 
+The Canvas message bar keeps unsent text per workspace in this tab across view
+changes and reloads. Browser Back closes a focused Design first, keeping the team
+on its board. Workspaces save their nodes automatically; no manual Save is needed.
+Draft text is bounded local session data and is never sent until you press Send.
+Unsent attachment cleanup keeps its existing ownership rules.
+
 Dense-canvas navigation retains nodes and drafts while temporarily deferring
 unfocused node body and secondary header paint until viewport motion settles.
 Overview zoom defers unreadable terminal paint, not the live PTY or its output.

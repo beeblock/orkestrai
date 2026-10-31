@@ -2,7 +2,8 @@
   import { applyEdgeActivity } from '$lib/components/agent-room/canvas/edge-activity.js';
   import { AUDIO_WORKFLOW_DRAFT } from '$lib/modules/creative-media/domain/audio-workflow.js';
   import { onMount, setContext, tick, untrack } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { goto, pushState } from '$app/navigation';
+  import { page } from '$app/state';
   import { toast } from '@beeblock/svelar/ui';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import {
@@ -639,6 +640,23 @@
   let importingImages = $state(false);
   let errorMessage = $state('');
   let designModeNodeId = $state<string | null>(null);
+  type CanvasHistoryState = { canvasDesign?: { workspaceId: string; nodeId: string } };
+  let designHistoryOwned = false;
+  // Native/browser Back dismisses the focused editor before leaving the board.
+  // A shallow history entry keeps the existing graph and composer mounted.
+  $effect(() => {
+    const focusedDesign = (page.state as CanvasHistoryState).canvasDesign;
+    untrack(() => {
+      if (focusedDesign && focusedDesign.workspaceId === activeWorkspace?.id
+        && nodes.some((node) => node.id === focusedDesign.nodeId && node.type === 'design')) {
+        blurActiveElement();
+        designModeNodeId = focusedDesign.nodeId;
+      } else if (designHistoryOwned) {
+        blurActiveElement();
+        designModeNodeId = null;
+      }
+    });
+  });
 
   function blurActiveElement() {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
@@ -646,14 +664,19 @@
     }
   }
 
-  function openDesignMode(nodeId: string) {
+  function openDesignMode(nodeId: string, recordHistory = true) {
     blurActiveElement();
     designModeNodeId = nodeId;
+    if (recordHistory && activeWorkspace && (page.state as CanvasHistoryState).canvasDesign?.nodeId !== nodeId) {
+      designHistoryOwned = true;
+      pushState('', { ...page.state, canvasDesign: { workspaceId: activeWorkspace.id, nodeId } });
+    }
   }
 
   function closeDesignMode() {
     blurActiveElement();
     designModeNodeId = null;
+    if (designHistoryOwned && (page.state as CanvasHistoryState).canvasDesign) history.back();
   }
   let designRevisions = $state<Record<string, number>>({});
   let permissionWorkspace = $state<Workspace | null>(null);
@@ -1453,7 +1476,7 @@
             await tick();
             const requestedNode = nodes.find((node) => node.id === requestedNodeId);
             if (requestedNode?.type === 'design' && params.get('design') === '1') {
-              openDesignMode(requestedNodeId);
+              openDesignMode(requestedNodeId, false);
             }
             requestAnimationFrame(() => requestAnimationFrame(() => (
               requestedNode?.type === 'device'

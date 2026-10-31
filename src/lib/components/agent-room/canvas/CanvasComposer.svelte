@@ -41,6 +41,7 @@
   import AttachmentList from '../AttachmentList.svelte';
   import ComposerAttachButton from '../ComposerAttachButton.svelte';
   import { ComposerAttachments } from '../composer-attachments.svelte.js';
+  import { canvasComposerDraft } from './canvas-composer-draft-state.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
   let {
@@ -101,7 +102,7 @@
   }
 
   async function onVoiceTranscript(text: string, mode: 'send' | 'edit') {
-    draft = draft.trim() ? `${draft.trimEnd()} ${text}` : text;
+    prompt.text = prompt.text.trim() ? `${prompt.text.trimEnd()} ${text}` : text;
     if (mode === 'edit') {
       requestAnimationFrame(() => {
         onInput();
@@ -161,7 +162,7 @@
             lastSent = { ...sent, state: 'delivered' };
             settleDelivered();
           }
-        } else if (sending) deliveredEarly.add(message.id);
+        } else if (prompt.sending) deliveredEarly.add(message.id);
         return;
       }
       if (sent && message.authorKind === 'agent' && message.authorNodeId === sent.nodeId && channel === `dm:${sent.nodeId}` && message.createdAt >= sent.at) {
@@ -194,8 +195,26 @@
     return () => window.removeEventListener('orkestrai:channel-message', onMessage);
   });
 
-  let draft = $state('');
-  let sending = $state(false);
+  function draftStorage(): Storage | null {
+    try { return sessionStorage; } catch { return null; }
+  }
+  const prompt = $derived(canvasComposerDraft(workspaceId, draftStorage()));
+  $effect(() => {
+    const owner = prompt;
+    return () => owner.save(draftStorage());
+  });
+  $effect(() => {
+    const owner = prompt;
+    void owner.text; // Save only after typing settles, and flush synchronously when leaving.
+    const timer = setTimeout(() => owner.save(draftStorage()), 200);
+    return () => clearTimeout(timer);
+  });
+  onMount(() => {
+    const save = () => prompt.save(draftStorage());
+    window.addEventListener('pagehide', save);
+    return () => window.removeEventListener('pagehide', save);
+  });
+
   let feedback = $state<{ ok: boolean; text: string } | null>(null);
   let mentionOpen = $state(false);
   let mentionFilter = $state('');
@@ -217,7 +236,7 @@
 
   // Reads the field itself, so a typed @ opens mentions whatever order the binding updates in.
   function onInput() {
-    const match = (input?.value ?? draft).match(/@([\p{L}\p{N} ._-]*)$/u);
+    const match = (input?.value ?? prompt.text).match(/@([\p{L}\p{N} ._-]*)$/u);
     mentionOpen = Boolean(match);
     mentionFilter = match?.[1] ?? '';
     if (input) {
@@ -227,9 +246,9 @@
   }
 
   function insertMention(mention: ComposerMention) {
-    draft = /@([\p{L}\p{N} ._-]*)$/u.test(draft)
-      ? draft.replace(/@([\p{L}\p{N} ._-]*)$/u, `@${mention.title} `)
-      : `${draft}${draft && !draft.endsWith(' ') ? ' ' : ''}@${mention.title} `;
+    prompt.text = /@([\p{L}\p{N} ._-]*)$/u.test(prompt.text)
+      ? prompt.text.replace(/@([\p{L}\p{N} ._-]*)$/u, `@${mention.title} `)
+      : `${prompt.text}${prompt.text && !prompt.text.endsWith(' ') ? ' ' : ''}@${mention.title} `;
     mentionOpen = false;
     input?.focus();
   }
@@ -241,30 +260,34 @@
   }
 
   async function send() {
-    const text = draft.trim();
-    if ((!text && !staged.items.length) || sending || staged.busy) return;
+    const owner = prompt;
+    const submitted = owner.capture();
+    const text = submitted.text;
+    if ((!text && !staged.items.length) || owner.sending || staged.busy) return;
     // Board commands are plain sentences; a message with files always goes to the agent.
     if (!staged.items.length && onCommand && await onCommand(text)) {
-      if (draft.trim() === text) draft = '';
+      owner.accept(submitted, draftStorage());
       onInput();
       showFeedback(true, m['composer.command_done']());
       return;
     }
+    if (prompt !== owner) return;
     if (!target) return;
     const recipient = target;
     const at = new Date().toISOString();
     const submission = staged.reserve();
-    sending = true;
-    const sent = await sendToAgent(workspaceId, recipient.id, text, submission.attachments);
-    sending = false;
+    owner.sending = true;
+    const sent = await sendToAgent(owner.workspaceId, recipient.id, text, submission.attachments);
+    owner.sending = false;
     // Stored, the message owns its files and text; only a message never stored stays a draft.
     if (sent.messageId) {
       submission.commit();
-      if (draft.trim() === text) draft = '';
+      owner.accept(submitted, draftStorage());
       onInput();
     } else {
       submission.release();
     }
+    if (prompt !== owner) return;
     if (sent.messageId && sent.delivered) trackSent(sent.messageId, recipient.id, recipient.title, text || submission.attachments.map((attachment) => attachment.name).join(', '), at);
     else showFeedback(false, m['composer.failed']({ name: recipient.title }));
   }
@@ -351,7 +374,7 @@
     <textarea
       id="canvas-composer-input"
       bind:this={input}
-      bind:value={draft}
+      bind:value={prompt.text}
       rows="1"
       disabled={!target && !onCommand}
       placeholder={target ? m['composer.placeholder']() : onCommand ? m['composer.placeholder_board']() : m['composer.no_agents']()}
@@ -362,13 +385,13 @@
     ></textarea>
     <ComposerAttachButton attachments={staged} class="icon attach" disabled={!target} />
     <button type="button" class="icon" disabled={!target} onclick={() => (threadOpen = !threadOpen)} aria-pressed={threadOpen} aria-label={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })} title={threadOpen ? m['composer.thread_close']() : m['composer.thread_open']({ name: target?.title ?? '' })}><ChevronUp size={16} class={threadOpen ? 'rotate-180 transition-transform' : 'transition-transform'} /></button>
-    <button type="button" class="icon" disabled={!target} onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()}><AtSign size={16} /></button>
+    <button type="button" class="icon" disabled={!target} onclick={() => { prompt.text = `${prompt.text}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()}><AtSign size={16} /></button>
     <button type="button" class="icon" class:on={speakReplies} disabled={!target} onclick={toggleSpeakReplies} aria-pressed={speakReplies} aria-label={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()} title={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()}>
       {#if speakReplies}<Volume2 size={16} />{:else}<VolumeX size={16} />{/if}
     </button>
-    {#if draft.trim() || staged.items.length || sending}
-      <button type="button" class="send" disabled={(!target && !onCommand) || (!draft.trim() && !staged.items.length) || sending || staged.busy} onclick={() => void send()} aria-label={m['composer.send']()}>
-        {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+    {#if prompt.text.trim() || staged.items.length || prompt.sending}
+      <button type="button" class="send" disabled={(!target && !onCommand) || (!prompt.text.trim() && !staged.items.length) || prompt.sending || staged.busy} onclick={() => void send()} aria-label={m['composer.send']()}>
+        {#if prompt.sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
       </button>
     {:else}
       <button type="button" class="send mic" disabled={!target && !onCommand} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="composer-mic">
