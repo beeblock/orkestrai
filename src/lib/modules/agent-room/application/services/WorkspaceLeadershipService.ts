@@ -120,7 +120,7 @@ export class WorkspaceLeadershipService {
     };
   }
 
-  private async applyConfiguration(workspaceId: string, input: ConfigurationInput, actor: LeadershipActor, context: HandoffContext | null, releases: Array<() => void>) {
+  private async applyConfiguration(workspaceId: string, input: ConfigurationInput, actor: LeadershipActor, context: HandoffContext | null, releases: Array<() => void>, newPrimary = false) {
     const before = await this.configuration(workspaceId);
     if (before.revision !== input.expectedRevision) throw new LeadershipError('leadership_stale');
     await this.authorizeConfiguration(workspaceId, input, before, actor);
@@ -146,7 +146,10 @@ export class WorkspaceLeadershipService {
         await workspaceRepository.updateNode(node.id, { payload: { ...payload, maestro, deputy } });
       }
     }
-    const handoff = input.leaderNodeId && input.leaderNodeId !== before.leaderNodeId
+    // Fresh creation already receives the normal launch contract. It has no
+    // predecessor to acknowledge and must not add a second unsolicited turn.
+    const initialPrimary = newPrimary && !before.leaderNodeId && !before.deputyNodeId;
+    const handoff = !initialPrimary && input.leaderNodeId && input.leaderNodeId !== before.leaderNodeId
       ? await workspaceLeadershipRepository.createHandoff({ workspaceId, fromNodeId: before.leaderNodeId, toNodeId: input.leaderNodeId,
           revision: configuration.revision, requestId: input.requestId, context }) : null;
     if (handoff && before.leaderNodeId) {
@@ -157,7 +160,7 @@ export class WorkspaceLeadershipService {
     for (const nodeId of participants) {
       const role = nodeId === configuration.leaderNodeId ? 'leader' : nodeId === configuration.deputyNodeId ? 'deputy' : 'specialist';
       const oldRole = nodeId === before.leaderNodeId ? 'leader' : nodeId === before.deputyNodeId ? 'deputy' : 'specialist';
-      if (role === oldRole && role === 'specialist') continue;
+      if ((role === oldRole && role === 'specialist') || (initialPrimary && role === 'leader')) continue;
       const instructions = role === 'leader'
         ? `You are the primary leader. Read current workspace instructions and explicit owner restrictions before acting; bounded handoff excerpts do not replace them. Continue the approved work using the existing team and Kanban. ${configuration.deputyNodeId ? `Independent deputy: ${configuration.deputyNodeId}. Deliveries require both recorded approvals on the same reviewed revision, with no pending findings. task done starts that review; it is not completion while review is pending.` : 'No deputy is configured; use the normal delivery flow.'} ${handoff ? `Read the durable handoff ${handoff.id} with orkestrai leadership handoff read ${handoff.id}, then acknowledge it. Do not wait for the previous leader to reply. Read pending delivery reviews in leadership status and continue their review or findings.` : ''}`
         : role === 'deputy'
@@ -204,13 +207,13 @@ export class WorkspaceLeadershipService {
 
   async createWithRole(workspaceId: string, create: () => Promise<CanvasNode>, role: 'leader' | 'deputy', previousAsDeputy = false): Promise<CanvasNode> {
     const before = await this.configuration(workspaceId);
-    const context = role === 'leader' ? await this.captureContext(workspaceId, before.leaderNodeId) : null;
+    const context = role === 'leader' && before.leaderNodeId ? await this.captureContext(workspaceId, before.leaderNodeId) : null;
     const releases: Array<() => void> = [];
     const node = await Connection.transaction(async () => {
       const created = await create();
       await this.applyConfiguration(workspaceId, { command: 'configure', requestId: uuidv7(), expectedRevision: before.revision,
         leaderNodeId: role === 'leader' ? created.id : before.leaderNodeId,
-        deputyNodeId: role === 'deputy' ? created.id : previousAsDeputy ? before.leaderNodeId : before.deputyNodeId }, { kind: 'owner' }, context, releases);
+        deputyNodeId: role === 'deputy' ? created.id : previousAsDeputy ? before.leaderNodeId : before.deputyNodeId }, { kind: 'owner' }, context, releases, role === 'leader');
       return (await workspaceRepository.getNode(created.id))!;
     });
     releases.forEach((release) => release());

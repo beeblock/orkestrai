@@ -264,4 +264,13 @@ describe('Workspace leadership', () => {
     expect(page).toMatchObject({ content: 'Explicit owner restriction at the end', nextOffset: null });
   });
 
+  it('creates the first primary without an empty handoff or an extra model turn', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orkestrai-first-primary-')); dirs.push(dir);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'First primary', workingDir: dir });
+    const created = await workspaceLeadershipService.createWithRole(workspace.id, () => workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Primary', payload: { provider: 'codex' } }), 'leader');
+    expect((await workspaceLeadershipService.configuration(workspace.id)).leaderNodeId).toBe(created.id);
+    expect(await workspaceLeadershipRepository.handoffs(workspace.id)).toEqual([]);
+    expect(await controlCenterRepository.inboxEnvelopes(created.id, ['queued', 'sent', 'delivered'])).toEqual([]);
+  });
+
 });
