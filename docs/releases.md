@@ -495,3 +495,30 @@ módulo e não conseguem buscar a própria correção. Esses usuários fazem uma
 instalação manual única da `0.1.1`; a pasta de dados fica fora do bundle e é
 preservada. O teste `packaged updater` em `release-artifacts.test.ts` protege
 essa regra nas próximas releases.
+
+## October 2026 matcher security update
+
+CI keeps the complete `npm audit --audit-level=moderate` gate, without waivers.
+Joi 17.13.9 and follow-redirects 1.16.2 fix their new advisories. All Minimatch
+copies resolve to 11.0.1; modern Glob consumers use 14.0.2. The callback Glob 7
+used by existing packaging dependencies keeps its API and uses the patched
+matcher. Electron and the native-module ABI remain pinned.
+
+Minimatch 11 uses a namespace CommonJS export and nonrecursive compiled matcher
+objects. A source-hash-verified patch restores the callable CommonJS export,
+legacy `globParts`/`_glob` metadata and `String.match` delegation to the patched
+matcher. Legacy constructors default to optimization level 0 for their original
+segment layout; explicitly requested optimization levels retain upstream limits.
+The ESM implementation and matching engine are unchanged. The patch is mandatory
+at postinstall and unknown sources/versions fail before any file is modified.
+
+`tests/unit/dependency-glob-compatibility.test.ts` exercises CommonJS and ESM,
+callback and promise Glob, dotfiles, ignored paths, Windows-style paths, real
+asar/ZIP production dependencies, and the upstream amplification reproduction
+in a memory/time-limited subprocess. `dependency-patches.test.ts` additionally
+checks exact pre/post hashes, idempotency, CRLF, corruption and ENOSPC.
+
+Upstream fixes: [Minimatch](https://github.com/isaacs/minimatch/commit/77a0f5c4b80bdc641c3c930a1d9edf5ad2db57f8),
+[Glob](https://github.com/isaacs/node-glob/commit/4682e8c9babee1b385202ede36389634e12076d7),
+[Joi](https://github.com/advisories/GHSA-4528-x5fx-h6hg), and
+[follow-redirects](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p).

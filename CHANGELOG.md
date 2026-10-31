@@ -16,6 +16,7 @@ pt-BR, English, and Spanish translations.
 - Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
 
 ### Fixed
+- Update Joi, follow-redirects, Minimatch and modern Glob to patched releases while preserving the legacy CommonJS matcher contract used by the packaging stack. Verify the compatibility patch by exact source hashes and real glob/archive regressions; keep the complete moderate-severity dependency audit unchanged.
 - Keep recorded inbox answers and durable reply forwarding intact when a delayed dispatcher receipt arrives; serialize each state transition and ignore receipts after a reply.
 - Preserve unsent Canvas prompt text per workspace across view changes and reloads in the current tab. Browser Back closes a focused Design before leaving the board, keeping the team visible. Delayed send acknowledgements do not clear newer drafts or another workspace.
 - Contain socket and WebSocket errors to the failed collaboration/model-access relay connection, cleaning up the peer without interrupting other rooms.

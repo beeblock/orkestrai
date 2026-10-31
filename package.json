@@ -203,7 +203,7 @@
     "handlebars": "4.7.10",
     "http-cache-semantics": "4.3.0",
     "ip-address": "10.7.4",
-    "joi": "17.13.8",
+    "joi": "17.13.9",
     "moment": "2.31.0",
     "nanoid": "3.3.18",
     "node-forge": "https://codeload.github.com/digitalbazaar/forge/tar.gz/ceba34402e329f0365134f23fe19898756527d65",
@@ -213,7 +213,10 @@
     "undici@6": "6.29.1",
     "undici@7": "$undici",
     "yaml": "$yaml",
-    "zod": "$zod"
+    "zod": "$zod",
+    "follow-redirects": "1.16.2",
+    "glob@^10.0.0": "14.0.2",
+    "minimatch": "11.0.1"
   },
   "main": "electron/main.cjs",
   "workspaces": [

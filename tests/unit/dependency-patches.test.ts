@@ -94,7 +94,7 @@ describe('reviewed dependency patch application', () => {
 
 describe('release dependency security', () => {
   it.each([
-    ['follow-redirects', [1, 16, 1]],
+    ['follow-redirects', [1, 16, 2]],
     ['vite', [6, 4, 5]],
   ] as const)('keeps every locked %s at a patched version', (name, minimum) => {
     const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
@@ -116,7 +116,7 @@ describe('release dependency security', () => {
     for (const name of ['braces', 'sprintf-js', 'patch-package']) {
       expect(Object.keys(lock.packages).some((path) => path.endsWith(`/node_modules/${name}`) || path === `node_modules/${name}`)).toBe(false);
     }
-    expect(manifest.overrides).toMatchObject({ 'global-agent': '4.1.3', 'http-cache-semantics': '4.3.0', joi: '17.13.8', 'source-map-js': '1.2.2' });
+    expect(manifest.overrides).toMatchObject({ 'global-agent': '4.1.3', 'http-cache-semantics': '4.3.0', joi: '17.13.9', 'source-map-js': '1.2.2' });
     expect(fs.readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('npm audit --audit-level=moderate');
   });
 

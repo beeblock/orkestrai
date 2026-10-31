@@ -114,6 +114,12 @@
       "file": "node_modules/zod/v3/types.cjs",
       "before": "7a2f06d88e280bdd198c60e0d292ed7f1e3993e877be4415de07e6abc7746dd1",
       "after": "1fea7372e34fb34f0e0c7c9c2196d0109be74f532e807576ab016104d9c7d2c5"
+    },
+    {
+      "patch": "minimatch+11.0.1.patch",
+      "file": "node_modules/minimatch/dist/commonjs/index.js",
+      "before": "d89e8ca7dda77bd9dc9efed6920b0ed09deb2f478ada54110980daa3080d3f9b",
+      "after": "c87196ee69e5b8baa11e91c710ae6b1a2d7a552901c43e8006f3f49e22a3159f"
     }
   ]
 }

@@ -1,0 +1,29 @@
+--- a/node_modules/minimatch/dist/commonjs/index.js
++++ b/node_modules/minimatch/dist/commonjs/index.js
+@@ -1509,4 +1509,24 @@
+ exports.minimatch.Minimatch = Minimatch;
+ exports.minimatch.escape = escape_js_1.escape;
+ exports.minimatch.unescape = unescape_js_1.unescape;
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++// Keep the legacy CommonJS API without replacing the patched matcher.
++// glob 7 reads globParts and each compiled matcher's original _glob text.
++const UpstreamMinimatch = exports.Minimatch;
++class CompatibleMinimatch extends UpstreamMinimatch {
++    constructor(pattern, options = {}) {
++        super(pattern, { ...options, optimizationLevel: options.optimizationLevel ?? 0 });
++        this.globParts = this.globSet.map(part => part.split(/\/+/));
++        for (const parts of this.set) {
++            for (const part of parts) {
++                if (part && typeof part === 'object' && part._glob === undefined) {
++                    part._glob = part.pattern;
++                    part[Symbol.match] = input => part.test(input) ? [input] : null;
++                }
++            }
++        }
++    }
++}
++exports.Minimatch = CompatibleMinimatch;
++exports.minimatch.Minimatch = CompatibleMinimatch;
++module.exports = Object.assign(exports.minimatch, exports);
