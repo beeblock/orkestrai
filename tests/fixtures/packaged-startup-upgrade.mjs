@@ -90,7 +90,9 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert.equal(health?.data?.status, 'ok', `Packaged startup failed: ${output}`);
-  assert.deepEqual(phases, ['backup', 'migrating', 'prepared']);
+  // Schema migration and isolated graph preparation are separate slow steps.
+  // The desktop intentionally keeps the same "migrating" phase for both.
+  assert.deepEqual(phases, ['backup', 'migrating', 'migrating', 'prepared']);
   await stopChild();
   configure();
   assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);
@@ -100,13 +102,19 @@ try {
   assert.equal((await readdir(scratch)).filter((name) => /^database\.db\.bak-.*Z$/.test(name)).length, 1);
   const [backupFile] = (await readdir(scratch)).filter((name) => /^database\.db\.bak-.*Z$/.test(name));
   const Database = require('better-sqlite3');
+  const graph = new Database(`${databasePath}.code-graph.sqlite`, { readonly: true, fileMustExist: true });
+  try {
+    assert.equal(graph.pragma('quick_check', { simple: true }), 'ok');
+    assert.equal(graph.prepare('SELECT COUNT(*) AS count FROM __orkestrai_graph_storage').get().count, 1);
+    assert.equal(graph.prepare('SELECT COUNT(*) AS count FROM agent_code_graph_projects').get().count, 0);
+  } finally { graph.close(); }
   const backup = new Database(join(scratch, backupFile), { readonly: true });
   try {
     assert.equal(backup.prepare('SELECT COUNT(*) AS count FROM agent_workspace_groups').get().count, 2);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
   } finally { backup.close(); }
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
 } finally {
   await stopChild();
   await Connection.disconnect();

@@ -101,3 +101,10 @@ Clipboard and paste assertions remain mandatory. CI executes these scenarios and
 the new leadership/review scenario before the full browser suite, retaining
 failure artifacts from either stage. This is a fail-fast check, not a replacement
 for the complete release gate.
+
+The signed Intel release startup smoke reached a healthy Core, then rejected the
+second `migrating` progress event introduced by isolated graph preparation. The
+fixture now requires both migration stages and verifies the prepared graph
+database alongside preserved workspace/group rows and the legacy backup. CI
+executes this same upgrade fixture against the production build before browser
+tests and packaging; the signed packaged check remains mandatory.

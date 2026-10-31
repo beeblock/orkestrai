@@ -122,6 +122,10 @@ jobs:
       - name: Build production application
         run: npm run build
 
+      - name: Verify production upgrade from the reported legacy schema
+        timeout-minutes: 5
+        run: node --conditions=import tests/fixtures/packaged-startup-upgrade.mjs .
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
