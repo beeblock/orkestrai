@@ -22,6 +22,8 @@
     model: string | null;
     effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra' | null;
     leader: boolean;
+    deputy: boolean;
+    previousLeaderAsDeputy: boolean;
     executionRuntime: WorkspaceExecutionRuntime | null;
     profileId?: string | null;
   };
@@ -120,6 +122,8 @@
         model: f.data.model || null,
         effort: (f.data.effort as AgentCreation['effort']) ?? null,
         leader: Boolean(f.data.leader),
+        deputy: Boolean(f.data.deputy),
+        previousLeaderAsDeputy: Boolean(f.data.previousLeaderAsDeputy),
         executionRuntime: runtimeMode === 'default'
           ? null
           : runtimeMode === 'native'
@@ -143,6 +147,8 @@
         effort: null,
         profileId: null,
         leader: provider ? defaultLeader : false,
+        deputy: false,
+        previousLeaderAsDeputy: false,
       });
       runtimeMode = 'default';
       runtimeProvider = provider;
@@ -376,17 +382,16 @@
       {/if}
 
       {#if provider}
-        <!-- Linha inteira clicavel: o rotulo aponta para o checkbox. -->
-        <Form.Field {form} name="leader" class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-1 space-y-0 rounded-lg px-3 py-2.5 shadow-[var(--app-shadow-border)] transition-[background-color] duration-150 hover:bg-[var(--app-hover)]">
-          <Form.Control>
-            {#snippet children({ props })}
-              <Checkbox {...props} class="row-span-2 mt-px" checked={Boolean($formData!.leader)} onCheckedChange={(checked) => ($formData!.leader = checked === true)} />
-              <Form.Label class="cursor-pointer text-[13px] leading-snug">{m['dlg.leader_label']()}</Form.Label>
-            {/snippet}
-          </Form.Control>
-          <Form.Description class="col-start-2 text-[12px] leading-relaxed text-pretty">{m['dlg.leader_desc']()}</Form.Description>
-          <Form.FieldErrors class="col-start-2 text-[12px] font-normal" children={fieldError} />
-        </Form.Field>
+        <section class="grid gap-3 rounded-xl border border-[var(--app-border)] p-3">
+          <Label>{m['leadership.role']()}</Label>
+          <SegmentedControl fill label={m['leadership.role']()} value={$formData!.leader ? 'leader' : $formData!.deputy ? 'deputy' : 'specialist'}
+            options={[{ value: 'specialist', label: m['leadership.specialist']() }, { value: 'leader', label: m['leadership.leader']() }, { value: 'deputy', label: m['leadership.deputy'](), disabled: defaultLeader }]}
+            onValueChange={(value) => { $formData!.leader = value === 'leader'; $formData!.deputy = value === 'deputy'; }} />
+          <p class="text-xs leading-relaxed text-muted-foreground">{m['leadership.role_description']()}</p>
+          {#if $formData!.leader && !defaultLeader}
+            <Label class="flex cursor-pointer items-center gap-2"><Checkbox checked={Boolean($formData!.previousLeaderAsDeputy)} onCheckedChange={(value: boolean | "indeterminate") => ($formData!.previousLeaderAsDeputy = value === true)} />{m['leadership.previous_deputy']()}</Label>
+          {/if}
+        </section>
       {/if}
 
       {#if workspace && wsl.supported}

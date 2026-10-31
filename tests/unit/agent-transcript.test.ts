@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  conversationHandoffTurn,
   findPromptInTranscript,
   findReplyToPrompt,
   latestTurnComplete,
@@ -26,6 +27,25 @@ import {
 } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 
 describe('async transcript lookup', () => {
+  it.each([false, true])('exports only the exact profile public turn for handoff (WSL: %s)', async (posixCwd) => {
+    const home = await mkdtemp(join(tmpdir(), 'orkestrai-handoff-turn-'));
+    const cwd = posixCwd ? '/home/test/project' : await realpath(home);
+    const profile = join(home, 'work-profile');
+    const dir = join(profile, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    try {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(profile, 'settings.json'), JSON.stringify({ apiKey: 'DO_NOT_COPY_CREDENTIAL' }));
+      await writeFile(join(dir, `${sessionId}.jsonl`), [
+        { type: 'user', message: { content: 'Finish the approved task' } },
+        { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: 'PRIVATE_REASONING' }, { type: 'tool_use', input: { secret: 'PRIVATE_TOOL_VALUE' } }, { type: 'text', text: 'Public handoff status' }] } },
+      ].map((event) => JSON.stringify(event)).join('\n'));
+      const turn = await conversationHandoffTurn('claude', cwd, sessionId, { homeDir: home, claudeConfigDir: profile, posixCwd });
+      expect(turn).toMatchObject({ prompt: 'Finish the approved task', reply: 'Public handoff status', coverage: 'latest_bounded_turn' });
+      for (const secret of ['DO_NOT_COPY_CREDENTIAL', 'PRIVATE_REASONING', 'PRIVATE_TOOL_VALUE', profile]) expect(JSON.stringify(turn)).not.toContain(secret);
+      expect(await conversationHandoffTurn('claude', cwd, '../settings', { claudeConfigDir: profile, posixCwd })).toBeNull();
+    } finally { await rm(home, { recursive: true, force: true }); }
+  });
   it.each([false, true])('reads exact turns without synchronous filesystem scans (WSL: %s)', async (posixCwd) => {
     const home = await mkdtemp(join(tmpdir(), 'ork-transcript-async-'));
     const cwd = posixCwd ? '/home/test/project' : home;

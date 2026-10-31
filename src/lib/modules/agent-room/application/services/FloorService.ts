@@ -694,6 +694,7 @@ export class FloorService {
         }
       }
       const floorNodes = context.nodes.filter((node) => node.floorId === floor.id);
+      if (floorNodes.some((node) => node.type === 'terminal' && ((node.payload as { maestro?: boolean; deputy?: boolean }).maestro || (node.payload as { deputy?: boolean }).deputy))) blockers.push('leadership_role');
       const ids = new Set(floorNodes.map((node) => node.id));
       if (context.tasks.some((task) => ids.has(String(task.getAttribute('assignee_node_id'))))) blockers.push('pending_tasks');
       const sessions = ptySessionManager.list();

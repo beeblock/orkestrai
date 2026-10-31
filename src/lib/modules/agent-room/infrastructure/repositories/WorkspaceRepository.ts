@@ -15,6 +15,7 @@ import type {
 } from '../../domain/types.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
 import { AgentCanvasNode } from '../../domain/models/AgentCanvasNode.js';
+import { workspaceLeadershipRepository } from './WorkspaceLeadershipRepository.js';
 import { AgentCanvasEdge } from '../../domain/models/AgentCanvasEdge.js';
 import { AgentFloor } from '../../domain/models/AgentFloor.js';
 import { AgentRoutine } from '../../domain/models/AgentRoutine.js';
@@ -163,6 +164,19 @@ function mapEdge(model: AgentCanvasEdge): CanvasEdge {
  * Ids UUID v7; layout persistido a cada mudanca (posicao, tamanho, payload).
  */
 export class WorkspaceRepository {
+  /** Role configuration is authoritative even when a stale terminal callback
+   * writes its old payload after a handoff. Do not infer a new leader from it. */
+  private async projectLeadership(nodes: CanvasNode[]): Promise<CanvasNode[]> {
+    if (!nodes.some((node) => node.type === 'terminal')) return nodes;
+    const configuration = await workspaceLeadershipRepository.configuration(nodes[0].workspaceId);
+    if (!configuration) return nodes;
+    const leader = configuration.getAttribute('leader_node_id');
+    const deputy = configuration.getAttribute('deputy_node_id');
+    return nodes.map((node) => node.type === 'terminal' ? {
+      ...node,
+      payload: { ...node.payload, maestro: node.id === leader, deputy: node.id === deputy },
+    } : node);
+  }
   // -- Workspaces -----------------------------------------------------------
 
   async listWorkspaces(): Promise<Workspace[]> {
@@ -372,7 +386,7 @@ export class WorkspaceRepository {
     // Arquivados (notas vinculadas a tarefas arquivadas) ficam fora do canvas.
     if (!includeArchived) query.whereNull('archived_at');
     const rows = await query.get();
-    return rows.map(mapNode);
+    return this.projectLeadership(rows.map(mapNode));
   }
 
   /** Archived nodes of a workspace, newest first, for the restore list. */
@@ -412,12 +426,12 @@ export class WorkspaceRepository {
 
   async getNode(id: string): Promise<CanvasNode | null> {
     const model = await AgentCanvasNode.find(id);
-    return model ? mapNode(model) : null;
+    return model ? (await this.projectLeadership([mapNode(model)]))[0] : null;
   }
 
   async getActiveNode(workspaceId: string, id: string): Promise<CanvasNode | null> {
     const model = await AgentCanvasNode.query().where('workspace_id', workspaceId).where('id', id).whereNull('archived_at').first();
-    return model ? mapNode(model) : null;
+    return model ? (await this.projectLeadership([mapNode(model)]))[0] : null;
   }
 
   async createNode(input: {
@@ -472,7 +486,14 @@ export class WorkspaceRepository {
           catch { throw new Error('Portal payload is invalid. No state was changed.'); }
           if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Portal payload must be an object.');
           changes.payload_json = JSON.stringify({ ...saved, ...input.payload });
-        } else changes.payload_json = JSON.stringify(input.payload);
+        } else {
+          let payload = input.payload;
+          if (current.type === 'terminal') {
+            const leadership = await workspaceLeadershipRepository.configuration(String(current.getAttribute('workspace_id')));
+            if (leadership) payload = { ...payload, maestro: leadership.getAttribute('leader_node_id') === id, deputy: leadership.getAttribute('deputy_node_id') === id };
+          }
+          changes.payload_json = JSON.stringify(payload);
+        }
       }
       if (Object.keys(changes).length) await current.update(changes);
       return this.getNode(id);
@@ -546,7 +567,10 @@ export class WorkspaceRepository {
         });
         createdEdges.push(mapEdge(model));
       }
+      const primary = createdNodes.find((node) => node.type === 'terminal' && (node.payload as { maestro?: boolean }).maestro);
+      if (primary) await workspaceLeadershipRepository.adoptTransferredPrimary(input.destinationWorkspaceId, primary.id);
       if (input.mode === 'move') {
+        await workspaceLeadershipRepository.detachMovedNodes(input.sourceWorkspaceId, input.sourceNodeIds);
         await AgentBoardTask.query().where('workspace_id', input.sourceWorkspaceId).whereIn('assignee_node_id', input.sourceNodeIds).update({ assignee_node_id: null });
         await AgentBoardTask.query().where('workspace_id', input.sourceWorkspaceId).whereIn('note_node_id', input.sourceNodeIds).update({ note_node_id: null });
         await AgentCanvasEdge.query().where('workspace_id', input.sourceWorkspaceId).whereIn('source_node_id', input.sourceNodeIds).delete();
@@ -554,7 +578,7 @@ export class WorkspaceRepository {
         await AgentCanvasNode.query().where('workspace_id', input.sourceWorkspaceId).whereIn('id', input.sourceNodeIds).delete();
       }
       await input.beforeCommit?.();
-      return { nodes: createdNodes, edges: createdEdges };
+      return { nodes: await this.projectLeadership(createdNodes), edges: createdEdges };
     });
   }
 

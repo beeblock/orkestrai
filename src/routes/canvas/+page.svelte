@@ -1594,10 +1594,6 @@
         },
         onProviderChange: changeNodeProvider,
         onRuntimeChange: changeNodeRuntime,
-        onToggleMaestro: (id: string) => {
-          const current = (nodes.find((node) => node.id === id)?.data?.payload ?? {}) as Record<string, unknown>;
-          updateNodePayload(id, { maestro: !current.maestro });
-        },
         onThemeChange: (id: string, theme: TerminalThemeName) => updateNodePayload(id, { theme }),
         onContentChange: (id: string, content: string) => updateNodePayload(id, { content }),
         onColorChange: (id: string, color: string) => updateNodePayload(id, { color }),
@@ -2156,7 +2152,7 @@
   async function addTerminal(
     provider?: AgentProviderInfo,
     rect?: { x: number; y: number; width: number; height: number },
-    creation?: { title: string; model: string | null; effort: string | null; leader: boolean; executionRuntime: import('$lib/modules/agent-room/domain/types.js').WorkspaceExecutionRuntime | null; profileId?: string | null }
+    creation?: { title: string; model: string | null; effort: string | null; leader: boolean; deputy?: boolean; previousLeaderAsDeputy?: boolean; executionRuntime: import('$lib/modules/agent-room/domain/types.js').WorkspaceExecutionRuntime | null; profileId?: string | null }
   ) {
     if (!activeWorkspace) return;
     const position = rect ? { x: rect.x, y: rect.y } : nextFreePosition(Number(appSettings.newTerminalWidth ?? 560), Number(appSettings.newTerminalHeight ?? 340));
@@ -2174,7 +2170,7 @@
         spec = await api<{ command: string; args: string[]; env?: Record<string, string> }>(`/api/agent-room/agent-spec?${params}`).catch(() => spec);
       }
       payload = spec
-        ? { command: spec.command, args: spec.args, env: spec.env, provider: provider.id, ...(creation?.leader ? { maestro: true } : {}) }
+        ? { command: spec.command, args: spec.args, env: spec.env, provider: provider.id, ...(creation?.leader ? { maestro: true } : {}), ...(creation?.deputy ? { deputy: true } : {}), ...(creation?.previousLeaderAsDeputy ? { previousLeaderAsDeputy: true } : {}) }
         : { command: provider.id, args: [], provider: provider.id };
     } else {
       // The server resolves the native/WSL shell against the host where the PTY runs.

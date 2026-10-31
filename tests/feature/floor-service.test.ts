@@ -45,6 +45,19 @@ describe('FloorService', () => {
     for (const dir of repos.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
+  it('keeps a current coordinator checkout even while its terminal is not running', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'coordinator', workingDir: dir });
+    const floor = await floorService.create(workspace.id, { name: 'leader' });
+    const coordinator = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Coordinator', floorId: floor.id, payload: { provider: 'codex', maestro: true } });
+    const [audit] = await floorService.audit(workspace.id);
+    expect(audit.blockers).toContain('leadership_role');
+    expect(audit.safeToRemove).toBe(false);
+    await workspaceRepository.updateNode(coordinator.id, { payload: { provider: 'codex', maestro: false } });
+    const [after] = await floorService.audit(workspace.id);
+    expect(after.blockers).not.toContain('leadership_role');
+  });
+
   it('cria andar com worktree e branch, lista e renomeia', async () => {
     const dir = makeRepo();
     const workspace = await workspaceRepository.createWorkspace({ name: 'ws', workingDir: dir });

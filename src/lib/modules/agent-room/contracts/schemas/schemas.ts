@@ -28,6 +28,8 @@ export const createAgentNodeSchema = z.object({
   profileId: z.string().uuid().nullish(),
   /** Lider da equipe = Modo Maestro (recruta/demite agentes sob demanda). */
   leader: z.boolean().default(false),
+  deputy: z.boolean().default(false),
+  previousLeaderAsDeputy: z.boolean().default(false),
 });
 
 export type CreateAgentNodeInput = z.infer<typeof createAgentNodeSchema>;

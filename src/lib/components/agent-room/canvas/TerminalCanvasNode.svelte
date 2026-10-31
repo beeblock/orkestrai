@@ -35,6 +35,7 @@
   import AttachmentList from '../AttachmentList.svelte';
   import { ComposerAttachments } from '../composer-attachments.svelte.js';
   import CouncilDialog from '../CouncilDialog.svelte';
+  import LeadershipDialog from '../LeadershipDialog.svelte';
   import TerminalRuntimeDialog from './TerminalRuntimeDialog.svelte';
   import TerminalCommandsDialog from './TerminalCommandsDialog.svelte';
   import AgentRuntimeDialog from './AgentRuntimeDialog.svelte';
@@ -97,6 +98,7 @@
   // provider para retomar o contexto da conversa anterior.
   let forceRespawn = $state(false);
   let councilOpen = $state(false);
+  let leadershipOpen = $state(false);
   let runtimeOpen = $state(false);
   let agentRuntimeOpen = $state(false);
   let agentRuntimeBusy = $state(false);
@@ -740,6 +742,9 @@
         <span>{data.floorName}</span>
       </button>
     {/if}
+    {#if data.payload.deputy}
+      <span class="terminal-status-chip" title={m['leadership.deputy']()}><Scale size={12}/><span>{m['leadership.deputy']()}</span></span>
+    {/if}
     {#if data.payload.maestro}
       <span class="terminal-leader-state" role="img" title={m['term.maestro_active']()} aria-label={m['term.maestro_active']()}>
         <Star size={12} fill="currentColor" />
@@ -939,10 +944,12 @@
           <RotateCcw size={14} />
           {m['term.reload']()}
         </DropdownMenu.Item>
-        <DropdownMenu.Item onclick={() => data.onToggleMaestro?.(id)}>
-          <Star size={14} fill={data.payload.maestro ? 'currentColor' : 'none'} />
-          {data.payload.maestro ? m['term.maestro_disable']() : m['term.maestro_enable']()}
-        </DropdownMenu.Item>
+        {#if currentProvider}
+          <DropdownMenu.Item onclick={() => (leadershipOpen = true)}>
+            <Star size={14} fill={data.payload.maestro ? 'currentColor' : 'none'} />
+            {m['leadership.title']()}
+          </DropdownMenu.Item>
+        {/if}
         <DropdownMenu.Separator />
         <DropdownMenu.Item variant="destructive" onclick={() => data.onDelete(id)}>
           <X size={14} />
@@ -1570,3 +1577,5 @@
     margin-right: 6px;
   }
 </style>
+
+{#if leadershipOpen}{#key data.workspaceId}<LeadershipDialog workspaceId={data.workspaceId} onClose={() => (leadershipOpen = false)} />{/key}{/if}

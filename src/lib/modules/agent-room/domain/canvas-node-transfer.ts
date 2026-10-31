@@ -119,6 +119,7 @@ export function transferredNodePayload(
     delete payload.env;
     payload.resumeRecovery = false;
     payload.maestro = keepMaestro && payload.maestro === true;
+    payload.deputy = false;
   }
   if (type === 'group') {
     payload.members = remapIds(payload.members, ids);

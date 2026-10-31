@@ -20,8 +20,11 @@ import { agentInboxService, taskRecoveryKey } from './AgentInboxService.js';
 import { floorService } from './FloorService.js';
 import { designDocumentService } from './DesignDocumentService.js';
 import { designDeliveryReadiness } from '../../domain/design-delivery-readiness.js';
+import { leadershipReviewSummary, type LeadershipReview, type LeadershipReviewSummary } from '../../contracts/schemas/leadership.schema.js';
+import { workspaceLeadershipRepository } from '../../infrastructure/repositories/WorkspaceLeadershipRepository.js';
 
 export type BoardTask = {
+  completionReview?: LeadershipReviewSummary | null;
   id: string;
   workspaceId: string;
   title: string;
@@ -222,10 +225,14 @@ export class TaskBoardService {
     // includeArchived: notas arquivadas junto com a tarefa ainda resolvem o título.
     const nodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
     const titles = new Map(nodes.map((node) => [node.id, node.title ?? node.type]));
+    const reviewIds = rows.map((row) => row.getAttribute('leadership_review_id')).filter(Boolean) as string[];
+    const reviews = await workspaceLeadershipRepository.reviewSummaries(workspaceId, reviewIds);
+    const reviewsById = new Map(reviews.map((review) => [review.id, review]));
     return rows.map((row) => {
       const assigneeId = row.getAttribute('assignee_node_id') as string | null;
       const noteId = row.getAttribute('note_node_id') as string | null;
-      return mapTask(row, assigneeId ? (titles.get(assigneeId) ?? null) : null, noteId ? (titles.get(noteId) ?? null) : null);
+      return { ...mapTask(row, assigneeId ? (titles.get(assigneeId) ?? null) : null, noteId ? (titles.get(noteId) ?? null) : null),
+        completionReview: reviewsById.get(String(row.getAttribute('leadership_review_id') ?? '')) ?? null };
     });
   }
 
@@ -304,7 +311,9 @@ export class TaskBoardService {
       assigneeId ? workspaceRepository.getNode(assigneeId) : null,
       noteId ? workspaceRepository.getNode(noteId) : null,
     ]);
-    return mapTask(model, assignee?.title ?? null, note?.title ?? null);
+    const reviewId = model.getAttribute('leadership_review_id');
+    return { ...mapTask(model, assignee?.title ?? null, note?.title ?? null),
+      completionReview: reviewId ? (await workspaceLeadershipRepository.reviewSummaries(String(model.getAttribute('workspace_id')), [String(reviewId)]))[0] ?? null : null };
   }
 
   private async requireNote(workspaceId: string, noteId: string): Promise<void> {
@@ -413,7 +422,7 @@ export class TaskBoardService {
       image_path: images[0] ?? null,
       images_json: images.length ? JSON.stringify(images) : null,
       attachments_json: attachments.length ? JSON.stringify(attachments) : null,
-      status,
+      status: status === 'done' ? 'doing' : status,
       assignee_node_id: input.assigneeNodeId ?? null,
       note_node_id: input.noteId ?? null,
       created_by: input.createdBy ?? 'user',
@@ -421,6 +430,9 @@ export class TaskBoardService {
       updated_at: now,
     });
     const task = await this.requireTask(workspaceId, id);
+    // Every completion goes through the same atomic guard, including a role
+    // configuration that changes concurrently with card creation.
+    if (status === 'done') return this.update(workspaceId, id, { status: 'done' });
     if (input.assigneeNodeId && input.dispatch !== false) {
       try {
         await this.dispatch(workspaceId, id);
@@ -489,7 +501,29 @@ export class TaskBoardService {
       patch.assignee_node_id = input.assigneeNodeId;
       if (assignedNow && input.status === undefined) patch.status = 'doing';
     }
-    await AgentBoardTask.query().where('id', taskId).update(patch);
+    let completionGate: { pending: boolean; review: LeadershipReview | null; alreadyDone?: boolean } | null = null;
+    if (resolvedStatus === 'done' && !wasDone) {
+      const { workspaceLeadershipService } = await import('./WorkspaceLeadershipService.js');
+      const pair = await workspaceLeadershipService.configuration(workspaceId);
+      const prior = task.getAttribute('leadership_review_id')
+        ? await workspaceLeadershipRepository.review(workspaceId, String(task.getAttribute('leadership_review_id'))) : null;
+      const completionFloor = pair.leaderNodeId && pair.deputyNodeId && prior?.status !== 'approved'
+        ? await this.commitAssigneeFloor(workspaceId, await this.mapWithTitles(task)) : null;
+      const { leadershipReviewService } = await import('./LeadershipReviewService.js');
+      completionGate = await leadershipReviewService.commitCompletion(workspaceId, taskId, patch);
+      if (completionGate.alreadyDone) return this.mapWithTitles(await this.requireTask(workspaceId, taskId));
+      if (completionGate.pending) {
+          notifyWorkspaceChanged(workspaceId);
+          return { ...await this.mapWithTitles(await this.requireTask(workspaceId, taskId)),
+            ...(completionFloor ? { completionFloor } : {}), completionReview: completionGate.review ? leadershipReviewSummary(completionGate.review) : null };
+      }
+    }
+    if (!completionGate) {
+      if (task.getAttribute('leadership_review_id')) {
+        const { leadershipReviewService } = await import('./LeadershipReviewService.js');
+        await leadershipReviewService.commitMetadataPatch(workspaceId, taskId, patch);
+      } else await AgentBoardTask.query().where('id', taskId).update(patch);
+    }
     if (assignedNow) {
       try {
         await this.dispatch(workspaceId, taskId);
@@ -988,6 +1022,11 @@ export class TaskBoardService {
         this.requireTask(input.workspaceId, input.taskId),
         workspaceRepository.getNode(input.nodeId),
       ]);
+      const reviewId = task.getAttribute('leadership_review_id');
+      if (reviewId) {
+        const [review] = await workspaceLeadershipRepository.reviewSummaries(input.workspaceId, [String(reviewId)]);
+        if (review && ['collecting', 'pending', 'approved'].includes(review.status)) { this.recoveryKeys.delete(key); return; }
+      }
       if (
         task.getAttribute('assignee_node_id') !== input.nodeId
         || ['todo', 'done'].includes(String(task.getAttribute('status')))
@@ -1169,7 +1208,10 @@ agentInboxService.registerRelevance('task', async (envelope) => {
 });
 agentInboxService.registerRelevance('task_recovery', async (envelope) => {
   const taskId = inboxTaskId(envelope);
-  return Boolean(taskId && await taskBoardService.isInboxTaskActive(envelope.workspaceId, taskId, envelope.toNodeId));
+  if (!taskId) return false;
+  const review = await workspaceLeadershipRepository.reviewForTask(envelope.workspaceId, taskId);
+  if (review && ['collecting', 'pending', 'approved'].includes(review.status)) return false;
+  return taskBoardService.isInboxTaskActive(envelope.workspaceId, taskId, envelope.toNodeId);
 });
 agentInboxService.registerRelevance('task_created', async (envelope) => {
   const taskId = inboxTaskId(envelope);

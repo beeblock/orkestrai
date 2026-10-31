@@ -29,6 +29,10 @@ describe('orkestrai CLI', () => {
           agentToken: req.headers['x-orkestrai-agent-token'],
         });
         res.setHeader('content-type', 'application/json');
+        if (req.url === '/api/agent-room/bridge/tasks/t1' && req.method === 'PATCH') {
+          res.end(JSON.stringify({ data: { id: 't1', status: JSON.parse(body).status } }));
+          return;
+        }
         if (req.url === '/api/agent-room/bridge/floors/audit') {
           res.end(JSON.stringify({ data: [{ floorId: 'floor-1', revision: 'a'.repeat(64), safeToRemove: true }] }));
           return;

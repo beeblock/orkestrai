@@ -303,6 +303,17 @@ describe('Agent inbox', () => {
     await expect(bridgeService.reply(workspace.id, { from: nodes.Lider, messageId, message: 'De novo' })).resolves.toMatchObject({ alreadyAnswered: true });
   });
 
+  it('does not overwrite a recorded answer or pending forward with a late dispatcher receipt', async () => {
+    const { workspace, nodes } = await team();
+    const queuedEnvelope = await agentInboxService.enqueueDeferred({ workspaceId: workspace.id, toNodeId: nodes.Web, fromNodeId: nodes.Lider, kind: 'ask', content: 'Keep my answer' });
+    const before = await controlCenterRepository.findEnvelope(queuedEnvelope.envelope.id);
+    await controlCenterRepository.transitionEnvelope(queuedEnvelope.envelope.id, { state: 'replied', reply: 'Confirmed answer', metadata: { ...before!.metadata, forwardPending: true, forwardId: uuidv7() } });
+    for (const state of ['sent', 'delivered', 'acknowledged'] as const) {
+      expect(await controlCenterRepository.transitionEnvelope(queuedEnvelope.envelope.id, { state, metadata: before!.metadata })).toBeNull();
+    }
+    expect(await controlCenterRepository.findEnvelope(queuedEnvelope.envelope.id)).toMatchObject({ state: 'replied', reply: 'Confirmed answer', metadata: { forwardPending: true } });
+  });
+
   it('routes an explicit answer to a reply back to its sender', async () => {
     const { workspace, nodes } = await team();
     const question = await bridgeService.ask(workspace.id, { from: nodes.Lider, to: nodes.Web, message: 'Contrato pronto?', timeoutMs: 1_000 });

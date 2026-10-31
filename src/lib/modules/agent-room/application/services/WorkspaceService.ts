@@ -1,3 +1,4 @@
+import { uuidv7 } from '@beeblock/svelar/support';
 import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
 import { isAbsolute, posix, resolve } from 'node:path';
@@ -475,7 +476,12 @@ export class WorkspaceService {
           height,
         })
       : { x: dto.x, y: dto.y };
-    const node = await workspaceRepository.createNode({
+    const desiredRole = dto.type === 'terminal' && (payload as TerminalNodePayload)?.provider
+      ? (payload as TerminalNodePayload).maestro ? 'leader' : (payload as TerminalNodePayload).deputy ? 'deputy' : null : null;
+    const previousAsDeputy = Boolean((payload as Record<string, unknown> | null)?.previousLeaderAsDeputy);
+    if (desiredRole) { (payload as TerminalNodePayload).maestro = false; (payload as TerminalNodePayload).deputy = false; }
+    if (payload) delete (payload as Record<string, unknown>).previousLeaderAsDeputy;
+    const create = () => workspaceRepository.createNode({
       workspaceId: dto.workspaceId,
       type: dto.type,
       title: dto.title,
@@ -487,6 +493,9 @@ export class WorkspaceService {
       payload,
       floorId,
     });
+    const node = desiredRole
+      ? await (await import('./WorkspaceLeadershipService.js')).workspaceLeadershipService.createWithRole(dto.workspaceId, create, desiredRole, previousAsDeputy)
+      : await create();
     if (node.type === 'terminal' && terminalExecutionRuntime(workspace, node.payload as never).kind === 'wsl') {
       await this.reprovisionBridge(workspace);
     }
@@ -514,6 +523,10 @@ export class WorkspaceService {
     const portalAfter = portalBefore && changes.payload ? portalProfileFromPayload({ ...existing.payload, ...changes.payload }) : null;
     if (existing.type === 'terminal' && changes.payload) {
       const payload = { ...(changes.payload as Record<string, unknown>) };
+      // Leadership has a separate revision-guarded command. A stale terminal
+      // settings snapshot must never silently restore an earlier leader.
+      payload.maestro = Boolean((existing.payload as TerminalNodePayload).maestro);
+      payload.deputy = Boolean((existing.payload as TerminalNodePayload).deputy);
       const currentRuntime = (existing.payload as { executionRuntime?: unknown } | null)?.executionRuntime;
       // Runtime changes must pass through changeTerminalRuntime so the PTY,
       // provider availability, resume metadata, and bridge stay consistent.
@@ -789,6 +802,12 @@ export class WorkspaceService {
     }
     if (node.type === 'computer') await computerService.removeEvidence(workspaceId).catch(() => undefined);
     if (node.type === 'terminal') {
+      const { workspaceLeadershipService } = await import('./WorkspaceLeadershipService.js');
+      const pair = await workspaceLeadershipService.configuration(workspaceId);
+      if (pair.leaderNodeId === nodeId || pair.deputyNodeId === nodeId) await workspaceLeadershipService.configure(workspaceId, {
+        command: 'configure', requestId: uuidv7(), expectedRevision: pair.revision,
+        leaderNodeId: pair.leaderNodeId === nodeId ? null : pair.leaderNodeId, deputyNodeId: null,
+      }, { kind: 'owner' });
       this.killTerminalSessions(workspaceId, nodeId, { ...((node.payload ?? {}) as Record<string, unknown>) });
     }
     if (node.type === 'design') await designDocumentService.remove(workspaceId, nodeId);

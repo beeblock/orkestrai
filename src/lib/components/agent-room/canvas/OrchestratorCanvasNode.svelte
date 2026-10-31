@@ -2,6 +2,7 @@
   import { useNodes, type NodeProps } from '@xyflow/svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { ArrowUp, Cable, LoaderCircle, LocateFixed, Mic, Plus, Star, X } from '@lucide/svelte';
+  import LeadershipDialog from '../LeadershipDialog.svelte';
   import ComposerVoice from './ComposerVoice.svelte';
   import { sendToAgent } from './CanvasComposer.svelte';
   import { TEXT_DICTATION_COMMAND } from '../text-dictation.js';
@@ -34,6 +35,7 @@
     onToggleMaestro?: (id: string) => void;
   };
 
+  let leadershipOpen = $state(false);
   let { id, data, selected } = $props<NodeProps & { data: OrchestratorNodeData }>();
   const staged = new ComposerAttachments(() => data.workspaceId);
   // Removing the panel discards the files of a draft that was never sent.
@@ -283,8 +285,8 @@
           </button>
           <button type="button" class="locate" onclick={() => data.onJumpToNode?.(item.id)} aria-label={m['orchestrator.show_on_canvas']({ name: item.title })} title={m['orchestrator.show_on_canvas']({ name: item.title })}><LocateFixed size={13} /></button>
           </div>
-          {#if !leader && data.onToggleMaestro}
-            <button type="button" class="make-leader" onclick={() => data.onToggleMaestro?.(item.id)}>{m['orchestrator.make_leader']({ name: item.title })}</button>
+          {#if !leader}
+            <button type="button" class="make-leader" onclick={() => (leadershipOpen = true)}>{m['orchestrator.make_leader']({ name: item.title })}</button>
           {/if}
         {/each}
       {:else}
@@ -834,3 +836,5 @@
     opacity: 0.45;
   }
 </style>
+
+{#if leadershipOpen}{#key data.workspaceId}<LeadershipDialog workspaceId={data.workspaceId} onClose={() => (leadershipOpen = false)} />{/key}{/if}

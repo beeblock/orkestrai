@@ -1,3 +1,4 @@
+import { leadershipCliInput } from './leadership-reference.js';
 /**
  * CLI `orkestrai` — ponte entre agentes e o canvas do Orkestrai.
  *
@@ -109,6 +110,7 @@ Uso:
   orkestrai checklist read <no> | checklist add <no> <texto> | checklist check|uncheck <no> <itemId> | checklist edit <no> <itemId> <texto> | checklist remove <no> <itemId>
   orkestrai calendar read <no> | calendar add <no> --date AAAA-MM-DD [--time HH:MM] [--notes <texto>] <titulo> | calendar edit <no> <eventId> [--title <titulo>] [--date AAAA-MM-DD] [--time HH:MM|dia-todo] [--notes <texto>] | calendar remove <no> <eventId>
     <no> e o id ou o titulo exato do checklist/calendario no Canvas.
+  orkestrai leadership status | command --input <json> | handoff read|brief|acknowledge <id> | review prepare|read|approve|changes
   orkestrai adventure [status] [--json] | adventure equip-best | adventure act '<json>'
     A Aventura do time: status mostra a guilda e o seu heroi; equip-best veste o melhor no seu heroi; act roda uma acao do acampamento ({"type":"raise-skill","heroId":"...","skillId":"..."}). Especialistas mexem so no proprio heroi; o lider tambem abre baus, usa o cubo, compra runas, viaja e equilibra a guilda.
   orkestrai api list [--json] | api reference | api read <nodeId> | api import <path> [--kind auto|bruno|postman|openCollection] [--node <nodeId>] [--title <titulo>] [--manual] | api create <titulo> --file <json> | api replace <nodeId> --file <json> --fingerprint <sha256> [--no-sync] | api sync-status <nodeId> | api pull <nodeId> [--force] | api push <nodeId> [--force] | api export <nodeId> <bruno|postman> [--path <relativo>] | api run <nodeId> <requestId> | api run-runner <nodeId> <runnerId> [--variables <json>] [--max-executions <n>] [--json]
@@ -1247,6 +1249,14 @@ async function runCommand(argv, options, sink) {
       }
       throw new Error(`Acao de nota desconhecida: ${action}`);
     }
+    case 'leadership': {
+      const path = '/api/agent-room/bridge/leadership';
+      const data = !rest.length || rest[0] === 'status'
+        ? await bridge(config, 'GET', path)
+        : await bridge(config, 'POST', path, { input: leadershipCliInput(rest, /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (flags))), from: selfAgent });
+      out(JSON.stringify(data, null, 2));
+      return 0;
+    }
     case 'adventure': {
       const [action = 'status', ...values] = rest;
       const usage = 'Uso: orkestrai adventure [status] | adventure equip-best | adventure act \'<json>\'';
@@ -2049,6 +2059,11 @@ async function runCommand(argv, options, sink) {
         const taskId = values[0];
         if (!taskId) throw new Error('Uso: orkestrai task done <taskId>');
         const data = await bridge(config, 'PATCH', `/api/agent-room/bridge/tasks/${taskId}`, { status: 'done', from: flags.from });
+        if (data.status !== 'done') {
+          out(`Completion requested; task remains [${data.status}] until both reviewers approve the same revision. Keep independent work moving.`);
+          if (data.completionReview) out(JSON.stringify({ completionReview: data.completionReview }, null, 2));
+          return 0;
+        }
         const handoff = data.completionHandoff;
         if (handoff?.status === 'queued') out(`Tarefa marcada como concluida. Lider ${handoff.leaderTitle} avisado.`);
         else if (handoff?.status === 'leader_offline') out(`Tarefa marcada como concluida. Lider ${handoff.leaderTitle} esta offline; o quadro registra a conclusao.`);

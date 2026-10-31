@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'leadership-handoff-review': 'leadership-handoff-review',
   'subscription-lending': 'subscription-lending',
   'profile-session-continuity': 'profile-session-continuity',
   'adventure-party': 'adventure-party',

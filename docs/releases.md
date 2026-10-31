@@ -251,6 +251,12 @@ versão de codec. O cache persistente não deve reaproveitar análise incompatí
 A CI obrigatória do mesmo SHA da release executa os testes abaixo; não remova
 esses casos nem flexibilize limites para contornar uma falha de publicação.
 
+- `tests/feature/workspace-leadership.test.ts` e
+  `tests/unit/orkestrai-cli-leadership.test.ts`: transição persistente sem trocar
+  conta/conversa/modelo, identidade real dos revisores, aceite independente dos
+  dois, correções com aprovações novas, recuperação de conclusão e avanço dos
+  cards independentes. `tests/e2e/workspace-leadership.spec.ts` verifica os
+  controles de liderança e os estados de revisão no build de produção.
 - `tests/feature/agent-inbox.test.ts`: ask padrão retorna em menos de 12 s
   (espera configurada de 8 s), um terminal lento não serializa outros agentes,
   respostas concorrentes não duplicam e a recuperação cobre reinício, lotes,

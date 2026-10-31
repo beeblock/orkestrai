@@ -550,7 +550,7 @@ export class PresetService {
         width: node.width ?? 560,
         height: node.height ?? 360,
         zIndex: node.zIndex ?? 0,
-        payload: await presetNodePayload(workspaceId, { ...node, payload: payloads[index] }) as never,
+        payload: await presetNodePayload(workspaceId, { ...node, payload: { ...payloads[index], deputy: false } }) as never,
       });
       nodeIds.push(created.id);
     }

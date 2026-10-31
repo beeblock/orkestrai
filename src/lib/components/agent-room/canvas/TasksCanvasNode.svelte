@@ -18,10 +18,14 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
   import CouncilDialog from '../CouncilDialog.svelte';
+  import LeadershipReviewDialog from '../LeadershipReviewDialog.svelte';
+  import { leadershipReviewLabel } from '../leadership-labels.js';
+  import type { LeadershipReviewSummary } from '$lib/modules/agent-room/contracts/schemas/leadership.schema.js';
   import { boardFeed } from '../shared-board-feed.js';
 
   type BoardTask = {
     id: string;
+    completionReview?: LeadershipReviewSummary | null;
     title: string;
     description: string | null;
     status: string;
@@ -57,6 +61,7 @@
     onRename?: (id: string, title: string) => void;
   };
 
+  let reviewOpen = $state<{ taskId: string } | null>(null);
   let { id, data, selected } = $props<NodeProps & { data: TasksNodeData }>();
 
   function defaultColumnLabel(key: string): string {
@@ -80,6 +85,7 @@
   })));
 
   let tasks = $state<BoardTask[]>([]);
+  const openReview = $derived(tasks.find((task) => task.id === reviewOpen?.taskId)?.completionReview ?? null);
   let agents = $state<Array<{ id: string; title: string }>>([]);
   let draft = $state('');
   let dragTaskId = $state<string | null>(null);
@@ -714,6 +720,9 @@
                 {:else}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <span class="tb-title" title={undefined} ondblclick={() => startEdit(task)}>{task.title}</span>
+                  {#if task.completionReview}
+                    <button type="button" class="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] focus-visible:outline focus-visible:outline-2" title={leadershipReviewLabel(task.completionReview.status)} aria-label={m['leadership.review_badge']()} onclick={() => (reviewOpen = { taskId: task.id })}><Scale size={11}/><span class="truncate">{leadershipReviewLabel(task.completionReview.status)}</span></button>
+                  {/if}
                 {/if}
                 <div class="tb-reveal">
                   <DropdownMenu.Root>
@@ -1535,3 +1544,5 @@
     }
   }
 </style>
+
+{#if openReview}{#key data.workspaceId + openReview.id}<LeadershipReviewDialog workspaceId={data.workspaceId} reviewId={openReview.id} signal={JSON.stringify([openReview.status, openReview.leaderDecision, openReview.deputyDecision])} onClose={() => (reviewOpen = null)} />{/key}{/if}

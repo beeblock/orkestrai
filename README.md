@@ -1011,3 +1011,30 @@ Open **Usage and performance** in the Code Graph header, or run `orkestrai graph
 The first boot moves verified graph data to `<database>.code-graph.sqlite` before compacting the retired primary rows. Migration failure preserves the original data and does not prevent conversations from opening. Future migration backups are a pair: restore the main `.bak-<timestamp>` together with the matching `.code-graph.sqlite.bak-<timestamp>`. New history shares unchanged chunks instead of copying the entire graph every revision; retained legacy history is preserved.
 
 For a production-size concurrency check, explicitly set `ORKESTRAI_GRAPH_BENCH_SOURCE` (a read-only SQLite source), `ORKESTRAI_GRAPH_BENCH_WORKSPACE`, and optionally `ORKESTRAI_GRAPH_BENCH_RESULT`, then run `vitest run --config vitest.graph-runtime.config.ts`. The benchmark copies only graph metadata into an isolated database, never opens a live provider, and measures message persistence during the real indexing engine. These are service measurements; desktop interaction and HTTP overhead require separate production-build checks.
+
+### Leadership handoff and independent deputy
+
+Choose Leader, optional Deputy or Specialist when creating an agent. For an
+existing agent, open its menu → Team leadership. A transfer records workspace
+instructions, bounded recent public conversation context, open cards and sourced
+references without replacing either agent's conversation, model or account. The
+new primary reads and acknowledges the handoff; the former primary can add a
+brief without blocking the new one. Older saved context remains available by
+reference, including prior handoffs. Cross-provider transfer does not copy hidden
+reasoning or turn a Claude conversation into a native Codex conversation.
+
+With a deputy, `task done` requests independent reviews instead of closing the
+card. Land Floor work and prepare the relevant file/native-node artifacts. Both
+reviewers submit their own decision for the same revision with concrete evidence.
+Findings require corrections and a new round approved by both. Changed artifacts,
+criteria or reviewers invalidate approvals. Confirmed completion is durable and
+recovers after restart. The gate belongs to one card, so other executable work
+continues. Without a deputy, completion follows the existing single-leader flow.
+
+Use `orkestrai leadership status`, `leadership handoff read|brief|acknowledge`,
+`leadership review prepare|read|approve|changes`, or
+`leadership command --input '<json>'` (MCP `leadership_status`,
+`leadership_command`). Votes require the actual reviewer's live terminal identity.
+Coordinators can transfer leadership with an active assigned task, but cannot
+remove an existing independent reviewer gate. The owner can explicitly change it. A coordinator promoted on a Floor retains
+that checkout and its conversation; transfer the role before retiring that Floor.

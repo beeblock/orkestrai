@@ -1318,6 +1318,20 @@ async function conversationTail(
   return text ? { storage, text } : null;
 }
 
+/** Public conversation text for a provider-neutral leadership handoff. Tool
+ * results, credentials/configuration and private reasoning are not exported. */
+export async function conversationHandoffTurn(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
+): Promise<{ prompt: string | null; reply: string | null; complete: boolean; coverage: 'latest_bounded_turn' } | null> {
+  if (!sessionId || !/^[a-zA-Z0-9_-]{1,160}$/.test(sessionId)) return null;
+  const tail = await conversationTail(provider, cwd, sessionId, options);
+  if (!tail) return null;
+  const turn = parserForStorage(tail.storage)?.(tail.text);
+  if (!turn) return null;
+  return { prompt: turn.prompt?.slice(0, 8_000) ?? null, reply: turn.reply?.slice(0, 16_000) ?? null,
+    complete: turn.complete, coverage: 'latest_bounded_turn' };
+}
+
 /** Bound to this PTY's conversation and host-visible home (including WSL). */
 export async function latestTurnComplete(
   provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},

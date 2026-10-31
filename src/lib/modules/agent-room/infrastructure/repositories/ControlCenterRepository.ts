@@ -1,3 +1,4 @@
+import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { createHash } from 'node:crypto';
 import type {
@@ -311,41 +312,45 @@ export class ControlCenterRepository {
     /** Only transition from these states; anything else leaves the envelope untouched. */
     fromStates?: AgentMessageDeliveryState[];
   }): Promise<{ envelope: AgentMessageEnvelopeData; event: AgentMessageDeliveryEvent } | null> {
-    const existing = await AgentMessageEnvelope.find(messageId);
-    if (!existing) return null;
-    if (input.fromStates && !input.fromStates.includes(existing.getAttribute('state') as AgentMessageDeliveryState)) return null;
-    const now = new Date().toISOString();
-    const metadata = input.metadata ?? parseMetadata(existing.getAttribute('metadata_json'));
-    const changes: Record<string, unknown> = {
-      state: input.state,
-      updated_at: now,
-      error: input.error === undefined ? existing.getAttribute('error') : input.error,
-      reply: input.reply === undefined ? existing.getAttribute('reply') : input.reply,
-      metadata_json: JSON.stringify(metadata),
-    };
-    if (input.countAttempt) changes.attempts = Number(existing.getAttribute('attempts') ?? 0) + 1;
-    if (input.state === 'delivered') changes.delivered_at = now;
-    if (input.state === 'acknowledged') changes.acknowledged_at = now;
-    if (input.state === 'replied') changes.replied_at = now;
-    if (input.state === 'failed') changes.failed_at = now;
-    await (input.fromStates
-      ? AgentMessageEnvelope.query().where('id', messageId).whereIn('state', input.fromStates)
-      : AgentMessageEnvelope.query().where('id', messageId)).update(changes);
-    const model = await AgentMessageDelivery.create({
-      id: uuidv7(),
-      message_id: messageId,
-      workspace_id: existing.getAttribute('workspace_id'),
-      from_node_id: existing.getAttribute('from_node_id') ?? null,
-      to_node_id: existing.getAttribute('to_node_id'),
-      state: input.state,
-      content: existing.getAttribute('content'),
-      reply: input.reply ?? null,
-      error: input.error ?? null,
-      metadata_json: JSON.stringify(metadata),
-      created_at: now,
+    return Connection.transaction(async () => {
+      const existing = await AgentMessageEnvelope.find(messageId);
+      if (!existing) return null;
+      // A late dispatcher receipt never rewinds an answer or its durable forward.
+      if (existing.getAttribute('state') === 'replied' && input.state !== 'replied') return null;
+      if (input.fromStates && !input.fromStates.includes(existing.getAttribute('state') as AgentMessageDeliveryState)) return null;
+      const now = new Date().toISOString();
+      const metadata = input.metadata ?? parseMetadata(existing.getAttribute('metadata_json'));
+      const changes: Record<string, unknown> = {
+        state: input.state,
+        updated_at: now,
+        error: input.error === undefined ? existing.getAttribute('error') : input.error,
+        reply: input.reply === undefined ? existing.getAttribute('reply') : input.reply,
+        metadata_json: JSON.stringify(metadata),
+      };
+      if (input.countAttempt) changes.attempts = Number(existing.getAttribute('attempts') ?? 0) + 1;
+      if (input.state === 'delivered') changes.delivered_at = now;
+      if (input.state === 'acknowledged') changes.acknowledged_at = now;
+      if (input.state === 'replied') changes.replied_at = now;
+      if (input.state === 'failed') changes.failed_at = now;
+      await (input.fromStates
+        ? AgentMessageEnvelope.query().where('id', messageId).whereIn('state', input.fromStates)
+        : AgentMessageEnvelope.query().where('id', messageId)).update(changes);
+      const model = await AgentMessageDelivery.create({
+        id: uuidv7(),
+        message_id: messageId,
+        workspace_id: existing.getAttribute('workspace_id'),
+        from_node_id: existing.getAttribute('from_node_id') ?? null,
+        to_node_id: existing.getAttribute('to_node_id'),
+        state: input.state,
+        content: existing.getAttribute('content'),
+        reply: input.reply ?? null,
+        error: input.error ?? null,
+        metadata_json: JSON.stringify(metadata),
+        created_at: now,
+      });
+      const fresh = await AgentMessageEnvelope.find(messageId);
+      return fresh ? { envelope: mapEnvelope(fresh), event: mapDelivery(model) } : null;
     });
-    const fresh = await AgentMessageEnvelope.find(messageId);
-    return fresh ? { envelope: mapEnvelope(fresh), event: mapDelivery(model) } : null;
   }
 
   async findEnvelope(messageId: string): Promise<AgentMessageEnvelopeData | null> {

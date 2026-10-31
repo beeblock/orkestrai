@@ -243,9 +243,12 @@ export class AgentRuntimeService {
     this.ticking = true;
     const generation = this.supervisorGeneration;
     try {
+      void import('./LeadershipReviewService.js').then(({ leadershipReviewService }) => leadershipReviewService.finalizePending())
+        .catch(() => undefined);
       for (const workspace of await workspaceRepository.listWorkspaces()) {
         if (generation !== this.supervisorGeneration) return;
         if (workspace.suspendedAt) continue;
+        void import('./LeadershipReviewService.js').then(({ leadershipReviewService }) => leadershipReviewService.maintain(workspace.id)).catch(() => undefined);
         const nodes = (await workspaceRepository.listNodes(workspace.id, undefined, false, true)).filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider));
         for (const node of nodes) {
           const payload = node.payload as TerminalNodePayload;
@@ -265,7 +268,8 @@ export class AgentRuntimeService {
         }
         // One workspace leader owns the shared board. Floor agents are not
         // independent owners of that same backlog, and sleeping agents remain asleep.
-        const leader = nodes.find((node) => !node.floorId && (node.payload as TerminalNodePayload).maestro);
+        const leader = nodes.find((node) => !node.floorId && (node.payload as TerminalNodePayload).maestro)
+          ?? nodes.find((node) => (node.payload as TerminalNodePayload).maestro);
         if (leader && generation === this.supervisorGeneration && !this.leaderChecks.has(leader.id)) {
           const controller = new AbortController();
           this.leaderChecks.set(leader.id, controller);
@@ -293,9 +297,14 @@ export class AgentRuntimeService {
   }
 
   private async pendingLeaderTasks(workspaceId: string): Promise<AgentBoardTask[]> {
-    return AgentBoardTask.query().where('workspace_id', workspaceId)
+    const tasks = await AgentBoardTask.query().where('workspace_id', workspaceId)
       .whereNull('archived_at').whereIn('status', ['todo', 'doing'])
       .orderBy('created_at', 'asc').get();
+    const { workspaceLeadershipRepository } = await import('../../infrastructure/repositories/WorkspaceLeadershipRepository.js');
+    const reviews = await workspaceLeadershipRepository.reviewSummaries(workspaceId, tasks.map((task) => task.getAttribute('leadership_review_id')).filter(Boolean) as string[]);
+    const waitingForDeputy = new Set(reviews.filter((review) => review.status === 'approved'
+      || (review.status === 'pending' && review.leaderDecision === 'approve')).map((review) => review.id));
+    return tasks.filter((task) => !waitingForDeputy.has(String(task.getAttribute('leadership_review_id') ?? '')));
   }
 
   private async leaderPolicyAllows(workspaceId: string, nodeId: string): Promise<boolean> {
@@ -445,6 +454,12 @@ export class AgentRuntimeService {
       || (HUMAN_ATTENTION_STATES.has(activity.state) && !activity.taskId))) return false;
     let task: AgentBoardTask | undefined;
     for (const candidate of tasks) {
+      const reviewId = candidate.getAttribute('leadership_review_id');
+      if (reviewId) {
+        const { workspaceLeadershipRepository } = await import('../../infrastructure/repositories/WorkspaceLeadershipRepository.js');
+        const [review] = await workspaceLeadershipRepository.reviewSummaries(workspaceId, [String(reviewId)]);
+        if (review && ['collecting', 'pending', 'approved'].includes(review.status)) continue;
+      }
       const previous = await controlCenterRepository.latestSemanticTaskActivity(nodeId, String(candidate.getAttribute('id')));
       if ((!previous || !HUMAN_ATTENTION_STATES.has(previous.state))
         && !(await controlCenterRepository.openAsksFrom(nodeId, asksSince, String(candidate.getAttribute('id'))))) { task = candidate; break; }

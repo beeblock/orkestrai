@@ -273,7 +273,6 @@
         },
         onProviderChange: changeProvider,
         onRuntimeChange: changeRuntime,
-        onToggleMaestro: (id: string) => patchPayload(id, { maestro: !payload.maestro }),
         onThemeChange: (id: string, theme: TerminalThemeName) => patchPayload(id, { theme }),
         onContentChange: (id: string, content: string) => patchPayload(id, { content }),
         onColorChange: (id: string, color: string) => patchPayload(id, { color }),

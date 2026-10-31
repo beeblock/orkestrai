@@ -7,13 +7,16 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-## 0.50.0 - 2026-10-30
+## 0.50.0 - 2026-10-31
 
 ### Added
+- Transfer primary leadership between existing or newly created agents with a durable, bounded context handoff and preserved provider conversations, profiles and models. Expose the same leadership commands through the UI, authenticated native bridge, CLI and MCP.
+- Add an optional deputy with independent, per-delivery revision approvals. Findings keep the card open; corrections require fresh decisions from both reviewers. Complete approved cards automatically with durable restart recovery while independent work continues.
 - Add atomic Adventure bag/stash bulk transfers in the Camp and the native CLI/MCP, preserving capacity, overflow, locks and equipped gear.
 - Expose measured workspace code-graph query counts, latency buckets, estimated returned context, index duration and shared database size in the app, CLI and MCP. Counters never store query text or source, and context estimates do not claim measured token savings.
 
 ### Fixed
+- Keep recorded inbox answers and durable reply forwarding intact when a delayed dispatcher receipt arrives; serialize each state transition and ignore receipts after a reply.
 - Preserve unsent Canvas prompt text per workspace across view changes and reloads in the current tab. Browser Back closes a focused Design before leaving the board, keeping the team visible. Delayed send acknowledgements do not clear newer drafts or another workspace.
 - Contain socket and WebSocket errors to the failed collaboration/model-access relay connection, cleaning up the peer without interrupting other rooms.
 - Restart an advancing Adventure party from Torment 1-1 after its final boss instead of looping that boss; preserve experience and clears, and explain that hero Paragon begins at level 100.

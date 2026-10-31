@@ -8,7 +8,7 @@ import type { AgentRoleLaunchContext } from '../adapters/types.js';
 import { taskBoardService } from './TaskBoardService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { agentInboxService } from './AgentInboxService.js';
-import { LEADER_LAUNCH_CONTEXT } from '../../domain/leader-execution.js';
+import { LEADER_LAUNCH_CONTEXT, LEADERSHIP_HANDOFF_CONTRACT } from '../../domain/leader-execution.js';
 
 export type AgentRole = {
   slug: string;
@@ -236,6 +236,7 @@ export class RoleService {
       roleConfiguredAtLaunch?: string;
       sessionId?: string;
       maestro?: boolean;
+      deputy?: boolean;
     };
     const role = payload.role && mode !== 'resume' ? await this.get(workspaceId, payload.role) : null;
     // Recruit accepts a free-form specialty as well as a saved role. A label
@@ -252,9 +253,10 @@ export class RoleService {
       ? []
       : (await taskBoardService.list(workspaceId)).filter((task) => {
           if (task.status === 'done') return false;
+          if (task.completionReview && ['collecting', 'pending', 'approved'].includes(task.completionReview.status) && !payload.maestro && !payload.deputy) return false;
           return task.assigneeNodeId === nodeId || (payload.maestro && !task.assigneeNodeId);
         });
-    let leaderContext = Boolean(payload.maestro && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
+    let leaderContext = Boolean((payload.maestro || payload.deputy) && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
     if (!shouldApplyRole && tasks.length === 0 && !leaderContext) return { applied: false, tasksDelivered: 0 };
     if (!payload.sessionId) throw new Error('O terminal ainda não tem sessão PTY.');
 
@@ -268,7 +270,7 @@ export class RoleService {
       // An automatic recovery that already reached this session covers its card.
       const covered = await Promise.all(tasks.map((task) => agentInboxService.recoveryDelivered(nodeId, task.id, sessionId).catch(() => false)));
       tasks = tasks.filter((_, index) => !covered[index]);
-      leaderContext = Boolean(payload.maestro && tasks.length > 0);
+      leaderContext = Boolean((payload.maestro || payload.deputy) && tasks.length > 0);
       if (!shouldApplyRole && tasks.length === 0) return { applied: false, tasksDelivered: 0 };
     }
 
@@ -307,7 +309,7 @@ export class RoleService {
         workspaceId,
         nodeId,
         sessionId: payload.sessionId,
-        message: `${leaderContext ? `[workspace leader]\n${LEADER_LAUNCH_CONTEXT}\n\n` : ''}${instruction}\n\n${briefs}`,
+        message: `${leaderContext ? `[workspace leader]\n${payload.deputy ? LEADERSHIP_HANDOFF_CONTRACT : LEADER_LAUNCH_CONTEXT + "\n" + LEADERSHIP_HANDOFF_CONTRACT}\n\n` : ''}${instruction}\n\n${briefs}`,
       });
       // This prompt already says to continue these cards: a queued recovery
       // would only make the agent start over on the same work.

@@ -19,6 +19,7 @@ export class AgentBoardTask extends Model {
     'created_by',
     'created_at',
     'updated_at',
+    'leadership_review_id',
   ];
 
   static casts = {

@@ -39,6 +39,7 @@ import type { TerminalNodePayload } from '../../domain/types.js';
  */
 
 export type InboxKind =
+  | 'leadership_change' | 'leadership_review' | 'leadership_findings' | 'leadership_criteria'
   | 'ask'
   | 'reply'
   | 'task'
@@ -925,6 +926,16 @@ export class AgentInboxService {
   }
 
   private async isRelevant(envelope: AgentMessageEnvelope): Promise<boolean> {
+    // These records carry role/review authority. A failed state read defers the
+    // delivery (the drain retries), rather than sending or discarding a stale grant.
+    if (envelope.kind === 'leadership_change') {
+      const { workspaceLeadershipService } = await import('./WorkspaceLeadershipService.js');
+      return workspaceLeadershipService.envelopeRelevant(envelope);
+    }
+    if (['leadership_review', 'leadership_findings', 'leadership_criteria'].includes(envelope.kind)) {
+      const { leadershipReviewService } = await import('./LeadershipReviewService.js');
+      return leadershipReviewService.envelopeRelevant(envelope);
+    }
     const check = this.relevance.get(envelope.kind);
     if (!check) return true;
     try {

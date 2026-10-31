@@ -666,6 +666,8 @@ export type TerminalNodePayload = {
   roleConfiguredAtLaunch?: string;
   /** Modo Maestro: pode recrutar/dispensar/conectar outros agentes via ponte. */
   maestro?: boolean;
+  /** Optional independent reviewer; distinct from the workspace's primary leader. */
+  deputy?: boolean;
   /** Identificador de um tema xterm embutido. */
   theme?: string;
   /** Comandos salvos exclusivamente para este node terminal. */

@@ -131,7 +131,7 @@
         return;
       }
       if (result?.cleanup === 'pending' && result.cleanupReason) {
-        errorMessage = m['floor.land_kept']({ reason: result.cleanupReason });
+        errorMessage = m['floor.land_kept']({ reason: result.cleanupReason.includes('leadership_role') ? m['leadership.floor_kept']() : result.cleanupReason });
         return;
       }
       if (visibleFloorId && !overview?.floors.some((item) => item.floorId === visibleFloorId)) onSelectFloor(null);

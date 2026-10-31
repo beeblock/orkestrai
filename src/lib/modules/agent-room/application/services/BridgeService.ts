@@ -1,3 +1,4 @@
+import { Connection } from '@beeblock/svelar/database';
 import { randomBytes } from 'node:crypto';
 import { Event } from '@beeblock/svelar/events';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -6,7 +7,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import type { AgentActivityState, CanvasNode, ImageNodePayload, ModelEffort, TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
 import { workspaceProjectContext } from '../../domain/runtime.js';
-import { LEADER_EXECUTION_CONTRACT } from '../../domain/leader-execution.js';
+import { LEADER_EXECUTION_CONTRACT, LEADERSHIP_HANDOFF_CONTRACT } from '../../domain/leader-execution.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { occupiedOnFloor, shownOnFloor } from '../../domain/canvas-floors.js';
 import { AgentWorkspace } from '../../domain/models/AgentWorkspace.js';
@@ -72,6 +73,7 @@ export type BridgeAgent = {
   sessionAlive: boolean;
   /** true quando o agente e o líder do time (Modo Maestro). */
   maestro: boolean;
+  deputy?: boolean;
 };
 
 export type BridgePortal = {
@@ -219,7 +221,7 @@ export class BridgeService {
     return nodes
       .filter((node) => node.type === 'terminal')
       .map((node) => {
-        const payload = node.payload as { provider?: string; command?: string; sessionId?: string; maestro?: boolean };
+        const payload = node.payload as { provider?: string; command?: string; sessionId?: string; maestro?: boolean; deputy?: boolean };
         const sessionId = payload.sessionId ?? null;
         const session = sessionId ? ptySessionManager.get(sessionId) : null;
         return {
@@ -230,6 +232,7 @@ export class BridgeService {
           sessionId,
           sessionAlive: Boolean(session && !session.exited),
           maestro: Boolean(payload.maestro),
+          deputy: Boolean(payload.deputy),
         };
       });
   }
@@ -1227,7 +1230,8 @@ export class BridgeService {
     const agents = await this.listAgents(workspaceId);
     const origin = this.findAgent(agents, from);
     const node = await workspaceRepository.getNode(origin.nodeId);
-    const maestro = Boolean((node?.payload as { maestro?: boolean } | undefined)?.maestro);
+    const coordinator = node?.payload as { maestro?: boolean; deputy?: boolean } | undefined;
+    const maestro = Boolean(coordinator?.maestro || coordinator?.deputy);
     if (!maestro) {
       throw new Error(`O agente "${origin.title}" não está no Modo Maestro. Ative no nó do terminal.`);
     }
@@ -1525,14 +1529,21 @@ export class BridgeService {
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.target);
     if (target.nodeId === origin.nodeId) throw new Error('O maestro não pode dispensar a si mesmo.');
+    let targetSnapshotPayload: { provider?: string; agentSessionId?: string } = {};
+    await Connection.transaction(async () => {
+      await this.requireMaestro(workspaceId, input.from);
+      const current = await workspaceRepository.getActiveNode(workspaceId, target.nodeId);
+      const role = current?.payload as { maestro?: boolean; deputy?: boolean } | undefined;
+      if (role?.maestro || role?.deputy) throw new Error('leadership_preserve_deputy');
+      targetSnapshotPayload = (current?.payload ?? {}) as typeof targetSnapshotPayload;
+      await workspaceRepository.deleteNode(target.nodeId);
+    });
     ptySessionManager.killNode(workspaceId, target.nodeId);
-    const targetNode = await workspaceRepository.getNode(target.nodeId);
-    const targetPayload = (targetNode?.payload ?? {}) as { provider?: string; agentSessionId?: string };
+    const targetPayload = targetSnapshotPayload;
     if (targetPayload.provider && targetPayload.agentSessionId) {
       ptySessionManager.killAgentSession(targetPayload.provider, targetPayload.agentSessionId, { workspaceId, nodeId: target.nodeId });
     }
     if (target.sessionId && ptySessionManager.claimNode(target.sessionId, workspaceId, target.nodeId)) ptySessionManager.kill(target.sessionId);
-    await workspaceRepository.deleteNode(target.nodeId);
     await agentLearningService.settlePending(workspaceId, target.nodeId).catch(() => 0);
     await attentionService.resolveNode(workspaceId, target.nodeId).catch(() => 0);
     this.notifyWorkspaceChanged(workspaceId);
@@ -1711,6 +1722,7 @@ Use \`--json\` para saída estruturada em qualquer comando.
 ## Orquestrar times (Modo Maestro) — OBRIGATÓRIO para o líder
 
 ${LEADER_EXECUTION_CONTRACT}
+${LEADERSHIP_HANDOFF_CONTRACT}
 
 Se você é o líder (Modo Maestro), você NUNCA executa o trabalho sozinho: você orquestra — isso vale INCLUSIVE quando o time trava, demora ou erra. Se der ruim, você DESBLOQUEIA o time (passo 7); assumir o trabalho é falha de orquestração, não solução. Ao receber um projeto/tarefa grande:
 
@@ -1853,7 +1865,8 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai adventure ...` (MCP `adventure_read/adventure_act`) — a Aventura do time: a guilda, o seu herói e as ações do acampamento (especialistas no próprio herói; o líder na guilda inteira), quando o dono pedir.',
       '- `orkestrai design list/read/reference/apply` — documentos visuais nativos. Em exploração, produza primeiro 1 desktop + 1 mobile com design_import_code ou lote pequeno, entregue a primeira revisão em até 5 minutos e espere o gate visual humano. Só expanda a direção aprovada com blueprint completo. design list sinaliza stalled e o reviewStatus da revisão atual.',
       '- `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.',
-      `- Leader execution: ${LEADER_EXECUTION_CONTRACT}`,
+      `- Leader execution: ${LEADER_EXECUTION_CONTRACT}
+${LEADERSHIP_HANDOFF_CONTRACT}`,
       '- `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente. Nascem do estado atual da main e `land` integra e commita mesmo com alterações locais (só os arquivos do andar; em conflito nada muda). Entregar = integrado e commitado na main.',
       '- `orkestrai device list/attach/tap/swipe/pinch/type/permissions/tree/screenshot/stop` — device mobile visivel no Foco; aparelhos Android fisicos so podem ser anexados pelo usuario apos confirmacao na UI.',
       '- Desktop text: send the complete value in one `computer_type` call, including accents and emoji. Do not reconstruct words with multiple calls or dead-key shortcuts. Verify the composed text and exact recipient before submitting through the configured publication gate; typing alone is not delivery.',
