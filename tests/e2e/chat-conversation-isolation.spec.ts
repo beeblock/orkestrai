@@ -282,3 +282,49 @@ test('a queued structural refresh cannot swallow a leadership change in the next
     await expect(page.locator('#chat-composer-input')).toHaveAttribute('placeholder', new RegExp(destination.next.title));
   } finally { await source.cleanup(); await destination.cleanup(); }
 });
+
+test('returning to the original channel shows a newly persisted send even when its live frame is missed', async ({ page, request }) => {
+  const t = await team(request, 'Return before send persistence');
+  const body = 'Keep this new send and the identical next draft';
+  const arrived = deferred(), release = deferred(), finished = deferred();
+  // Model a missing live message while HTTP still works. The send receipt is
+  // the only way this view can learn about the newly persisted message.
+  await page.addInitScript(() => {
+    const NativeSocket = window.WebSocket;
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        this.addEventListener('message', event => {
+          try { if (JSON.parse(String(event.data)).type === 'channelMessage') event.stopImmediatePropagation(); }
+          catch { /* Other socket traffic. */ }
+        });
+      }
+    };
+  });
+  await page.route(`**${t.messagesUrl(t.next.id)}`, async route => {
+    if (route.request().method() !== 'POST' || route.request().postDataJSON()?.body !== body) return route.continue();
+    arrived.resolve();
+    try {
+      await release.promise;
+      const response = await route.fetch();
+      await route.fulfill({ response });
+    } finally { finished.resolve(); }
+  });
+  try {
+    await page.goto(`/chat?workspace=${t.workspace.id}&channel=${encodeURIComponent(`dm:${t.next.id}`)}`);
+    const input = page.locator('#chat-composer-input');
+    await expect(input).toBeEnabled();
+    await input.fill(body); await input.press('Enter'); await arrived.promise;
+    await direct(page, t.previous.title).click();
+    const loaded = page.waitForResponse(response => response.request().method() === 'GET'
+      && response.url().includes(t.messagesUrl(t.next.id)) && !new URL(response.url()).searchParams.has('questions'));
+    await direct(page, t.next.title).click();
+    expect((await loaded).ok()).toBe(true);
+    await expect(page.getByTestId('chat-message').filter({ hasText: body })).toHaveCount(0);
+    await input.fill(body);
+    release.resolve(); await finished.promise;
+    await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toBeEnabled();
+    await expect(page.getByTestId('chat-message').filter({ hasText: body })).toHaveCount(1);
+    await expect(input).toHaveValue(body);
+  } finally { release.resolve(); await t.cleanup(); }
+});

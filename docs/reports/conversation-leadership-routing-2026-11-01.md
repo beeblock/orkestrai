@@ -22,8 +22,9 @@ leader until a remount, even though server-side leadership was correct.
 
 ## Correction
 
-- Capture the workspace, channel and view generation for sends, history and
-  pending-question reads. Only that view may receive their UI updates.
+- Match persisted send receipts to their original workspace/channel, including
+  after returning to that channel. Scope draft, error, scroll, history and
+  pending-question updates to the original view generation.
 - Change the generation on workspace/channel switches and unmount, including
   leaving and returning to the same channel. Preserve a newer identical draft.
 - Keep successful sends committed to their original recipient, with their
@@ -57,7 +58,10 @@ details, and no Canvas node reload for ordinary incoming messages. An eighth tes
 debounce callbacks across a workspace switch and a second leadership change,
 then verifies that the active workspace receives its queued metadata refresh.
 The debounce reads the active workspace at execution time so an older queued
-event cannot swallow the new workspace's event.
+event cannot swallow the new workspace's event. A ninth test delays a send
+before persistence, returns to its channel and drops live message frames. It
+verifies that the HTTP receipt still shows the saved message and preserves an
+identical newer draft; missing a live frame cannot hide an accepted send.
 
 Local focused verification: 58 tests passed across channel delivery, timeline,
 leadership, navigation and the three-language documentation/tour catalogs.

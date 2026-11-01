@@ -124,7 +124,8 @@
     const id = workspaceId;
     const current = channel;
     const generation = conversationGeneration;
-    return { id, channel: current, isCurrent: () => id === workspaceId && current === channel && generation === conversationGeneration };
+    const matches = () => id === workspaceId && current === channel;
+    return { id, channel: current, matches, isCurrent: () => matches() && generation === conversationGeneration };
   }
 
   async function loadWorkspace(id: string, includeDetails = true) {
@@ -293,7 +294,9 @@
     );
     // The message is still committed, with its files and original destination,
     // when the owner opens a different conversation while this request runs.
-    if (!scope.isCurrent()) return true;
+    // Persisted messages still belong here after leaving and returning. Draft,
+    // error and scroll changes below require the original view generation.
+    if (!scope.matches()) return true;
     messages = upsertMessage(messages, result.message);
     if (result.answer) messages = upsertMessage(messages, result.answer);
     await tick();
