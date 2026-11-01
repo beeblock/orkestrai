@@ -53,7 +53,11 @@ identity, routing, provider sessions, accounts, tasks or database schemas.
 All six were run against a copy of the installed, unmodified production build
 and failed at the corresponding behavioral assertion. The additional seventh
 test checks an out-of-order metadata snapshot, preservation of pending channel
-details, and no Canvas node reload for ordinary incoming messages.
+details, and no Canvas node reload for ordinary incoming messages. An eighth test holds
+debounce callbacks across a workspace switch and a second leadership change,
+then verifies that the active workspace receives its queued metadata refresh.
+The debounce reads the active workspace at execution time so an older queued
+event cannot swallow the new workspace's event.
 
 Local focused verification: 58 tests passed across channel delivery, timeline,
 leadership, navigation and the three-language documentation/tour catalogs.

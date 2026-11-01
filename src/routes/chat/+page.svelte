@@ -479,12 +479,14 @@
         }
         if (frame.type === 'controlCenterChanged') scheduleAgentStatusRefresh();
         if (frame.type === 'workspaceChanged' && !workspaceTimer) {
-          const id = workspaceId;
           // Structural changes and leadership transfers are debounced; ordinary
           // status/message events never re-fetch the full Canvas node payloads.
           workspaceTimer = setTimeout(() => {
             workspaceTimer = null;
-            if (id && id === workspaceId) void loadWorkspace(id, false).catch(() => undefined);
+            // A workspace switch may happen during the debounce. Refresh the
+            // active workspace so its newer event is not lost behind this one.
+            const id = workspaceId;
+            if (id) void loadWorkspace(id, false).catch(() => undefined);
           }, 300);
         }
         if (frame.type === 'attentionChanged') {

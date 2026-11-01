@@ -8,7 +8,7 @@ pt-BR, English, and Spanish translations.
 ## Unreleased
 
 ### Fixed
-- Keep Conversation send receipts, history errors, pending questions and draft clearing scoped to the workspace and channel where the request started, including leaving and returning to the same conversation. Refresh agent identities and the current leader after workspace changes and reconnects without redirecting an explicitly selected agent conversation.
+- Keep Conversation send receipts, history errors, pending questions and draft clearing scoped to the workspace and channel where the request started, including leaving and returning to the same conversation. Refresh agent identities and the current leader after workspace changes and reconnects without redirecting an explicitly selected agent conversation. Keep queued metadata refreshes effective when switching workspaces.
 
 ## 0.50.0 - 2026-10-31
 

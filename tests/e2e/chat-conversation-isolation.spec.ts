@@ -222,3 +222,63 @@ test('an older workspace snapshot cannot restore the former leader or discard pe
     expect(nodeReads).toBe(readsBeforeMessages);
   } finally { release.resolve(); await t.cleanup(); }
 });
+
+test('a queued structural refresh cannot swallow a leadership change in the next workspace', async ({ page, request }) => {
+  const source = await team(request, 'Queued refresh source');
+  const destination = await team(request, 'Queued refresh destination');
+  const sourceChanged = deferred(), destinationChanged = deferred();
+  page.on('websocket', socket => {
+    let chat = false;
+    socket.on('framesent', event => {
+      try { const frame = JSON.parse(String(event.payload)); chat ||= frame.type === 'subscribe' && frame.events.includes('channelMessage'); } catch { /* Other socket traffic. */ }
+    });
+    socket.on('framereceived', event => {
+      if (!chat) return;
+      try {
+        const frame = JSON.parse(String(event.payload));
+        if (frame.type !== 'workspaceChanged') return;
+        if (frame.workspaceId === source.workspace.id) sourceChanged.resolve();
+        if (frame.workspaceId === destination.workspace.id) destinationChanged.resolve();
+      } catch { /* Other socket traffic. */ }
+    });
+  });
+  try {
+    await page.goto(`/chat?workspace=${source.workspace.id}`);
+    await expect(page.locator('aside.profile h2')).toHaveText(source.previous.title);
+    await page.getByTestId('workspace-switcher').click();
+    await page.getByRole('menuitem').filter({ hasText: destination.workspace.name }).click();
+    await expect(page).toHaveURL(new RegExp(destination.workspace.id));
+    await expect(page.locator('aside.profile h2')).toHaveText(destination.previous.title);
+    await page.locator('button.ws-tab-main').filter({ hasText: source.workspace.name }).click();
+    await expect(page).toHaveURL(new RegExp(source.workspace.id));
+    await expect(page.locator('aside.profile h2')).toHaveText(source.previous.title);
+    // Hold debounce callbacks until both workspaces changed, with real
+    // cancellation semantics. Other browser tasks and UI interactions run normally.
+    await page.evaluate(() => {
+      const originalSet = window.setTimeout.bind(window), originalClear = window.clearTimeout.bind(window);
+      const held = new Map<number, () => void>();
+      window.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+        if (delay !== 300 || typeof handler !== 'function') return originalSet(handler, delay, ...args);
+        const callback = () => { held.delete(id); handler(...args); };
+        const id = originalSet(callback, 60_000);
+        held.set(id, callback);
+        return id;
+      }) as typeof window.setTimeout;
+      window.clearTimeout = (id => { if (id !== undefined) held.delete(Number(id)); originalClear(id); }) as typeof window.clearTimeout;
+      (window as typeof window & { flushChatDebounces: () => void }).flushChatDebounces = () => {
+        const callbacks = [...held.entries()]; held.clear();
+        for (const [id, callback] of callbacks) { originalClear(id); callback(); }
+      };
+    });
+    await source.promote(); await sourceChanged.promise;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.locator('button.ws-tab-main').filter({ hasText: destination.workspace.name }).click();
+    await expect(page).toHaveURL(new RegExp(destination.workspace.id));
+    await expect(page.locator('aside.profile h2')).toHaveText(destination.previous.title);
+    await destination.promote(); await destinationChanged.promise;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.evaluate(() => (window as typeof window & { flushChatDebounces: () => void }).flushChatDebounces());
+    await expect(page.locator('aside.profile h2')).toHaveText(destination.next.title);
+    await expect(page.locator('#chat-composer-input')).toHaveAttribute('placeholder', new RegExp(destination.next.title));
+  } finally { await source.cleanup(); await destination.cleanup(); }
+});
