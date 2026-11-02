@@ -13,6 +13,7 @@ pt-BR, English, and Spanish translations.
 - Provision compact common agent skills and version-matched reference sections through `orkestrai guide` and `workspace_guide`, retaining every capability and the focused Karpathy delivery principles for leaders and specialists.
 
 ### Fixed
+- Hand pending inbox messages over with failed bridge tool results as well as successful ones, preserving the original operation error without retrying mutations. Git conflicts and validation errors no longer defer owner messages until the next successful tool call; an unavailable inbox leaves messages queued.
 - Keep leader coordination cards eligible independently of the specialist implementation slot, while retaining per-task attempts and prerequisite checks.
 - Keep Kanban card actions in normal layout so dependency controls cannot cover title editing or joint-review buttons, and allow clearing prerequisites even when a referenced task was removed.
 - Keep terminal viewers recovering after six connection failures, retain retry counts across brief attaches and allow fresh heartbeat replies after renderer suspension. Preserve live PTYs and durable inbox messages across viewer disconnection.

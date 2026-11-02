@@ -335,12 +335,10 @@ async function bridge(config, method, path, body, options = {}) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.error) {
-    throw new Error(payload.error || payload.data?.error || `Falha na ponte (HTTP ${response.status}).`);
-  }
+  const failed = !response.ok || Boolean(payload.error);
   // Messages that arrived while this agent works ride along with any bridge
   // call, so a busy agent reads them now instead of at its next turn.
-  const graph = payload.meta?.graph;
+  const graph = failed ? undefined : payload.meta?.graph;
   const graphSink = config[INBOX_SINK];
   if (graphSink && ['committed', 'refreshing', 'outdated'].includes(graph?.state) && Array.isArray(graph.revisionIds) && graph.revisionIds.length <= 16 && graph.revisionIds.every(/** @param {unknown} id */ id => typeof id === 'string' && /^[a-f0-9-]{36}$/i.test(id))) graphSink.graph = graph;
   const pending = Number(response.headers?.get?.('x-orkestrai-inbox') ?? 0);
@@ -353,6 +351,11 @@ async function bridge(config, method, path, body, options = {}) {
     } catch {
       // Advisory: the items stay queued and reach the agent at its next turn.
     }
+  }
+  // A conflict or validation failure still carries newly arrived messages.
+  // Preserve the operation error after handing them off; never retry the mutation.
+  if (failed) {
+    throw new Error(payload.error || payload.data?.error || `Falha na ponte (HTTP ${response.status}).`);
   }
   return options.includeMeta && payload.meta ? { items: payload.data, ...payload.meta } : payload.data;
 }

@@ -14,6 +14,7 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
   let server: Server;
   let cwd: string;
   let pendingInbox = 0;
+  let inboxUnavailable = false;
   let heavyPolls = 0;
   let heartbeat: Record<string, unknown> | null = null;
   const requests: Array<{ method?: string; url?: string; body?: any; agentToken?: string | string[] }> = [];
@@ -28,12 +29,20 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
         res.setHeader('content-type', 'application/json');
         if (pendingInbox > 0 && req.url !== '/api/agent-room/bridge/inbox') res.setHeader('x-orkestrai-inbox', String(pendingInbox));
         if (req.url?.startsWith('/api/agent-room/bridge/inbox')) {
+          if (inboxUnavailable) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'Inbox temporarily unavailable.' }));
+            return;
+          }
           pendingInbox = 0;
           res.end(JSON.stringify({ data: { items: [QUESTION], remaining: 0 } }));
         } else if (req.url === '/api/agent-room/bridge/ask') {
           res.end(JSON.stringify({ data: { to: body.to, reply: '', delivered: false, replyConfirmed: false, timedOut: false, deliveryState: 'queued', inbox: true, messageId: 'm-1' } }));
         } else if (req.url?.endsWith('/reply')) {
           res.end(JSON.stringify({ data: { messageId: QUESTION.messageId, to: 'Lider', via: 'waiter', alreadyAnswered: false } }));
+        } else if (req.url === '/api/agent-room/bridge/floors/conflicted/land') {
+          res.statusCode = 409;
+          res.end(JSON.stringify({ error: 'Integration conflict; no files were changed.' }));
         } else if (heartbeat && req.url?.endsWith('/heartbeat')) {
           res.end(JSON.stringify({ data: heartbeat }));
         } else if (req.url === '/api/agent-room/bridge/heavy' && req.method === 'POST') {
@@ -79,6 +88,65 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
     expect(await run(['ask', 'Lider', 'Pronto', 'para', 'revisar'], io.options)).toBe(0);
     expect(io.out.join('\n')).toContain('na caixa de entrada de Lider');
     expect(io.out.join('\n')).toContain('Nao reenvie');
+  });
+
+  it('hands over pending messages with a failed CLI operation without hiding or retrying the error', async () => {
+    pendingInbox = 1;
+    const io = capture();
+    const from = requests.length;
+    try {
+      await expect(run(['floor', 'land', 'conflicted'], io.options)).rejects.toThrow('Integration conflict; no files were changed.');
+      expect(io.err.join('\n')).toContain(QUESTION.messageId);
+      expect(pendingInbox).toBe(0);
+      expect(requests.slice(from).map(request => request.url)).toEqual([
+        '/api/agent-room/bridge/floors/conflicted/land', '/api/agent-room/bridge/inbox',
+      ]);
+    } finally {
+      pendingInbox = 0;
+    }
+  });
+
+  it('appends the inbox to an actual failed MCP bridge call exactly once', async () => {
+    pendingInbox = 1;
+    const io = capture();
+    const input = new PassThrough();
+    const chunks: string[] = [];
+    const from = requests.length;
+    input.end([
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'floor_land', arguments: { floorId: 'conflicted' } } },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'task_list', arguments: {} } },
+    ].map(call => JSON.stringify(call)).join('\n') + '\n');
+    try {
+      expect(await run(['mcp'], { ...io.options, input, write: (chunk: string) => chunks.push(chunk) })).toBe(0);
+      const results = chunks.join('').split('\n').filter(Boolean).map(line => JSON.parse(line));
+      const failed = results.find(result => result.id === 1).result;
+      expect(failed.isError).toBe(true);
+      expect(failed.content[0].text).toBe('Integration conflict; no files were changed.');
+      expect(failed.content[1].text).toContain(QUESTION.messageId);
+      expect(results.find(result => result.id === 2).result.content).toHaveLength(1);
+      expect(requests.slice(from).filter(request => request.url === '/api/agent-room/bridge/inbox')).toHaveLength(1);
+    } finally {
+      pendingInbox = 0;
+    }
+  });
+
+  it('preserves the operation error and queued messages if the advisory inbox read fails', async () => {
+    pendingInbox = 1;
+    inboxUnavailable = true;
+    const io = capture();
+    const from = requests.length;
+    try {
+      await expect(run(['floor', 'land', 'conflicted'], io.options)).rejects.toThrow('Integration conflict; no files were changed.');
+      expect(pendingInbox).toBe(1);
+      expect(io.err.join('\n')).not.toContain(QUESTION.messageId);
+      inboxUnavailable = false;
+      expect(await run(['task', 'list', '--json'], io.options)).toBe(0);
+      expect(io.err.join('\n')).toContain(QUESTION.messageId);
+      expect(requests.slice(from).filter(request => request.url?.endsWith('/conflicted/land'))).toHaveLength(1);
+    } finally {
+      inboxUnavailable = false;
+      pendingInbox = 0;
+    }
   });
 
   it('answers a received message explicitly', async () => {
