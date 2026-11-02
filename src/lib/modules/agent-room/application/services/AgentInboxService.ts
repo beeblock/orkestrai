@@ -112,7 +112,7 @@ const CONFIRMATION_WINDOW_MS = 10 * 60_000;
 const RESTORE_RETRY_MS = 60_000;
 const PENDING_HORIZON_MS = 48 * 60 * 60_000;
 const CLAIM_LIMIT = 10;
-/** Terminal deliveries running at once; each still waits for its own agent's turn boundary. */
+/** Simultaneous terminal submissions; transcript reads and receipts use no submission slot. */
 const MAX_PARALLEL_DELIVERIES = 6;
 const FORWARD_PAGE_SIZE = 200;
 const CLAIM_CHARS = 24_000;
@@ -143,6 +143,9 @@ export class AgentInboxService {
   private readonly locks = new Map<string, Promise<void>>();
   private readonly redrain = new Set<string>();
   private readonly drainRuns = new Map<string, Promise<void>>();
+  private readonly drainStarted = new Map<string, number>();
+  private lastSweepAt: number | null = null;
+  private lastHealthReportAt: number | null = null;
   private readonly confirmations = new Map<string, BatchTracking>();
   private readonly replyWatches = new Map<string, BatchTracking>();
   private readonly waiters = new Map<string, Set<(result: InboxReplyResult) => void>>();
@@ -179,6 +182,7 @@ export class AgentInboxService {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.lastSweepAt = null;
   }
 
   /** Clears in-memory dispatch state (timers, watches, waiters). Persisted envelopes are untouched. */
@@ -188,6 +192,8 @@ export class AgentInboxService {
     this.locks.clear();
     this.redrain.clear();
     this.drainRuns.clear();
+    this.drainStarted.clear();
+    this.lastHealthReportAt = null;
     this.confirmations.clear();
     this.replyWatches.clear();
     this.waiters.clear();
@@ -521,8 +527,25 @@ export class AgentInboxService {
 
   private ensureTimer(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.sweep(); }, SWEEP_MS);
+    this.timer = setInterval(() => { this.reportHealth(); void this.sweep(); }, SWEEP_MS);
     this.timer.unref?.();
+  }
+
+  /** Bounded numeric evidence for exported desktop logs, never message data. */
+  private reportHealth(now = Date.now()): void {
+    const loopDelayMs = this.lastSweepAt === null ? 0 : Math.max(0, now - this.lastSweepAt - SWEEP_MS);
+    this.lastSweepAt = now;
+    let oldestDrainMs = 0;
+    for (const started of this.drainStarted.values()) oldestDrainMs = Math.max(oldestDrainMs, now - started);
+    if ((oldestDrainMs < 30_000 && loopDelayMs < 1_000)
+      || (this.lastHealthReportAt !== null && now - this.lastHealthReportAt < 60_000)) return;
+    this.lastHealthReportAt = now;
+    console.log(`[orkestrai:orchestration-health] ${JSON.stringify({
+      pendingRecipients: this.recipients.size, activeDrains: this.drainRuns.size,
+      submitting: this.activeDeliveries, waitingForWriter: this.deliverySlots.length,
+      confirmationWatches: this.confirmations.size, replyWatches: this.replyWatches.size,
+      oldestDrainMs: Math.round(oldestDrainMs), loopDelayMs: Math.round(loopDelayMs), rssBytes: process.memoryUsage().rss,
+    })}`);
   }
 
   private async restorePending(): Promise<void> {
@@ -631,21 +654,36 @@ export class AgentInboxService {
     }
     const run = this.drainOnce(workspaceId, nodeId).finally(() => {
       this.drainRuns.delete(nodeId);
+      this.drainStarted.delete(nodeId);
       if (this.redrain.delete(nodeId)) void this.drain(workspaceId, nodeId);
     });
     this.drainRuns.set(nodeId, run);
+    this.drainStarted.set(nodeId, Date.now());
     return run;
   }
 
   private async drainOnce(workspaceId: string, nodeId: string): Promise<void> {
-    await this.acquireDeliverySlot();
     try {
       const prepared = await this.withLock(nodeId, () => this.prepareBatch(workspaceId, nodeId));
-      if (prepared) await this.deliverBatch(prepared);
+      if (!prepared) return;
+      // A slow native/UNC readiness read belongs to this agent. It must not
+      // reserve one of the six terminal writers before there is any input.
+      await this.acquireDeliverySlot();
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        this.releaseDeliverySlot();
+      };
+      try {
+        // Enter ends the submission, not its transcript confirmation. Keeping
+        // six slots until receipts arrive parked every other agent for minutes.
+        await this.deliverBatch(prepared, release);
+      } finally {
+        release();
+      }
     } catch {
       console.warn('[agent-inbox] Delivery attempt failed; it will be retried.');
-    } finally {
-      this.releaseDeliverySlot();
     }
   }
 
@@ -745,7 +783,7 @@ export class AgentInboxService {
     };
   }
 
-  private async deliverBatch(batch: BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }): Promise<void> {
+  private async deliverBatch(batch: BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }, onSubmitted: () => void): Promise<void> {
     try {
       await agentTerminalDeliveryService.deliver({
         workspaceId: batch.workspaceId,
@@ -754,6 +792,7 @@ export class AgentInboxService {
         message: batch.prompt,
         submitDelayMs: 120,
         queueTimeoutMs: 30_000,
+        onSubmitted,
         isStillRelevant: async () => {
           for (const envelope of batch.envelopes) if (await this.isRelevant(envelope)) return true;
           return false;

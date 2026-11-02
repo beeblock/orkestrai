@@ -17,6 +17,7 @@ import { usageRoutingId } from '../../domain/usage-routing.js';
 import { attentionService } from './AttentionService.js';
 
 const SUPERVISOR_INTERVAL_MS = 15_000;
+const MAX_PARALLEL_WAKES = 4;
 const LEADER_IDLE_MS = 2 * 60_000;
 const LEADER_REMINDER_INTERVAL_MS = 5 * 60_000;
 /** Unchanged boards get at most a few spaced reminders, only while a worker waits. */
@@ -82,6 +83,8 @@ export class AgentRuntimeService {
   private ticking = false;
   private supervisorGeneration = 0;
   private leaderChecks = new Map<string, AbortController>();
+  private readonly waking = new Set<string>();
+  private readonly pendingWakes = new Map<string, { workspaceId: string; generation: number; leader: boolean }>();
 
   async status(workspaceId: string, nodeId: string): Promise<AgentRuntimeData> {
     const node = await this.requireAgent(workspaceId, nodeId);
@@ -235,7 +238,43 @@ export class AgentRuntimeService {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.supervisorGeneration += 1;
+    this.pendingWakes.clear();
     for (const check of this.leaderChecks.values()) check.abort();
+  }
+
+  private queuePersistentWake(workspaceId: string, nodeId: string, leader: boolean, generation: number): void {
+    if (this.waking.has(nodeId) || this.pendingWakes.has(nodeId)) return;
+    this.pendingWakes.set(nodeId, { workspaceId, generation, leader });
+    this.drainPersistentWakes();
+  }
+
+  private drainPersistentWakes(): void {
+    while (this.waking.size < MAX_PARALLEL_WAKES && this.pendingWakes.size) {
+      const entries = [...this.pendingWakes];
+      const [nodeId, pending] = entries.find(([, entry]) => entry.leader) ?? entries[0];
+      this.pendingWakes.delete(nodeId);
+      if (pending.generation !== this.supervisorGeneration) continue;
+      this.waking.add(nodeId);
+      void this.wakePersistentIfCurrent(pending.workspaceId, nodeId, pending.generation)
+        .catch(() => undefined)
+        .finally(() => {
+          this.waking.delete(nodeId);
+          this.drainPersistentWakes();
+        });
+    }
+  }
+
+  private async wakePersistentIfCurrent(workspaceId: string, nodeId: string, generation: number): Promise<void> {
+    // A queued start must respect a later pause, deletion or mode change.
+    const [workspace, node] = await Promise.all([
+      workspaceRepository.getWorkspace(workspaceId), workspaceRepository.getNode(nodeId),
+    ]);
+    if (generation !== this.supervisorGeneration || !workspace || workspace.suspendedAt
+      || !node || node.workspaceId !== workspaceId || node.type !== 'terminal') return;
+    const payload = node.payload as TerminalNodePayload;
+    const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
+    if (!payload.provider || config(payload).mode !== 'persistent' || (session && !session.exited)) return;
+    await this.wake(workspaceId, nodeId, false);
   }
 
   private async tick(): Promise<void> {
@@ -255,7 +294,9 @@ export class AgentRuntimeService {
           const settings = config(payload);
           const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
           if (settings.mode === 'persistent' && (!session || session.exited)) {
-            await this.wake(workspace.id, node.id, false).catch(() => undefined);
+            // A slow provider/WSL startup must not suspend this leader, the
+            // remaining agents or the next workspace's supervision.
+            this.queuePersistentWake(workspace.id, node.id, Boolean(payload.maestro), generation);
             continue;
           }
           if (settings.mode !== 'on_demand' || !session || session.exited || !session.waiting) continue;

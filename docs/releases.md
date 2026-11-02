@@ -307,6 +307,30 @@ integrados. Arraste/zoom no Moedex, CPU do Electron e tempo de conclusão de
 trabalho arbitrário continuam exigindo validação em uso real. Testes verdes
 não garantem um prazo do modelo ou do provider.
 
+## Proteções da fila e supervisão na 0.50.1
+
+A fila limita a seis os envios simultâneos ao terminal e libera cada vaga após
+Enter, mantendo a confirmação exata e a ordem por agente. Leituras de transcritos
+e confirmações demoradas não reservam essas vagas. Os resultados de perguntas,
+respostas e limites de turno usam caches por revisão, com até 128 entradas e
+16 MiB estimados por cache; falhas temporárias de leitura são tentadas novamente.
+Inicializações persistentes usam uma fila independente com até quatro inícios,
+prioridade para líderes e nova checagem de pausa e modo antes de iniciar.
+
+`transcript-team-throughput.test.ts`, `agent-inbox.test.ts` e
+`agent-runtime-service.test.ts` cobrem equipes de 30 agentes, Claude/Codex,
+leituras nativas/WSL, concorrência limitada e continuidade da supervisão.
+`chat-conversation-isolation.spec.ts` cobre os nove cenários de troca de
+conversa, workspace e liderança sem mover mensagens nem apagar rascunhos novos.
+A versão também usa os contadores agregados suportados pelo Svelar na tarefa
+de saúde da fila, em vez da chamada inexistente `Queue.stats()`.
+
+Um envio que demora mais de 30 segundos ou um atraso do timer acima de um
+segundo pode gerar um diagnóstico numérico no log local, no máximo uma vez por
+minuto. Ele inclui contagens de filas, atraso do Core e memória do processo;
+nunca prompts, identidades, caminhos ou credenciais. Isso não substitui uma
+medição de CPU e a validação em uso na máquina afetada.
+
 ## Criar uma versão
 
 A CI envia um artifact `production-build-<SHA>` somente depois de testes e E2E

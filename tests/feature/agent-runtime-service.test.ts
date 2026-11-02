@@ -122,6 +122,86 @@ describe('AgentRuntimeService', () => {
     });
   });
 
+  it('continues supervising both workspace leaders while one persistent agent is stalled starting', async () => {
+    const { workspace } = await setupLeader();
+    await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Slow persistent specialist',
+      payload: { command: 'true', provider: 'runtime-test' as never, agentRuntimeMode: 'persistent' } });
+    const other = await workspaceRepository.createWorkspace({ name: 'Independent workspace', workingDir: '/tmp' });
+    await workspaceRepository.createNode({ workspaceId: other.id, type: 'terminal', title: 'Independent leader',
+      payload: { command: 'true', provider: 'runtime-test' as never, maestro: true, sessionId: uuidv7() } });
+    const service = new AgentRuntimeService();
+    const internal = service as unknown as { tick(): Promise<void>; superviseLeader(workspaceId: string, nodeId: string, signal: AbortSignal): Promise<void> };
+    const supervise = vi.spyOn(internal, 'superviseLeader').mockResolvedValue();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const wake = vi.spyOn(service, 'wake').mockImplementation(async () => { await gate; return {} as never; });
+    const run = internal.tick();
+    try {
+      await vi.waitFor(() => expect(wake).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(new Set(supervise.mock.calls.map(call => call[0]))).toEqual(new Set([workspace.id, other.id])), { timeout: 1500 });
+    } finally { release(); await run; service.stopSupervisor(); }
+  });
+
+  it('limits persistent starts to four and does not duplicate them across supervisor ticks', async () => {
+    const { workspace } = await setup();
+    const ids: string[] = [];
+    for (let index = 0; index < 29; index++) {
+      const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: `Persistent ${index}`,
+        payload: { command: 'true', provider: 'runtime-test' as never, agentRuntimeMode: 'persistent' } });
+      ids.push(node.id);
+    }
+    const service = new AgentRuntimeService();
+    const internal = service as unknown as { tick(): Promise<void> };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let active = 0, peak = 0, finished = 0;
+    const wake = vi.spyOn(service, 'wake').mockImplementation(async () => {
+      active++; peak = Math.max(peak, active);
+      await gate;
+      active--; finished++;
+      return {} as never;
+    });
+    try {
+      await internal.tick();
+      await vi.waitFor(() => expect(wake).toHaveBeenCalledTimes(4));
+      await internal.tick();
+      expect(wake).toHaveBeenCalledTimes(4);
+      release();
+      await vi.waitFor(() => expect(finished).toBe(29));
+      expect(peak).toBe(4);
+      expect(new Set(wake.mock.calls.map(call => call[1]))).toEqual(new Set(ids));
+    } finally { service.stopSupervisor(); release(); }
+  });
+
+  it.each(['stop', 'pause', 'mode'])('cancels queued starts after a later %s', async change => {
+    const { workspace } = await setup();
+    const ids: string[] = [];
+    for (let index = 0; index < 8; index++) {
+      const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: `Queued ${index}`,
+        payload: { command: 'true', provider: 'runtime-test' as never, agentRuntimeMode: 'persistent' } });
+      ids.push(node.id);
+    }
+    const service = new AgentRuntimeService();
+    const internal = service as unknown as { tick(): Promise<void>; waking: Set<string> };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const wake = vi.spyOn(service, 'wake').mockImplementation(async () => { await gate; return {} as never; });
+    try {
+      await internal.tick();
+      await vi.waitFor(() => expect(wake).toHaveBeenCalledTimes(4));
+      const started = new Set(wake.mock.calls.map(call => call[1]));
+      if (change === 'stop') service.stopSupervisor();
+      if (change === 'pause') await workspaceRepository.setWorkspaceSuspended(workspace.id, true);
+      if (change === 'mode') for (const id of ids.filter(id => !started.has(id))) {
+        const node = await workspaceRepository.getNode(id);
+        await workspaceRepository.updateNode(id, { payload: { ...node!.payload, agentRuntimeMode: 'interactive' } });
+      }
+      release();
+      await vi.waitFor(() => expect(internal.waking.size).toBe(0));
+      expect(wake).toHaveBeenCalledTimes(4);
+    } finally { service.stopSupervisor(); release(); }
+  });
+
   it('keeps the Core alive and retries after a transient supervisor database failure', async () => {
     vi.useFakeTimers();
     const list = vi.spyOn(workspaceRepository, 'listWorkspaces')
@@ -140,7 +220,7 @@ describe('AgentRuntimeService', () => {
     vi.useFakeTimers();
     const tick = vi.spyOn(routineService, 'tick')
       .mockRejectedValueOnce(new Error('database temporarily unavailable'))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(0);
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     routineService.startScheduler();
     await vi.advanceTimersByTimeAsync(0);

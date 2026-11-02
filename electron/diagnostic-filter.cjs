@@ -36,4 +36,23 @@ function isExpectedServerDiagnostic(values) {
   return !requestPath.startsWith('/api/');
 }
 
-module.exports = { diagnosticText, isExpectedPortalDiagnostic, isExpectedServerDiagnostic };
+/** Ignore extra fields and reject malformed values before any stdout reaches disk. */
+function orchestrationHealthDiagnostic(line) {
+  const prefix = '[orkestrai:orchestration-health] ';
+  if (typeof line !== 'string' || line.length > 2048 || !line.startsWith(prefix)) return null;
+  try {
+    const value = JSON.parse(line.slice(prefix.length));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const fields = ['pendingRecipients', 'activeDrains', 'submitting', 'waitingForWriter',
+      'confirmationWatches', 'replyWatches', 'oldestDrainMs', 'loopDelayMs', 'rssBytes'];
+    const result = {};
+    for (const field of fields) {
+      const number = value[field];
+      if (!Number.isSafeInteger(number) || number < 0) return null;
+      result[field] = number;
+    }
+    return JSON.stringify(result);
+  } catch { return null; }
+}
+
+module.exports = { diagnosticText, isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic };

@@ -2,12 +2,24 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('../../electron/diagnostic-filter.cjs') as {
+const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('../../electron/diagnostic-filter.cjs') as {
   isExpectedPortalDiagnostic: (values: unknown[]) => boolean;
   isExpectedServerDiagnostic: (values: unknown[]) => boolean;
+  orchestrationHealthDiagnostic: (line: string) => string | null;
 };
 
 describe('desktop diagnostic filter', () => {
+  it('persists only allowlisted numeric dispatch health data', () => {
+    const metrics = { pendingRecipients: 30, activeDrains: 6, submitting: 0, waitingForWriter: 0,
+      confirmationWatches: 6, replyWatches: 4, oldestDrainMs: 31_000, loopDelayMs: 100, rssBytes: 512_000_000 };
+    const line = (value: unknown) => `[orkestrai:orchestration-health] ${JSON.stringify(value)}`;
+    expect(JSON.parse(orchestrationHealthDiagnostic(line({ ...metrics, message: 'PRIVATE_PROMPT', token: 'PRIVATE_TOKEN' }))!)).toEqual(metrics);
+    for (const value of [null, [], { ...metrics, submitting: -1 }, { ...metrics, rssBytes: 'PRIVATE_VALUE' }, { ...metrics, rssBytes: 1e20 }]) {
+      expect(orchestrationHealthDiagnostic(line(value))).toBeNull();
+    }
+    expect(orchestrationHealthDiagnostic(line({ ...metrics, message: 'x'.repeat(2048) }))).toBeNull();
+    expect(orchestrationHealthDiagnostic('[orkestrai:orchestration-health] {invalid')).toBeNull();
+  });
   it('does not persist duplicate expected Portal failures', () => {
     expect(isExpectedPortalDiagnostic([
       "Error occurred in handler for 'GUEST_VIEW_MANAGER_CALL': Error: ERR_CONNECTION_REFUSED",
