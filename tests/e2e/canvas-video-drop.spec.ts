@@ -104,7 +104,7 @@ test('drops real videos as playable, persistent native workflow references witho
       await run(['task', 'add', 'Deliver local edit', '--assign', process.env.ORKESTRAI_NODE_ID]);
       let tasks;
       await run(['task', 'list', '--json'], { out: value => { tasks = JSON.parse(value); } });
-      const task = tasks.find(item => item.title === 'Deliver local edit');
+      const task = tasks.items.find(item => item.title === 'Deliver local edit');
       const args = ['video', 'import', '--task', task.id, '--input', JSON.stringify({path:'renders/final.webm',title:'Edited final'})];
       await run(args);
       await run(args);
