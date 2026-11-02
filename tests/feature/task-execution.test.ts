@@ -52,6 +52,24 @@ describe('durable task execution custody',()=>{
     expect(await f.claim(a)).not.toBeNull();
     expect(await repository.claim(f.workspace.id,b,other.id,uuidv7(),uuidv7())).not.toBeNull();
   });
+  it('keeps leader coordination independent while honoring prerequisite completion',async()=>{
+    const f=await fixture();const a=await f.task(),b=await f.task(),dependent=await f.task([a]);
+    for(const taskId of [a,b,dependent]) {
+      await AgentBoardTask.query().where('id',taskId).update({assignee_node_id:f.leader.id});
+      await repository.schedule(f.workspace.id,taskId,f.leader.id);
+      await agentInboxService.enqueueDeferred({workspaceId:f.workspace.id,toNodeId:f.leader.id,kind:'task',taskId,content:`Coordinate ${taskId}`});
+    }
+    const first=await agentInboxService.claim(f.workspace.id,f.leader.id,1);
+    expect(first.items).toHaveLength(1);
+    const next=await agentInboxService.claim(f.workspace.id,f.leader.id,1);
+    expect(next.items).toHaveLength(1);
+    expect([...first.items,...next.items].map(item=>item.taskId).sort()).toEqual([a,b].sort());
+    expect(await repository.activeForNode(f.workspace.id,f.leader.id)).toBeNull();
+    expect((await agentInboxService.claim(f.workspace.id,f.leader.id)).items).toHaveLength(0);
+    await AgentBoardTask.query().where('id',a).update({status:'done'});await service.changed(f.workspace.id,a);
+    expect((await agentInboxService.claim(f.workspace.id,f.leader.id)).items.map(item=>item.taskId)).toEqual([dependent]);
+  });
+
   it('keeps dependencies queued and starts work when prerequisites complete',async()=>{
     const f=await fixture();const a=await f.task(),b=await f.task([a]);
     expect(await f.claim(b)).toBeNull();expect(await repository.current(f.workspace.id,b)).toMatchObject({state:'queued'});

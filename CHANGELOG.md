@@ -13,6 +13,7 @@ pt-BR, English, and Spanish translations.
 - Provision compact common agent skills and version-matched reference sections through `orkestrai guide` and `workspace_guide`, retaining every capability and the focused Karpathy delivery principles for leaders and specialists.
 
 ### Fixed
+- Keep leader coordination cards eligible independently of the specialist implementation slot, while retaining per-task attempts and prerequisite checks.
 - Keep Kanban card actions in normal layout so dependency controls cannot cover title editing or joint-review buttons, and allow clearing prerequisites even when a referenced task was removed.
 - Keep terminal viewers recovering after six connection failures, retain retry counts across brief attaches and allow fresh heartbeat replies after renderer suspension. Preserve live PTYs and durable inbox messages across viewer disconnection.
 - Discover Claude/Codex sessions and read rotation metadata through asynchronous filesystem operations with bounded reads and listings; avoid blocking Core heartbeats with synchronous Windows process-tree cleanup or WSL path conversion.

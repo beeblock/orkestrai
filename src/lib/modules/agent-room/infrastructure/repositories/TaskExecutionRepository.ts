@@ -2,6 +2,7 @@ import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { AgentTaskExecution } from '../../domain/models/AgentTaskExecution.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
+import { workspaceRepository } from './WorkspaceRepository.js';
 
 export type ExecutionState = 'queued' | 'dispatching' | 'running' | 'waiting' | 'blocked' | 'stopped' | 'reported' | 'completed' | 'cancelled';
 export type TaskExecution = {
@@ -68,7 +69,9 @@ export class TaskExecutionRepository {
         || !(await this.dependenciesReady(workspaceId, taskDependencies(task)))) return null;
       if (execution.envelopeId === envelopeId && execution.sessionId === sessionId && ['dispatching', 'running'].includes(execution.state)) return execution;
       if (execution.state !== 'queued' && !(resume && ['waiting', 'blocked', 'stopped'].includes(execution.state))) return null;
-      const occupied = await this.activeForNode(workspaceId, nodeId);
+      const node = await workspaceRepository.getNode(nodeId);
+      const coordinator = node?.workspaceId === workspaceId && Boolean((node.payload as {maestro?:boolean}).maestro);
+      const occupied = coordinator ? null : await this.activeForNode(workspaceId, nodeId);
       if (occupied && occupied.id !== execution.id) {
         const occupiedTask = await AgentBoardTask.query().where('workspace_id', workspaceId).where('id', occupied.taskId).first();
         if (!occupiedTask || occupiedTask.getAttribute('archived_at') || ['todo', 'done'].includes(occupiedTask.getAttribute('status'))
@@ -76,7 +79,7 @@ export class TaskExecutionRepository {
         else return null;
       }
       const changed = await AgentTaskExecution.query().where('id', execution.id).where('state', execution.state).update({
-        active_node_id: nodeId, state: 'dispatching', session_id: sessionId, envelope_id: envelopeId,
+        active_node_id: coordinator ? null : nodeId, state: 'dispatching', session_id: sessionId, envelope_id: envelopeId,
         claimed_at: new Date().toISOString(), submitted_at: null, accepted_at: null, stop_key: null, updated_at: new Date().toISOString(),
       });
       return changed ? this.current(workspaceId, taskId) : null;
@@ -113,7 +116,9 @@ export class TaskExecutionRepository {
     const deps = [...new Set(tasks.flatMap(taskDependencies))];
     const completed = new Set(deps.length ? (await AgentBoardTask.query().select('id').where('workspace_id', workspaceId).whereIn('id', deps).where('status', 'done').get()).map(task => String(task.getAttribute('id'))) : []);
     const eligible = new Set(tasks.filter(task => taskDependencies(task).every(id => completed.has(id))).map(task => String(task.getAttribute('id'))));
-    const occupied = rows.find(row => row.getAttribute('active_node_id'));
+    const node = await workspaceRepository.getNode(nodeId);
+    const coordinator = node?.workspaceId === workspaceId && Boolean((node.payload as {maestro?:boolean}).maestro);
+    const occupied = coordinator ? null : rows.find(row => row.getAttribute('active_node_id'));
     return { known, ready: rows.filter(row => eligible.has(String(row.getAttribute('active_task_id')))
       && (occupied ? row === occupied : row.getAttribute('state') === 'queued')).map(row => String(row.getAttribute('active_task_id'))),
       recovery: occupied ? [String(occupied.getAttribute('active_task_id'))] : rows.filter(row => eligible.has(String(row.getAttribute('active_task_id')))
