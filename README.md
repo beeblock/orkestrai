@@ -2,6 +2,12 @@
   <img src="orkestrai-branding/logo.svg" alt="Orkestrai" width="360">
 </p>
 
+Agent task queries return bounded open-work summaries. Use `orkestrai task read <id>`
+for a full brief and `task list --assignee <agent> --cursor <id>` for scoped pages;
+completed history stays accessible. Shared agent instructions emphasize focused
+changes and verified functional delivery, drawing on the
+[MIT-licensed Karpathy guidelines](https://github.com/multica-ai/andrej-karpathy-skills/tree/main/skills/karpathy-guidelines).
+
 <p align="center">
   <strong>Orchestrate AI teams for building, designing, marketing, and shipping on a visual canvas.</strong>
 </p>

@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { executeMcpTool } from '../../packages/orkestrai-cli/src/mcp.js';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { PassThrough } from 'node:stream';
@@ -11,6 +12,16 @@ import { isPortFree, run } from '../../packages/orkestrai-cli/src/cli.js';
  * Testa a CLI `orkestrai` contra um servidor HTTP falso que emula a bridge.
  */
 describe('orkestrai CLI', () => {
+  it('exposes bounded task filters, cursor history and a full-detail read through MCP', async () => {
+    const bridge = vi.fn().mockResolvedValue({ items: [], nextCursor: 'next' });
+    const context = { bridge, findFreePort: async () => 4000, selfAgent: 'agent' };
+    await executeMcpTool(context, 'task_list', { assignee: 'Backend', limit: 5, cursor: 'cursor', status: 'doing' });
+    expect(bridge).toHaveBeenLastCalledWith('GET', '/api/agent-room/bridge/tasks?status=doing&assignee=Backend&limit=5&cursor=cursor');
+    await executeMcpTool(context, 'task_history', { limit: 10, cursor: 'older' });
+    expect(bridge).toHaveBeenLastCalledWith('GET', '/api/agent-room/bridge/tasks/history?limit=10&cursor=older');
+    await executeMcpTool(context, 'task_read', { taskId: 'task' });
+    expect(bridge).toHaveBeenLastCalledWith('GET', '/api/agent-room/bridge/tasks/task');
+  });
   let server: ReturnType<typeof createServer>;
   let apiUrl: string;
   let cwd: string;

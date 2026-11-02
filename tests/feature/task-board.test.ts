@@ -9,6 +9,9 @@ import { agentTerminalDeliveryService } from '$lib/modules/agent-room/applicatio
 import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
+import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
+import { uuidv7 } from '@beeblock/svelar/support';
+import { bridgeTaskQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 
 async function createWorkspaceWithTerminal() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'board', workingDir: '/tmp' });
@@ -36,6 +39,56 @@ async function createWorkspaceWithLeader() {
 
 describe('TaskBoardService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('bounds a real 1,331-card board, paginates open work and reads full briefs explicitly', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'large board', workingDir: '/tmp' });
+    const records = Array.from({ length: 1331 }, (_, index) => ({ id: uuidv7(), workspace_id: workspace.id,
+      title: `Card ${index} ${'long title '.repeat(40)}`, description: 'Acceptance detail '.repeat(100),
+      status: index < 1195 ? 'done' : index < 1293 ? 'doing' : 'todo', created_by: 'user',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+    await AgentBoardTask.query().insertMany(records);
+    const first = await taskBoardService.agentPage(workspace.id, bridgeTaskQuerySchema.parse({}));
+    expect(first.data).toHaveLength(25);
+    expect(first.data.every((task) => task.status !== 'done')).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThan(16000);
+    expect(first.meta.hasMore).toBe(true);
+    const seen = new Set(first.data.map((task) => task.id));
+    let cursor = first.meta.nextCursor;
+    while (cursor) {
+      const next = await taskBoardService.agentPage(workspace.id, bridgeTaskQuerySchema.parse({ cursor }));
+      for (const task of next.data) { expect(seen.has(task.id)).toBe(false); seen.add(task.id); }
+      cursor = next.meta.nextCursor;
+    }
+    expect(seen.size).toBe(136);
+    expect((await taskBoardService.read(workspace.id, records[1200].id)).description).toBe(records[1200].description);
+    const history = await taskBoardService.agentPage(workspace.id, bridgeTaskQuerySchema.parse({}), true);
+    expect(history.data).toHaveLength(25);
+    expect(history.data.every((task) => task.status === 'done')).toBe(true);
+    const other = await workspaceRepository.createWorkspace({ name: 'other board', workingDir: '/tmp' });
+    await expect(taskBoardService.read(other.id, records[1200].id)).rejects.toThrow();
+    expect((await taskBoardService.list(workspace.id))).toHaveLength(1331);
+    expect(() => bridgeTaskQuerySchema.parse({ limit: 500 })).toThrow();
+    expect(() => bridgeTaskQuerySchema.parse({ cursor: 'not-a-cursor' })).toThrow();
+  });
+
+  it('recovers missing assignees once, preserves completed work and repairs future deletion', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'missing agents', workingDir: '/tmp' });
+    const missing = uuidv7();
+    const ids = [uuidv7(), uuidv7()];
+    await AgentBoardTask.query().insertMany(ids.map((id, index) => ({ id, workspace_id: workspace.id, title: 'Keep my work',
+      description: 'Do not discard this brief', status: index ? 'done' : 'doing', assignee_node_id: missing,
+      created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() })));
+    expect(await workspaceRepository.recoverMissingAssignees(workspace.id)).toBe(1);
+    expect(await workspaceRepository.recoverMissingAssignees(workspace.id)).toBe(0);
+    expect(await taskBoardService.read(workspace.id, ids[0])).toMatchObject({ status: 'todo', assigneeNodeId: null, description: 'Do not discard this brief' });
+    expect(await taskBoardService.read(workspace.id, ids[1])).toMatchObject({ status: 'done', assigneeNodeId: missing });
+    const events = await controlCenterRepository.listActivity(workspace.id);
+    expect(events.some((event) => event.taskId === ids[0] && event.metadata.previousAssigneeNodeId === missing)).toBe(true);
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Removed', payload: {} });
+    await AgentBoardTask.query().where('id', ids[0]).update({ status: 'doing', assignee_node_id: node.id });
+    await workspaceRepository.deleteNode(node.id);
+    expect(await taskBoardService.read(workspace.id, ids[0])).toMatchObject({ status: 'todo', assigneeNodeId: null });
+  });
 
   it('returns a new card while the leader notification waits and records a later delivery failure', async () => {
     const { workspace, leaderSession } = await createWorkspaceWithLeader();

@@ -10,7 +10,8 @@ export type TokenProvider = 'claude' | 'codex';
 export type TokenCounts = { input: number; output: number; cached: number };
 export type TokenDay = TokenCounts & { date: string; provider: TokenProvider };
 export type TokenAgent = TokenCounts & { nodeId: string; title: string; provider: TokenProvider };
-export type TokenAnalytics = { days: TokenDay[]; agents: TokenAgent[]; totals: Record<TokenProvider, TokenCounts>; scannedFiles: number; scannedAt: string };
+export type TokenAnalytics = { days: TokenDay[]; agents: TokenAgent[]; totals: Record<TokenProvider, TokenCounts>; scannedFiles: number; scannedAt: string;
+  coverage: { scope: string; complete: boolean; limitation: string } };
 
 type FileContribution = { provider: TokenProvider; sessionId: string | null; byDay: Record<string, TokenCounts> };
 type CacheEntry = { mtimeMs: number; size: number; contribution: FileContribution };
@@ -153,10 +154,14 @@ export class TokenAnalyticsService {
       contributions.push(contribution);
     }
 
+    const scopedNodes = input.workspaceId ? await workspaceRepository.listNodes(input.workspaceId, undefined, true, true) : [];
+    const sessions = new Set(scopedNodes.filter((node) => node.type === 'terminal')
+      .map((node) => (node.payload as TerminalNodePayload).agentSessionId).filter(Boolean));
+    const scopedContributions = input.workspaceId ? contributions.filter((item) => item.sessionId && sessions.has(item.sessionId)) : contributions;
     const firstDay = dayOf(new Date(since).toISOString()) ?? '';
     const dayMap = new Map<string, TokenDay>();
     const totals: Record<TokenProvider, TokenCounts> = { claude: emptyCounts(), codex: emptyCounts() };
-    for (const contribution of contributions) {
+    for (const contribution of scopedContributions) {
       for (const [day, counts] of Object.entries(contribution.byDay)) {
         if (day < firstDay) continue;
         const key = `${day}:${contribution.provider}`;
@@ -173,12 +178,11 @@ export class TokenAnalyticsService {
 
     const agents: TokenAgent[] = [];
     if (input.workspaceId) {
-      const nodes = await workspaceRepository.listNodes(input.workspaceId, undefined, false, true);
-      for (const node of nodes) {
+      for (const node of scopedNodes) {
         const payload = node.payload as TerminalNodePayload;
         if (node.type !== 'terminal' || !payload.agentSessionId || (payload.provider !== 'claude' && payload.provider !== 'codex')) continue;
         const counts = emptyCounts();
-        for (const contribution of contributions) {
+        for (const contribution of scopedContributions) {
           if (contribution.sessionId !== payload.agentSessionId) continue;
           for (const [day, value] of Object.entries(contribution.byDay)) {
             if (day < firstDay) continue;
@@ -198,6 +202,8 @@ export class TokenAnalyticsService {
       totals,
       scannedFiles: contributions.length,
       scannedAt: new Date().toISOString(),
+      coverage: { scope: input.workspaceId ? 'linked_workspace_sessions' : 'scanned_sessions', complete: false,
+        limitation: 'Local transcript counters; historical, rotated or alternative-profile sessions may be absent. Not an invoice.' },
     };
   }
 }

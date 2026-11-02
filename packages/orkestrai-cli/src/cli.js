@@ -140,7 +140,8 @@ Uso:
   orkestrai recruit <titulo> --from <maestro> [--provider <id>] [--profile <nome> | --default-profile] [--model <id>] [--effort low|medium|high|xhigh|max|ultra] [--role <papel>] [--replace <agente>] [--floor <id>] [--json]
   orkestrai dismiss <agente> --from <maestro>
   orkestrai connect <de> <para> --from <maestro>
-  orkestrai task list [--json]
+  orkestrai task list [--status open|all|<column>] [--assignee <agent>] [--limit 25] [--cursor <id>] [--json]
+  orkestrai task read <taskId> [--json]
   orkestrai task columns [--json]
   orkestrai task add <titulo> [--description <md>] [--assign <agente>] [--note <nota>] [--column <coluna>] [--from <agente>]
   orkestrai task done <taskId>
@@ -319,7 +320,7 @@ function resolveConfig(env, cwd) {
   return { token, apiUrl, [BRIDGE_AGENT_TOKEN]: env.ORKESTRAI_AGENT_TOKEN?.trim() || null };
 }
 
-async function bridge(config, method, path, body) {
+async function bridge(config, method, path, body, options = {}) {
   const response = await fetch(`${config.apiUrl}${path}`, {
     method,
     headers: {
@@ -349,7 +350,7 @@ async function bridge(config, method, path, body) {
       // Advisory: the items stay queued and reach the agent at its next turn.
     }
   }
-  return payload.data;
+  return options.includeMeta && payload.meta ? { items: payload.data, ...payload.meta } : payload.data;
 }
 
 function parseFlags(args) {
@@ -466,7 +467,8 @@ async function runCommand(argv, options, sink) {
     await runMcpServer({
       input: options.input ?? process.stdin,
       write: options.write ?? ((chunk) => process.stdout.write(chunk)),
-      bridge: (method, path, body) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, method, path, body),
+      bridge: (method, path, body) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, method, path, body,
+        { includeMeta: method === 'GET' && /^\/api\/agent-room\/bridge\/tasks(?:\/history)?(?:\?|$)/.test(path) }),
       drainInbox: () => {
         const digest = [formatInbox(mcpSink.items, mcpSink.remaining), formatGraphSnapshot(mcpSink.graph)].filter(Boolean).join('\n');
         mcpSink.graph = null;
@@ -2010,9 +2012,12 @@ async function runCommand(argv, options, sink) {
     case 'task': {
       const [action, ...values] = rest;
       if (action === 'list') {
-        const data = await bridge(config, 'GET', '/api/agent-room/bridge/tasks');
+        const query = new URLSearchParams();
+        for (const key of ['status', 'assignee', 'limit', 'cursor']) if (flags[key] !== undefined) query.set(key, String(flags[key]));
+        const result = await bridge(config, 'GET', `/api/agent-room/bridge/tasks${query.size ? `?${query}` : ''}`, undefined, { includeMeta: true });
+        const data = result.items ?? result;
         if (flags.json) {
-          out(JSON.stringify(data, null, 2));
+          out(JSON.stringify(result, null, 2));
         } else {
           for (const task of data) {
             const who = task.assigneeTitle ? ` → ${task.assigneeTitle}` : '';
@@ -2023,7 +2028,14 @@ async function runCommand(argv, options, sink) {
             }
           }
           if (!data.length) out('(quadro vazio)');
+          if (result.nextCursor) out(`Next page: orkestrai task list --cursor ${result.nextCursor}${flags.status ? ` --status ${flags.status}` : ''}${flags.assignee ? ` --assignee ${flags.assignee}` : ''}`);
         }
+        return 0;
+      }
+      if (action === 'read') {
+        const taskId = values[0];
+        if (!taskId) throw new Error('Usage: orkestrai task read <taskId>');
+        out(JSON.stringify(await bridge(config, 'GET', `/api/agent-room/bridge/tasks/${encodeURIComponent(taskId)}`), null, 2));
         return 0;
       }
       if (action === 'add') {
@@ -2106,9 +2118,12 @@ async function runCommand(argv, options, sink) {
         return 0;
       }
       if (action === 'history') {
-        const data = await bridge(config, 'GET', '/api/agent-room/bridge/tasks/history');
+        const query = new URLSearchParams();
+        for (const key of ['assignee', 'limit', 'cursor']) if (flags[key] !== undefined) query.set(key, String(flags[key]));
+        const result = await bridge(config, 'GET', `/api/agent-room/bridge/tasks/history${query.size ? `?${query}` : ''}`, undefined, { includeMeta: true });
+        const data = result.items ?? result;
         if (flags.json) {
-          out(JSON.stringify(data, null, 2));
+          out(JSON.stringify(result, null, 2));
         } else {
           for (const task of data) {
             const who = task.assigneeTitle ? ` → ${task.assigneeTitle}` : '';
@@ -2117,6 +2132,7 @@ async function runCommand(argv, options, sink) {
             if (task.noteTitle) out(`    nota: ${task.noteTitle} (${task.noteId})`);
           }
           if (!data.length) out('(historico vazio)');
+          if (result.nextCursor) out(`Next history page: --cursor ${result.nextCursor}`);
         }
         return 0;
       }

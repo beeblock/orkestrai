@@ -1,11 +1,38 @@
-import { describe, expect, it } from 'vitest';
-import { readClaudeTranscript, readCodexRollout } from '$lib/modules/agent-room/application/services/TokenAnalyticsService.js';
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readClaudeTranscript, readCodexRollout, TokenAnalyticsService } from '$lib/modules/agent-room/application/services/TokenAnalyticsService.js';
+import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 
 async function* lines(rows: unknown[]): AsyncIterable<string> {
   for (const row of rows) yield JSON.stringify(row);
 }
 
 describe('token analytics', () => {
+  it('scopes daily and total counters to the requested workspace and labels incomplete coverage', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'token-scope-'));
+    const sessions = join(dir, '.codex', 'sessions');
+    await mkdir(sessions, { recursive: true });
+    vi.stubEnv('HOME', dir);
+    vi.stubEnv('CODEX_HOME', join(dir, '.codex'));
+    const nodes = vi.spyOn(workspaceRepository, 'listNodes').mockResolvedValue([
+      { id: 'mine', type: 'terminal', title: 'My agent', payload: { provider: 'codex', agentSessionId: 'my-session' } } as never,
+    ]);
+    try {
+      for (const [id, input] of [['my-session', 100], ['other-workspace', 900]] as const) {
+        await writeFile(join(sessions, id + '.jsonl'), [
+          { type: 'session_meta', payload: { id } },
+          { timestamp: new Date().toISOString(), type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: input, cached_input_tokens: 0, output_tokens: 10 } } } },
+        ].map((row) => JSON.stringify(row)).join('\n'));
+      }
+      const result = await new TokenAnalyticsService().analytics({ days: 7, workspaceId: 'workspace' });
+      expect(result.totals.codex).toEqual({ input: 100, cached: 0, output: 10 });
+      expect(result.days.reduce((sum, day) => sum + day.input, 0)).toBe(100);
+      expect(result.agents).toHaveLength(1);
+      expect(result.coverage).toMatchObject({ scope: 'linked_workspace_sessions', complete: false });
+    } finally { nodes.mockRestore(); vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
+  });
   it('counts each Claude message once even when streamed blocks repeat it', async () => {
     const usage = { input_tokens: 2, cache_creation_input_tokens: 100, cache_read_input_tokens: 50, output_tokens: 10 };
     const result = await readClaudeTranscript(lines([

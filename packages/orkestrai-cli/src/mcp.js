@@ -319,14 +319,15 @@ const TOOLS = [
     pathClosed: { type: 'boolean' }, fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] }, summary: { type: 'string', maxLength: 500 }, taskId: { type: 'string', format: 'uuid' },
   }, required: ['nodeId', 'baseRevision', 'elementId'] } },
   { name: 'design_delete_element', description: 'Exclui um elemento e seus descendentes do Design node, respeitando lock e revisao.', inputSchema: { type: 'object', properties: { nodeId: { type: 'string' }, baseRevision: { type: 'number' }, elementId: { type: 'string' }, summary: { type: 'string' }, taskId: { type: 'string' } }, required: ['nodeId', 'baseRevision', 'elementId'] } },
-  { name: 'task_list', description: 'Lista as tarefas do quadro (kanban) do workspace.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'task_list', description: 'Bounded summaries of open cards (25 by default). Follow nextCursor; use task_read for a full brief. status=all includes done; history is separate.', inputSchema: { type: 'object', properties: { status: { type: 'string' }, assignee: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 50 }, cursor: { type: 'string' } } } },
+  { name: 'task_read', description: 'Read one full task brief, attachments, acceptance criteria and linked note id. Use after task_list instead of loading the entire board.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } },
   { name: 'task_columns', description: 'Lista as colunas e chaves validas do kanban.', inputSchema: { type: 'object', properties: {} } },
   { name: 'task_add', description: 'Creates and dispatches an assigned task. Do not repeat the briefing with ask/run. Delegate implementation to specialists; the leader may only take explicitly declared coordination/review work.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string', description: 'Descricao em markdown (checklists, links)' }, assignee: { type: 'string' }, leaderWork: { type: 'string', enum: ['coordination', 'review'] }, note: { type: 'string', description: 'Nota de spec (id ou titulo)' }, column: { type: 'string', description: 'Chave ou nome da coluna inicial' } }, required: ['title'] } },
   { name: 'task_assign', description: 'Changes the assignee and dispatches once. Repeating the same assignee does NOT resend; inspect assignmentDelivery. Use task_dispatch only for an intentional retry after checking the terminal. Only coordination/review work belongs to the leader.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, assignee: { type: 'string' }, leaderWork: { type: 'string', enum: ['coordination', 'review'] } }, required: ['taskId', 'assignee'] } },
   { name: 'task_dispatch', description: 'Explicitly resends an existing assigned task, equivalent to orkestrai run. Check the prior delivery first; do not repeat work already accepted or bypass an uncertain terminal submission.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', format: 'uuid' } }, required: ['taskId'] } },
   { name: 'task_move', description: 'Move uma tarefa para qualquer coluna do quadro.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, column: { type: 'string' } }, required: ['taskId', 'column'] } },
   { name: 'task_done', description: 'Requests completion and commits Floor work. Without a deputy it completes and hands off to the primary. With a deputy it leaves the card open for two independent reviews of the same prepared revision; inspect completionReview and continue unrelated cards.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } },
-  { name: 'task_history', description: 'Historico do quadro (concluidas + arquivadas).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'task_history', description: 'Paginated summaries of completed/archived cards. Follow nextCursor; task_read returns the full record.', inputSchema: { type: 'object', properties: { assignee: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 50 }, cursor: { type: 'string' } } } },
   { name: 'portal_create', description: 'Cria um portal somente quando nenhum existente pode ser reutilizado. A mesma URL e idempotente; forceNew exige pedido explicito do usuario.', inputSchema: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, connect: { type: 'string' }, forceNew: { type: 'boolean', default: false } }, required: ['url'] } },
   { name: 'portal_navigate', description: 'Abre URL no portal identificado por nome unico ou ID.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Optional traceability: when provided, must be an active task assigned to this terminal.' }, nodeId: { type: 'string', description: 'Nome unico ou ID do portal.' }, url: { type: 'string' } }, required: ['nodeId', 'url'] } },
   { name: 'portal_eval', description: 'Disabled for agent safety. Use typed Portal snapshot/click/type/select/extract tools instead; arbitrary scripts cannot inspect authenticated sessions.', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Optional traceability: when provided, must be an active task assigned to this terminal.' }, nodeId: { type: 'string', description: 'Nome unico ou ID do portal.' }, js: { type: 'string' } }, required: ['nodeId', 'js'] } },
@@ -1091,7 +1092,13 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
         taskId: args.taskId,
       });
     case 'task_list':
-      return bridge('GET', '/api/agent-room/bridge/tasks');
+    case 'task_history': {
+      const query = new URLSearchParams();
+      for (const key of ['status', 'assignee', 'limit', 'cursor']) if (args[key] !== undefined) query.set(key, String(args[key]));
+      return bridge('GET', `/api/agent-room/bridge/tasks${name === 'task_history' ? '/history' : ''}${query.size ? `?${query}` : ''}`);
+    }
+    case 'task_read':
+      return bridge('GET', `/api/agent-room/bridge/tasks/${encodeURIComponent(args.taskId)}`);
     case 'task_columns':
       return bridge('GET', '/api/agent-room/bridge/task-columns');
     case 'task_add':
@@ -1104,8 +1111,6 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
       return bridge('PATCH', `/api/agent-room/bridge/tasks/${encodeURIComponent(args.taskId)}`, { status: args.column });
     case 'task_done':
       return bridge('PATCH', `/api/agent-room/bridge/tasks/${encodeURIComponent(args.taskId)}`, { status: 'done', from: selfAgent });
-    case 'task_history':
-      return bridge('GET', '/api/agent-room/bridge/tasks/history');
     case 'portal_create': {
       if (!selfAgent) throw new Error('identidade do agente desconhecida (ORKESTRAI_NODE_ID ausente) — crie o portal pelo canvas ou pela CLI dentro do terminal de um agente.');
       return bridge('POST', '/api/agent-room/bridge/portal/create', { url: args.url, title: args.title, connect: args.connect, forceNew: args.forceNew === true, from: selfAgent });

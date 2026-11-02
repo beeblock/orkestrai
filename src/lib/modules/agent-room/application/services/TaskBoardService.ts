@@ -187,6 +187,47 @@ function notifyWorkspaceChanged(workspaceId: string) {
 export class TaskBoardService {
   private recoveryKeys = new Set<string>();
 
+  /** Keep the owner's complete board separate from bounded model context. */
+  async agentPage(workspaceId: string, input: { limit: number; cursor?: string; status: string; assigneeNodeId?: string }, history = false) {
+    const columns = ['id', 'workspace_id', 'title', 'status', 'assignee_node_id', 'note_node_id', 'created_at', 'updated_at', 'archived_at'];
+    const makeQuery = () => {
+      const query = AgentBoardTask.query().select(...columns).where('workspace_id', workspaceId);
+      if (input.cursor) query.where('id', '<', input.cursor);
+      if (input.assigneeNodeId) query.where('assignee_node_id', input.assigneeNodeId);
+      if (input.status !== 'open' && input.status !== 'all') query.where('status', input.status);
+      return query.orderBy('id', 'desc').limit(input.limit + 1);
+    };
+    const rows = history
+      ? (await Promise.all([
+        makeQuery().where('status', 'done').whereNull('archived_at').get(),
+        makeQuery().whereNotNull('archived_at').get(),
+      ])).flat().sort((a, b) => String(b.getAttribute('id')).localeCompare(String(a.getAttribute('id'))))
+      : await (() => {
+        const query = makeQuery().whereNull('archived_at');
+        if (input.status === 'open') query.where('status', '!=', 'done');
+        return query.get();
+      })();
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const ids = page.flatMap((row) => [row.getAttribute('assignee_node_id'), row.getAttribute('note_node_id')]).filter((id): id is string => typeof id === 'string');
+    const titles = await workspaceRepository.listNodeTitles(workspaceId, ids);
+    const data = page.map((row) => ({
+      id: String(row.getAttribute('id')),
+      title: String(row.getAttribute('title')).slice(0, 240),
+      status: row.getAttribute('status'),
+      assigneeNodeId: row.getAttribute('assignee_node_id') ?? null,
+      assigneeTitle: (titles.get(String(row.getAttribute('assignee_node_id'))) ?? null)?.slice(0, 80) ?? null,
+      noteId: row.getAttribute('note_node_id') ?? null,
+      updatedAt: new Date(row.getAttribute('updated_at')).toISOString(),
+      archivedAt: row.getAttribute('archived_at') ?? null,
+    }));
+    return { data, meta: { limit: input.limit, hasMore, nextCursor: hasMore ? data.at(-1)?.id ?? null : null, detailTool: 'task_read' } };
+  }
+
+  async read(workspaceId: string, taskId: string): Promise<BoardTask> {
+    return this.mapWithTitles(await this.requireTask(workspaceId, taskId));
+  }
+
   private async assertDesignStageComplete(workspaceId: string, task: AgentBoardTask, requestedStatus: string | undefined): Promise<void> {
     if (requestedStatus !== 'done') return;
     const stage = designStageFromTask(task);

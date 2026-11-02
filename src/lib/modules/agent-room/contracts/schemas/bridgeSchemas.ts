@@ -55,6 +55,15 @@ export const bridgeInboxQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 
+/** Agent lists are summaries; full briefs are read explicitly by task id. */
+export const bridgeTaskQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(25),
+  cursor: z.string().uuid().optional(),
+  status: z.string().trim().min(1).max(80).default('open'),
+  assignee: z.string().trim().min(1).max(120).optional(),
+});
+export type BridgeTaskQuery = z.infer<typeof bridgeTaskQuerySchema>;
+
 export const bridgeNoteWriteSchema = z.object({
   token: z.string().trim().min(1).nullish(),
   content: z.string(),

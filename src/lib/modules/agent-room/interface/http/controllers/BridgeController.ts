@@ -29,7 +29,7 @@ import type { TerminalNodePayload } from '$lib/modules/agent-room/domain/types.j
 import { filesystemService } from '$lib/modules/agent-room/application/services/FilesystemService.js';
 import { OpenWorkspaceFolderRequest } from '$lib/modules/agent-room/interface/http/requests/OpenWorkspaceFolderRequest.js';
 import { OpenWorkspaceFolderDto } from '$lib/modules/agent-room/application/dto/OpenWorkspaceFolderDto.js';
-import { bridgeHeavyAcquireSchema, bridgeHeavyHeartbeatSchema, bridgeInboxQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
+import { bridgeHeavyAcquireSchema, bridgeHeavyHeartbeatSchema, bridgeInboxQuerySchema, bridgeTaskQuerySchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
 import { heavyRunService } from '$lib/modules/agent-room/application/services/HeavyRunService.js';
 import { orchestrationStatsService } from '$lib/modules/agent-room/application/services/OrchestrationStatsService.js';
 import { bridgeDesignApplySchema, bridgeFigmaSelectionSchema, bridgeReassignSchema, bridgeRoleEditSchema, bridgeRoleWriteSchema, bridgeFloorCreateSchema, bridgeFloorLandSchema, bridgeNoteCreateSchema } from '$lib/modules/agent-room/contracts/schemas/bridgeSchemas.js';
@@ -1891,9 +1891,20 @@ export class BridgeController extends Controller {
     try {
       const token = this.requireToken(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(token);
-      return this.json({ data: await taskBoardService.list(workspace.id) });
+      const input = bridgeTaskQuerySchema.parse(Object.fromEntries(event.url.searchParams));
+      const assigneeNodeId = await this.assigneeNodeId(workspace.id, input.assignee);
+      return this.json(await taskBoardService.agentPage(workspace.id, { ...input, assigneeNodeId: assigneeNodeId ?? undefined }));
     } catch (error) {
       return this.errorResponse(error, 'Falha ao listar tarefas.', 401);
+    }
+  }
+
+  async taskRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      return this.json({ data: await taskBoardService.read(workspace.id, event.params.taskId) });
+    } catch (error) {
+      return this.errorResponse(error, 'Falha ao consultar tarefa.');
     }
   }
 
@@ -1956,7 +1967,9 @@ export class BridgeController extends Controller {
     try {
       const token = this.requireToken(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(token);
-      return this.json({ data: await taskBoardService.history(workspace.id) });
+      const input = bridgeTaskQuerySchema.parse(Object.fromEntries(event.url.searchParams));
+      const assigneeNodeId = await this.assigneeNodeId(workspace.id, input.assignee);
+      return this.json(await taskBoardService.agentPage(workspace.id, { ...input, assigneeNodeId: assigneeNodeId ?? undefined }, true));
     } catch (error) {
       return this.errorResponse(error, 'Falha ao consultar o historico.', 401);
     }

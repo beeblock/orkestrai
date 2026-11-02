@@ -8,5 +8,9 @@ describe('bridge skill content', () => {
     expect(content).toContain('orkestrai post');
     expect(content).toContain('`![descrição](caminho/relativo/ao/workspace.png)`');
     expect(content).toContain('o app coloca a mesma imagem no Canvas, ao seu lado e conectada a você');
+    expect(content).toContain('Focused delivery (all agents)');
+    expect(content).toContain('karpathy-guidelines');
+    expect(content).toContain('Resolve routine reversible choices autonomously');
+    expect(content).toContain('use task_read / orkestrai task read');
   });
 });

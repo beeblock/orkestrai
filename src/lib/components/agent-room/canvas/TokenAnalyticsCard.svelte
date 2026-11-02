@@ -113,6 +113,7 @@
       {/if}
     {/if}
     <p class="source">{m['tokens.source']({ count: data.scannedFiles })}</p>
+    {#if data.coverage?.complete === false}<p class="source">{m['tokens.coverage_partial']()}</p>{/if}
   {/if}
 </section>
 

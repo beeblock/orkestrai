@@ -1,4 +1,5 @@
 {
+  "tokens.coverage_partial": "Contagem parcial de sessões locais. Sessões antigas e outros perfis podem estar ausentes; isto não é uma fatura.",
   "startup.recovery_title": "Não foi possível iniciar o Orkestrai",
   "startup.recovery_message": "O servidor interno não conseguiu iniciar. Seus dados não foram redefinidos.",
   "startup.recovery_detail": "Baixe o instalador mais recente e substitua somente o aplicativo, preservando sua pasta de dados. Você também pode tentar novamente ou abrir os logs para enviar ao suporte. Não apague o banco de dados para resolver esse erro.",

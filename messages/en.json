@@ -1,4 +1,5 @@
 {
+  "tokens.coverage_partial": "Partial local session counts. Older sessions and other profiles may be absent; this is not an invoice.",
   "startup.recovery_title": "Orkestrai could not start",
   "startup.recovery_message": "The internal server could not start. Your data has not been reset.",
   "startup.recovery_detail": "Download the latest installer and replace only the application, keeping your data folder. You can also retry or open the logs to share with support. Do not delete the database to solve this error.",

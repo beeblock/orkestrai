@@ -483,6 +483,27 @@ export class ControlCenterRepository {
     return rows.map(mapEnvelope);
   }
 
+  /** Numeric metrics scan every matching envelope without loading message bodies. */
+  async *inboxStatsPages(workspaceId: string, createdAfter: string, through: string) {
+    let cursor: string | null = null;
+    for (;;) {
+      const query = AgentMessageEnvelope.query().select('id', 'kind', 'state', 'to_node_id',
+        'created_at', 'delivered_at', 'replied_at', 'metadata_json')
+        .where('workspace_id', workspaceId).where('created_at', '>=', createdAfter).where('created_at', '<=', through)
+        .orderBy('id', 'asc').limit(500);
+      if (cursor) query.where('id', '>', cursor);
+      const rows = await query.get();
+      yield rows.map((model) => ({
+        id: String(model.getAttribute('id')), kind: String(model.getAttribute('kind')),
+        state: String(model.getAttribute('state')), toNodeId: String(model.getAttribute('to_node_id')),
+        createdAt: toIso(model.getAttribute('created_at')), deliveredAt: nullableIso(model.getAttribute('delivered_at')),
+        repliedAt: nullableIso(model.getAttribute('replied_at')), metadata: parseMetadata(model.getAttribute('metadata_json')),
+      }));
+      if (rows.length < 500) return;
+      cursor = String(rows.at(-1)!.getAttribute('id'));
+    }
+  }
+
   async listEnvelopes(workspaceId: string, limit = 200): Promise<AgentMessageEnvelopeData[]> {
     const rows = await AgentMessageEnvelope.query()
       .where('workspace_id', workspaceId)

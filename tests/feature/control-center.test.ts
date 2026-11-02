@@ -10,10 +10,29 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { attentionService } from '$lib/modules/agent-room/application/services/AttentionService.js';
 import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
 import { workspaceService } from '$lib/modules/agent-room/application/services/WorkspaceService.js';
+import { orchestrationStatsService } from '$lib/modules/agent-room/application/services/OrchestrationStatsService.js';
 
 describe('ControlCenterService', () => {
   useSvelarTest({ refreshDatabase: true });
   afterEach(() => vi.restoreAllMocks());
+
+  it('counts and finds queued messages after the former 5,000-envelope cutoff without loading content', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'stats pages', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Recipient' });
+    const created = new Date(Date.now() - 10_000).toISOString();
+    const rows = Array.from({ length: 5001 }, (_, i) => ({ id: uuidv7(), workspace_id: workspace.id, to_node_id: node.id,
+      kind: 'ask', state: i === 5000 ? 'queued' : 'delivered', content: 'Do not load this body '.repeat(40), content_hash: 'test',
+      metadata_json: JSON.stringify({ inbox: true }), created_at: created, updated_at: created,
+      delivered_at: i === 5000 ? null : new Date(Date.parse(created) + 2000).toISOString() }));
+    for (let i = 0; i < rows.length; i += 500) await AgentMessageEnvelope.query().insertMany(rows.slice(i, i + 500));
+    const metrics = await orchestrationStatsService.workspace(workspace.id, 168);
+    expect(metrics.messages).toMatchObject({ total: 5001, queued: 1, failed: 0, deliverySeconds: { p50: 2, p95: 2 } });
+    expect(metrics.inboxes).toMatchObject([{ nodeId: node.id, queued: 1 }]);
+    for await (const page of controlCenterRepository.inboxStatsPages(workspace.id, created, new Date().toISOString())) {
+      expect(page.length).toBeLessThanOrEqual(500);
+      for (const item of page) expect(item).not.toHaveProperty('content');
+    }
+  });
 
   it('does not let terminal redraws or silence erase a reported blocker', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'blocked terminal', workingDir: '/tmp' });

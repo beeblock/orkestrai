@@ -78,6 +78,7 @@ function leaderWorkFingerprint(tasks: AgentBoardTask[]): string {
 }
 
 export class AgentRuntimeService {
+  private orphanRepairsAt = new Map<string, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly idleChecks = new Set<string>();
   private ticking = false;
@@ -287,6 +288,11 @@ export class AgentRuntimeService {
       for (const workspace of await workspaceRepository.listWorkspaces()) {
         if (generation !== this.supervisorGeneration) return;
         if (workspace.suspendedAt) continue;
+        if (Date.now() - (this.orphanRepairsAt.get(workspace.id) ?? 0) >= 5 * 60_000) {
+          const recovered = await workspaceRepository.recoverMissingAssignees(workspace.id);
+          this.orphanRepairsAt.set(workspace.id, recovered === 100 ? 0 : Date.now());
+          if (recovered) broadcast(workspace.id);
+        }
         void import('./LeadershipReviewService.js').then(({ leadershipReviewService }) => leadershipReviewService.maintain(workspace.id)).catch(() => undefined);
         const nodes = (await workspaceRepository.listNodes(workspace.id, undefined, false, true)).filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider));
         for (const node of nodes) {
@@ -373,7 +379,10 @@ export class AgentRuntimeService {
       const node = await workspaceRepository.getNode(nodeId);
       waiting.push({ nodeId, title: node?.title ?? 'agente', state: activity.state, action: activity.action, since: activity.createdAt });
     }
-    const fingerprint = createHash('sha256').update(JSON.stringify(latest.map(({ nodeId, activity }) => [nodeId, activity?.id ?? null]))).digest('hex');
+    // Repeating the same status is not progress and must not buy a new model turn.
+    const fingerprint = createHash('sha256').update(JSON.stringify(latest.map(({ nodeId, activity }) => [
+      nodeId, activity?.state ?? null, activity?.taskId ?? null, activity?.action ?? null,
+    ]))).digest('hex');
     return { fingerprint, waiting };
   }
 

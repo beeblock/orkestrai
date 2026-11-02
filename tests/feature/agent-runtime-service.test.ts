@@ -56,6 +56,22 @@ async function setupLeader(status = 'todo') {
 describe('AgentRuntimeService', () => {
   useSvelarTest({ refreshDatabase: true });
 
+  it('does not treat a repeated blocked status row as new team progress', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'semantic progress', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Worker' });
+    const id = uuidv7();
+    await AgentBoardTask.query().insert({ id, workspace_id: workspace.id, title: 'Pending', assignee_node_id: node.id,
+      status: 'doing', created_by: 'user', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const service = new AgentRuntimeService() as unknown as { teamProgress(tasks: AgentBoardTask[]): Promise<{ fingerprint: string }> };
+    const tasks = await AgentBoardTask.query().where('workspace_id', workspace.id).get();
+    await controlCenterRepository.appendActivity({ workspaceId: workspace.id, nodeId: node.id, taskId: id, state: 'blocked', action: 'Needs backend' });
+    const before = await service.teamProgress(tasks);
+    await controlCenterRepository.appendActivity({ workspaceId: workspace.id, nodeId: node.id, taskId: id, state: 'blocked', action: 'Needs backend' });
+    expect((await service.teamProgress(tasks)).fingerprint).toBe(before.fingerprint);
+    await controlCenterRepository.appendActivity({ workspaceId: workspace.id, nodeId: node.id, taskId: id, state: 'working', action: 'Backend available' });
+    expect((await service.teamProgress(tasks)).fingerprint).not.toBe(before.fingerprint);
+  });
+
   afterEach(() => {
     agentRuntimeService.stopSupervisor();
     routineService.stopScheduler();

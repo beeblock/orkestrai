@@ -1,4 +1,5 @@
 {
+  "tokens.coverage_partial": "Recuento parcial de sesiones locales. Pueden faltar sesiones antiguas y otros perfiles; esto no es una factura.",
   "startup.recovery_title": "No se pudo iniciar Orkestrai",
   "startup.recovery_message": "El servidor interno no pudo iniciar. Tus datos no se han restablecido.",
   "startup.recovery_detail": "Descarga el instalador más reciente y reemplaza solo la aplicación, conservando tu carpeta de datos. También puedes reintentar o abrir los logs para compartirlos con soporte. No borres la base de datos para resolver este error.",

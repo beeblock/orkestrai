@@ -37,35 +37,40 @@ export class OrchestrationStatsService {
   async workspace(workspaceId: string, windowHours = 24): Promise<OrchestrationStats> {
     const hours = Math.max(1, Math.min(168, Math.round(windowHours)));
     const since = new Date(Date.now() - hours * 60 * 60_000).toISOString();
-    const [envelopes, nodes, tasks, floors, heavy] = await Promise.all([
-      controlCenterRepository.inboxStats(workspaceId, since),
-      workspaceRepository.listNodes(workspaceId, undefined, true),
-      AgentBoardTask.query().where('workspace_id', workspaceId).get(),
+    const through = new Date().toISOString();
+    const [tasks, floors, heavy] = await Promise.all([
+      AgentBoardTask.query().select('status', 'created_at', 'updated_at', 'archived_at').where('workspace_id', workspaceId).get(),
       AgentFloor.query().where('workspace_id', workspaceId).get(),
       heavyRunService.status(),
     ]);
-    const titles = new Map(nodes.map((node) => [node.id, node.title ?? 'agente']));
-    // Only conversations and work handoffs: replies and notices are not asks.
-    const asks = envelopes.filter((envelope) => envelope.kind === 'ask');
-    const delivery = envelopes.map((envelope) => seconds(envelope.createdAt, envelope.deliveredAt)).filter((value): value is number => value !== null);
-    const reply = asks.map((envelope) => seconds(envelope.createdAt, envelope.repliedAt)).filter((value): value is number => value !== null);
-    const queued = envelopes.filter((envelope) => envelope.state === 'queued' && envelope.metadata.inbox === true);
+    const delivery: number[] = [];
+    const reply: number[] = [];
+    let total = 0, replied = 0, failed = 0, queued = 0;
     const byRecipient = new Map<string, { queued: number; oldest: string }>();
-    for (const envelope of queued) {
-      const current = byRecipient.get(envelope.toNodeId);
-      byRecipient.set(envelope.toNodeId, {
-        queued: (current?.queued ?? 0) + 1,
-        oldest: current && current.oldest < envelope.createdAt ? current.oldest : envelope.createdAt,
-      });
+    for await (const page of controlCenterRepository.inboxStatsPages(workspaceId, since, through)) {
+      for (const envelope of page) {
+        total += 1;
+        if (envelope.kind === 'ask' && envelope.state === 'replied') replied += 1;
+        if (envelope.state === 'failed' && envelope.metadata.cancelled !== true) failed += 1;
+        const delivered = seconds(envelope.createdAt, envelope.deliveredAt);
+        const answered = envelope.kind === 'ask' ? seconds(envelope.createdAt, envelope.repliedAt) : null;
+        if (delivered !== null) delivery.push(delivered);
+        if (answered !== null) reply.push(answered);
+        if (envelope.state !== 'queued' || envelope.metadata.inbox !== true) continue;
+        queued += 1;
+        const current = byRecipient.get(envelope.toNodeId);
+        byRecipient.set(envelope.toNodeId, {
+          queued: (current?.queued ?? 0) + 1,
+          oldest: current && current.oldest < envelope.createdAt ? current.oldest : envelope.createdAt,
+        });
+      }
     }
+    const titles = await workspaceRepository.listNodeTitles(workspaceId, [...byRecipient.keys()]);
     const inWindow = (value: unknown) => String(value instanceof Date ? value.toISOString() : value ?? '') >= since;
     return {
       windowHours: hours,
       messages: {
-        total: envelopes.length,
-        replied: asks.filter((envelope) => envelope.state === 'replied').length,
-        failed: envelopes.filter((envelope) => envelope.state === 'failed' && envelope.metadata.cancelled !== true).length,
-        queued: queued.length,
+        total, replied, failed, queued,
         deliverySeconds: { p50: percentile(delivery, 0.5), p95: percentile(delivery, 0.95) },
         replySeconds: { p50: percentile(reply, 0.5), p95: percentile(reply, 0.95) },
       },

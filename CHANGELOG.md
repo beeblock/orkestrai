@@ -7,6 +7,12 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+- Bound agent task lists to paginated open-card summaries, with status/assignee filters, explicit task details and cursor-based history. Preserve the complete owner board and its records.
+- Recover unfinished work assigned to missing agents, preserve briefs and completed history, and return pending work to the backlog when its agent is removed. Keep repeated identical status reports from generating false supervisory progress.
+- Calculate message metrics across all matching pages without reading message bodies. Scope workspace token totals and daily charts consistently and visibly label incomplete local session coverage.
+- Provision focused delivery instructions for leaders and specialists, adapted from the MIT-licensed Karpathy guidelines: explicit assumptions, minimal changes, preserved unrelated work and verified functional outcomes within existing owner restrictions.
+
 ## 0.50.1 - 2026-11-02
 
 ### Fixed

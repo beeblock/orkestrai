@@ -1593,6 +1593,15 @@ description: Ponte com o canvas do Orkestrai. Use SEMPRE que precisar falar com 
 
 # Ponte Orkestrai
 
+## Focused delivery (all agents)
+
+Inspired by the MIT-licensed karpathy-guidelines skill: https://github.com/multica-ai/andrej-karpathy-skills/tree/main/skills/karpathy-guidelines
+- State material assumptions and acceptance checks before editing. Resolve routine reversible choices autonomously; isolate a real ambiguity to its card and continue independent work.
+- Implement the smallest sufficient change. Avoid speculative features, one-use abstractions and unrelated refactors.
+- Preserve others' changes and follow the repository style. Remove only leftovers introduced by your own work.
+- Reproduce defects, apply a focused fix, verify the user's outcome, then integrate. Tests, status messages and reports are evidence, not substitutes for a working delivery.
+- Read bounded open-task summaries; use task_read / orkestrai task read for one brief. Follow nextCursor only when needed; never reload completed history as a routine checklist.
+
 ## Entrega contínua (leia primeiro)
 
 Hosts dos Portais: leia \`portal.revision\` em \`canvas_list\`; \`portal_configure_hosts\` altera allowedHosts para a tarefa atribuída. CLI: \`orkestrai canvas portal-hosts --task <id> --input '<json>'\`. Use hosts exatos, incluindo localhost, 127.0.0.1 e [::1] quando necessário. Preserva pausas, controle, agentes e navegador; respeite restrições explícitas e políticas. Se seu MCP é antigo, use a CLI; não peça edição manual ao dono nem pare outros cards executáveis.
@@ -1864,7 +1873,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       '- `orkestrai checklist ...` / `orkestrai calendar ...` (MCP `checklist_read/update`, `calendar_read/update`) — checklists e calendários do canvas, alterados item a item sobre o conteúdo mais recente.',
       '- `orkestrai adventure ...` (MCP `adventure_read/adventure_act`) — a Aventura do time: a guilda, o seu herói e as ações do acampamento (especialistas no próprio herói; o líder na guilda inteira), quando o dono pedir.',
       '- `orkestrai design list/read/reference/apply` — documentos visuais nativos. Em exploração, produza primeiro 1 desktop + 1 mobile com design_import_code ou lote pequeno, entregue a primeira revisão em até 5 minutos e espere o gate visual humano. Só expanda a direção aprovada com blueprint completo. design list sinaliza stalled e o reviewStatus da revisão atual.',
-      '- `orkestrai task list/columns/add/move/done` — quadro do time; consulte `task columns` e respeite as etapas personalizadas pelo usuário.',
+      '- `orkestrai task list` (MCP task_list) — resumo paginado de cards abertos; use --assignee/--status/--cursor. `task read <id>` (task_read) lê um briefing completo. Histórico só quando necessário. Faça a menor mudança suficiente, preserve trabalho alheio, explicite premissas e valide a entrega funcional; uma dúvida só bloqueia seu próprio card, sem novas aprovações rotineiras.',
       `- Leader execution: ${LEADER_EXECUTION_CONTRACT}
 ${LEADERSHIP_HANDOFF_CONTRACT}`,
       '- `orkestrai floor create/preview/land` — andares (worktrees git) isolados por frente. Nascem do estado atual da main e `land` integra e commita mesmo com alterações locais (só os arquivos do andar; em conflito nada muda). Entregar = integrado e commitado na main.',

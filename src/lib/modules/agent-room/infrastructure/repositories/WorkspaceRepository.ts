@@ -507,9 +507,52 @@ export class WorkspaceRepository {
   }
 
   async deleteNode(id: string): Promise<boolean> {
-    await AgentCanvasEdge.query().where('source_node_id', id).orWhere('target_node_id', id).delete();
-    const deleted = await AgentCanvasNode.query().where('id', id).delete();
-    return deleted > 0;
+    return Connection.transaction(async () => {
+      const node = await AgentCanvasNode.find(id);
+      if (node) {
+        // Preserve unfinished briefs; reassignment belongs to the leader.
+        await AgentBoardTask.query().where('workspace_id', node.getAttribute('workspace_id'))
+          .where('assignee_node_id', id).where('status', '!=', 'done').whereNull('archived_at')
+          .update({ assignee_node_id: null, status: 'todo', updated_at: new Date().toISOString() });
+      }
+      await AgentCanvasEdge.query().where('source_node_id', id).orWhere('target_node_id', id).delete();
+      return await AgentCanvasNode.query().where('id', id).delete() > 0;
+    });
+  }
+
+  async listNodeTitles(workspaceId: string, ids: string[]): Promise<Map<string, string>> {
+    if (!ids.length) return new Map();
+    const nodes = await AgentCanvasNode.query().select('id', 'title', 'type')
+      .where('workspace_id', workspaceId).whereIn('id', ids).get();
+    return new Map(nodes.map((node) => [String(node.getAttribute('id')), String(node.getAttribute('title') ?? node.getAttribute('type'))]));
+  }
+
+  /** Repair legacy dangling assignments in bounded batches without finishing work. */
+  async recoverMissingAssignees(workspaceId: string): Promise<number> {
+    const nodes = await AgentCanvasNode.query().select('id').where('workspace_id', workspaceId).get();
+    const ids = nodes.map((node) => String(node.getAttribute('id')));
+    const query = AgentBoardTask.query().select('id', 'assignee_node_id', 'status')
+      .where('workspace_id', workspaceId).whereNull('archived_at').whereNotNull('assignee_node_id').where('status', '!=', 'done');
+    if (ids.length) query.whereNotIn('assignee_node_id', ids);
+    const missing = await query.orderBy('id', 'asc').limit(100).get();
+    let recovered = 0;
+    for (const task of missing) {
+      // A concurrent reassignment/completion wins over this repair.
+      recovered += await Connection.transaction(async () => {
+        const restored = await AgentCanvasNode.find(String(task.getAttribute('assignee_node_id')));
+        if (restored?.getAttribute('workspace_id') === workspaceId) return 0;
+        const changed = await AgentBoardTask.query().where('workspace_id', workspaceId).where('id', task.getAttribute('id'))
+          .where('assignee_node_id', task.getAttribute('assignee_node_id')).where('status', task.getAttribute('status')).whereNull('archived_at')
+          .update({ assignee_node_id: null, status: 'todo', updated_at: new Date().toISOString() });
+        if (changed) await controlCenterRepository.appendActivity({ workspaceId,
+          nodeId: String(task.getAttribute('assignee_node_id')), taskId: String(task.getAttribute('id')),
+          state: 'idle', category: 'task', verb: 'assignment_recovered', action: 'system:assignment_recovered',
+          metadata: { previousAssigneeNodeId: task.getAttribute('assignee_node_id'), lifecycle: true },
+        });
+        return changed;
+      });
+    }
+    return recovered;
   }
 
   async commitNodeTransfer(input: {
