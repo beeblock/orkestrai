@@ -333,6 +333,17 @@ medição de CPU e a validação em uso na máquina afetada.
 
 ## Criar uma versão
 
+A verificação de navegador roda em quatro jobs isolados, com um worker por
+máquina e sem dividir a ordem interna dos arquivos de teste. Cada job instala
+suas próprias dependências, usa banco e home de teste isolados e valida os hashes
+do mesmo candidato de build. Não há quatro builds web. O candidato
+`browser-candidate-<SHA>` ainda não é elegível para release. Somente depois dos
+quatro jobs, testes unitários, transporte Windows, relay e scan de segredos
+aprovados, outro job verifica os mesmos bytes e publica o artifact de produção.
+Uma partição recusada impede essa publicação; os limites e as asserções dos
+testes permanecem ativos. Não execute essas partições em paralelo no computador
+do dono: o isolamento é feito por máquinas independentes no CI.
+
 A CI envia um artifact `production-build-<SHA>` somente depois de testes e E2E
 bem-sucedidos em um push de `main`. A release resolve o ID desse artifact no
 run concluído do mesmo commit e verifica o digest do download, a versão, o

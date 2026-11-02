@@ -76,11 +76,33 @@ describe('tested portable production bundle', () => {
 
   it('uploads only the main-push bundle after E2E success and keeps native rebuilds per target', () => {
     const ci = parse(readFileSync('.github/workflows/ci.yml', 'utf8'));
-    const steps = ci.jobs.verify.steps;
-    const e2e = steps.findIndex((step: { name: string }) => step.name === 'Run end-to-end tests');
+    const candidate = ci.jobs.verify.steps.find((step: { name: string }) => step.name === 'Upload browser-test candidate');
+    expect(candidate.with.name).toBe('browser-candidate-${{ github.sha }}');
+    const browsers = ci.jobs['browser-tests'];
+    expect(browsers.needs).toBe('verify');
+    expect(browsers.strategy['fail-fast']).toBe(false);
+    expect(browsers.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    const browserCommand = browsers.steps.find((step: { name: string }) => step.name === 'Run end-to-end tests').run;
+    expect(browserCommand).toContain('--shard=${{ matrix.shard }}/4');
+    expect(browserCommand).toContain('--workers=1');
+    expect(browserCommand).not.toContain('--grep');
+    const browserDownload = browsers.steps.find((step: { name: string }) => step.name === 'Download browser-test candidate');
+    expect(browserDownload.uses).toBe('actions/download-artifact@v8');
+    expect(browserDownload.with['digest-mismatch']).toBe('error');
+    expect(browsers.steps.some((step: { run?: string }) => step.run?.includes('production-bundle.mjs verify'))).toBe(true);
+    const promotion = ci.jobs['production-bundle'];
+    expect([...promotion.needs].sort()).toEqual(['verify', 'browser-tests', 'windows-native', 'relay-container', 'secrets'].sort());
+    expect(promotion.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    expect(promotion.if).not.toMatch(/always|cancelled/);
+    const steps = promotion.steps;
+    const verified = steps.findIndex((step: { name: string }) => step.name === 'Verify tested source and unchanged file hashes');
     const upload = steps.findIndex((step: { name: string }) => step.name === 'Upload tested production bundle');
-    expect(upload).toBeGreaterThan(e2e);
-    expect(steps[upload].if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    expect(verified).toBeGreaterThanOrEqual(0);
+    expect(upload).toBeGreaterThan(verified);
+    expect(steps[upload].with.name).toBe('production-build-${{ github.sha }}');
+    const productionDownload = steps.find((step: { name: string }) => step.name === 'Download verified browser-test candidate');
+    expect(productionDownload.uses).toBe('actions/download-artifact@v8');
+    expect(productionDownload.with['digest-mismatch']).toBe('error');
     const release = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
     expect(ci.jobs['windows-native'].steps.some((step: { run?: string }) => step.run?.includes('tests/unit/production-bundle.test.ts'))).toBe(true);
     expect(release.jobs['build-windows'].steps.some((step: { run?: string }) => step.run?.includes('tests/unit/production-bundle.test.ts'))).toBe(true);

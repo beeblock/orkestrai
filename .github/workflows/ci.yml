@@ -37,6 +37,7 @@ jobs:
           trap 'docker rm -f orkestrai-relay-ci >/dev/null 2>&1 || true' EXIT
           docker run --detach --rm --name orkestrai-relay-ci --publish 127.0.0.1:18787:8787 orkestrai-relay:ci
           for attempt in $(seq 1 20); do
+            echo "Checking relay readiness ($attempt/20)"
             if curl --fail --silent http://127.0.0.1:18787/health > "$RUNNER_TEMP/relay-health.json"; then
               node --input-type=module -e "import fs from 'node:fs'; import assert from 'node:assert/strict'; const h=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); assert.equal(h.ok,true); for (const p of ['orkestrai-collaboration.v1','orkestrai-inference.v1']) assert.ok(h.protocols.includes(p));" "$RUNNER_TEMP/relay-health.json"
               exit 0
@@ -126,25 +127,102 @@ jobs:
         timeout-minutes: 5
         run: node scripts/run-packaged-startup-smoke.mjs .
 
+      - name: Stamp browser-test candidate
+        run: node scripts/production-bundle.mjs stamp build "$GITHUB_SHA"
+
+      - name: Upload browser-test candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-candidate-${{ github.sha }}
+          overwrite: true
+          path: build/
+          retention-days: 1
+          if-no-files-found: error
+          include-hidden-files: true
+
+  browser-tests:
+    name: Browser tests (${{ matrix.shard }}/4)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies and generate test modules
+        run: |
+          npm install --global "npm@$NPM_VERSION"
+          npm ci --no-audit --no-fund
+          npm run test:prepare
+
+      - name: Download browser-test candidate
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-candidate-${{ github.sha }}
+          path: build/
+          digest-mismatch: error
+
+      - name: Verify candidate source and file hashes
+        run: node scripts/production-bundle.mjs verify build "$GITHUB_SHA"
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
       - name: Verify leadership and terminal interactions
+        if: matrix.shard == 1
         id: interaction_tests
         timeout-minutes: 5
-        run: npm run test:e2e -- tests/e2e/agent-create.spec.ts tests/e2e/workspace-leadership.spec.ts tests/e2e/terminal.spec.ts --grep 'desenhar terminal|transfers leadership|copia a selecao' --reporter=line,github --max-failures=1
+        run: npm run test:e2e -- tests/e2e/agent-create.spec.ts tests/e2e/workspace-leadership.spec.ts tests/e2e/terminal.spec.ts --grep 'desenhar terminal|transfers leadership|copia a selecao' --reporter=line,github --max-failures=1 --workers=1
 
       - name: Run end-to-end tests
         id: browser_tests
-        timeout-minutes: 45
-        run: npm run test:e2e -- --reporter=line,github --max-failures=3
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/4 --workers=1 --reporter=line,github --max-failures=3
 
-      - name: Stamp tested production bundle
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: node scripts/production-bundle.mjs stamp build "$GITHUB_SHA"
+      - name: Upload Playwright failure artifacts
+        if: always() && (steps.interaction_tests.outcome == 'failure' || (steps.browser_tests.outcome != 'success' && steps.browser_tests.outcome != 'skipped'))
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-failures-${{ github.sha }}-${{ matrix.shard }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
+
+  production-bundle:
+    name: Publish tested production bundle
+    needs: [verify, browser-tests, windows-native, relay-container, secrets]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download verified browser-test candidate
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-candidate-${{ github.sha }}
+          path: build/
+          digest-mismatch: error
+
+      - name: Verify tested source and unchanged file hashes
+        run: node scripts/production-bundle.mjs verify build "$GITHUB_SHA"
 
       - name: Upload tested production bundle
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
           name: production-build-${{ github.sha }}
@@ -153,16 +231,6 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           include-hidden-files: true
-
-      - name: Upload Playwright failure artifacts
-        if: always() && (steps.interaction_tests.outcome == 'failure' || (steps.browser_tests.outcome != 'success' && steps.browser_tests.outcome != 'skipped'))
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-failures-${{ github.sha }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-          overwrite: true
 
   secrets:
     name: Scan Git history for secrets
