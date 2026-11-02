@@ -1,5 +1,5 @@
 import { ScheduledTask } from '@beeblock/svelar/scheduler';
-import { Queue } from '@beeblock/svelar/queue';
+import { JobMonitor } from '@beeblock/svelar/queue/JobMonitor';
 
 export default class QueueHealthCheck extends ScheduledTask {
   name = 'queue-health-check';
@@ -9,8 +9,7 @@ export default class QueueHealthCheck extends ScheduledTask {
   }
 
   async handle(): Promise<void> {
-    const stats = await Queue.stats();
-    const { pending, failed } = stats;
+    const { waiting: pending, failed } = await JobMonitor.getCounts('default');
 
     if (failed > 0) {
       console.warn(`[QueueHealthCheck] ${failed} failed jobs in queue`);

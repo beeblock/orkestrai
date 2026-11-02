@@ -7,6 +7,13 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+- Keep large teams dispatching while individual native/WSL transcript reads or submitted-prompt confirmations are slow. Limit concurrent terminal submissions to six, release each writer after Enter, and preserve exact receipt checks and per-agent delivery ordering without retyping uncertain prompts.
+- Reuse revision-validated prompt, reply and turn-boundary results across 30-agent teams instead of repeatedly reading unchanged transcripts. Bound result caches by entry count and retained bytes, invalidate changed files, and retry transient read failures rather than retaining a missing receipt.
+- Recover persistent agents through a queue of at most four concurrent starts, with queued-leader priority and per-node deduplication. Slow provider startup no longer suspends leader supervision; recheck pauses and runtime-mode changes before starting and cancel queued starts when supervision stops.
+- Include rate-limited numeric dispatch, event-loop delay and process-memory diagnostics in desktop logs during prolonged stalls, without recording prompts, conversation contents, identities or credentials.
+- Read scheduled queue health from Svelar’s supported aggregate monitor API instead of calling the nonexistent `Queue.stats()`, preventing the five-minute health task from failing.
+
 ## 0.50.0 - 2026-10-31
 
 ### Added

@@ -29,6 +29,55 @@ import { findTranscriptFile, recentTranscriptFiles, transcriptRevision, transcri
 const TAIL_BYTES = 512 * 1024;
 const MATCH_TAIL_BYTES = 4 * 1024 * 1024;
 
+/** Parsed results only: enough entries for large teams, with a separate byte
+ * ceiling so large replies cannot grow the cache with the team indefinitely. */
+class TranscriptResultCache<T> {
+  private entries = new Map<string, { revision: string; value: Promise<T | null>; bytes: number }>();
+  private bytes = 0;
+  private measure: (value: T | null) => number;
+
+  constructor(measure: (value: T | null) => number) { this.measure = measure; }
+
+  read(key: string, revision: string, load: () => Promise<{ value: T | null; cacheable: boolean }>): Promise<T | null> {
+    const cached = this.entries.get(key);
+    if (cached?.revision === revision) {
+      this.entries.delete(key);
+      this.entries.set(key, cached);
+      return cached.value;
+    }
+    this.remove(key);
+    const entry = { revision, bytes: key.length * 2, value: null as unknown as Promise<T | null> };
+    entry.value = load().then(result => {
+      if (this.entries.get(key) === entry) {
+        if (!result.cacheable) this.remove(key);
+        else {
+          const bytes = key.length * 2 + this.measure(result.value);
+          this.bytes += bytes - entry.bytes;
+          entry.bytes = bytes;
+          this.trim();
+        }
+      }
+      return result.value;
+    }, error => {
+      if (this.entries.get(key) === entry) this.remove(key);
+      throw error;
+    });
+    this.entries.set(key, entry);
+    this.bytes += entry.bytes;
+    this.trim();
+    return entry.value;
+  }
+
+  private remove(key: string): void {
+    const entry = this.entries.get(key);
+    if (entry) { this.bytes -= entry.bytes; this.entries.delete(key); }
+  }
+
+  private trim(): void {
+    while (this.entries.size > 128 || this.bytes > 16 * 1024 * 1024) this.remove(this.entries.keys().next().value!);
+  }
+}
+
 export type MatchedTranscriptReply = {
   sessionId: string;
   text: string;
@@ -1298,10 +1347,10 @@ function turnActivityBefore(storage: string, records: unknown[], before: number)
   return latest > 0 && latest < before;
 }
 
-/** The tail of this PTY's conversation file, from its host-visible home (including WSL). */
-async function conversationTail(
+/** The exact native/WSL file; callers decide whether its revision needs reading. */
+async function conversationFile(
   provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions,
-): Promise<{ storage: string; text: string } | null> {
+): Promise<{ storage: string; path: string } | null> {
   if (!sessionId || !hasAgentAdapter(provider)) return null;
   const storage = getAgentAdapter(provider).sessionStorage;
   if (!storage || !FILE_LOOKUP_STORAGES.has(storage)) return null;
@@ -1314,8 +1363,16 @@ async function conversationTail(
   const path = (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') ? join(root, `${sessionId}.jsonl`)
     : storage === 'codex-rollout-jsonl' ? await findTranscriptFile(root, sessionId, 4)
       : join(root, sessionId, 'agents', 'main', 'wire.jsonl');
-  const text = path ? await transcriptTail(path, TAIL_BYTES) : null;
-  return text ? { storage, text } : null;
+  return path ? { storage, path } : null;
+}
+
+/** The tail of this PTY's conversation file, from its host-visible home (including WSL). */
+async function conversationTail(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions,
+): Promise<{ storage: string; text: string } | null> {
+  const file = await conversationFile(provider, cwd, sessionId, options);
+  const text = file ? await transcriptTail(file.path, TAIL_BYTES) : null;
+  return file && text ? { storage: file.storage, text } : null;
 }
 
 /** Public conversation text for a provider-neutral leadership handoff. Tool
@@ -1345,6 +1402,7 @@ export async function latestTurnComplete(
 }
 
 export type TranscriptTurnBoundary = { ready: boolean | null; startedAt: number | null; finishedAt: number | null };
+const boundaryCache = new TranscriptResultCache<TranscriptTurnBoundary>(() => 64);
 
 /** Composer readiness is distinct from having an answer: an aborted turn has no reply. */
 export function parseLatestTurnBoundary(storage: string, transcript: string, processStartedAt?: number): TranscriptTurnBoundary {
@@ -1395,9 +1453,15 @@ export async function latestTurnBoundary(
   provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
 ): Promise<TranscriptTurnBoundary> {
   try {
-    const tail = await conversationTail(provider, cwd, sessionId, options);
-    return tail ? parseLatestTurnBoundary(tail.storage, tail.text, options.processStartedAt)
-      : { ready: null, startedAt: null, finishedAt: null };
+    const file = await conversationFile(provider, cwd, sessionId, options);
+    const revision = file ? await transcriptRevision(file.path, 0) : null;
+    if (!file || !revision) return { ready: null, startedAt: null, finishedAt: null };
+    const key = JSON.stringify([file.storage, file.path, options.processStartedAt ?? null]);
+    const result = await boundaryCache.read(key, revision, async () => {
+      const text = await transcriptTail(file.path, TAIL_BYTES);
+      return { value: text ? parseLatestTurnBoundary(file.storage, text, options.processStartedAt) : null, cacheable: text !== null };
+    });
+    return result ? { ...result } : { ready: null, startedAt: null, finishedAt: null };
   } catch { return { ready: null, startedAt: null, finishedAt: null }; }
 }
 
@@ -1425,7 +1489,7 @@ export async function latestTurnStartedAt(
 }
 
 type FileTurn = { sessionId: string; reply: { text: string; complete: boolean } | null };
-const fileTurnCache = new Map<string, { revision: string; value: Promise<FileTurn | null> }>();
+const fileTurnCache = new TranscriptResultCache<FileTurn>(value => (value?.reply?.text.length ?? 0) * 2);
 
 /** The high-frequency delivery/reply path never walks local or WSL files synchronously. */
 async function findFileTurn(
@@ -1443,17 +1507,12 @@ async function findFileTurn(
     if (!revision) return null;
     const occurrence = promptOnly ? undefined : promptBound(options);
     const key = JSON.stringify([storage, path, sessionId, promptOnly, occurrence ?? null, createHash('sha256').update(expectedPrompt).digest('hex')]);
-    const cached = fileTurnCache.get(key);
-    if (cached?.revision === revision) return cached.value;
-    const value = (async () => {
+    return fileTurnCache.read(key, revision, async () => {
       const text = await transcriptTail(path, MATCH_TAIL_BYTES);
-      if (!text || !(promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt, occurrence))) return null;
-      return { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt, occurrence) };
-    })();
-    fileTurnCache.set(key, { revision, value });
-    // Polling an unchanged long conversation must not parse megabytes again.
-    while (fileTurnCache.size > 16) fileTurnCache.delete(fileTurnCache.keys().next().value!);
-    return value;
+      if (text === null) return { value: null, cacheable: false };
+      const match = promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt, occurrence);
+      return { value: match ? { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt, occurrence) } : null, cacheable: true };
+    });
   };
   const preferred = preferredSessionId
     ? (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') ? join(root, `${preferredSessionId}.jsonl`)

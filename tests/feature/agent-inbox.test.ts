@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
-import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
+import { agentInboxService, AgentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
@@ -24,10 +24,11 @@ describe('Agent inbox', () => {
   const prompts: Array<{ nodeId: string; message: string }> = [];
   let replies: Map<string, string>;
 
-  async function team() {
+  async function team(size = 3) {
     const workspace = await workspaceRepository.createWorkspace({ name: 'inbox', workingDir: '/tmp' });
     const nodes: Record<string, string> = {};
-    for (const title of ['Lider', 'Web', 'Mobile']) {
+    const titles = ['Lider', 'Web', 'Mobile', ...Array.from({ length: Math.max(0, size - 3) }, (_, index) => `Specialist ${index + 1}`)];
+    for (const title of titles) {
       const sessionId = uuidv7();
       const node = await workspaceRepository.createNode({
         workspaceId: workspace.id,
@@ -585,6 +586,104 @@ describe('Agent inbox', () => {
     expect(prompts.map((prompt) => prompt.nodeId)).not.toContain(nodes.Lider);
     releaseLeader();
     await vi.waitFor(() => expect(prompts.map((prompt) => prompt.nodeId)).toContain(nodes.Lider));
+  });
+
+  it('submits to all 30 agents while six submitted prompts await transcript confirmation', async () => {
+    const { workspace, nodes } = await team(30);
+    const ids = Object.values(nodes);
+    for (const id of ids) session(id).ready = false;
+    for (const id of ids) await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: id, kind: 'handoff', content: `Continue ${id}` });
+    await Promise.all(ids.map(id => agentInboxService.drain(workspace.id, id)));
+    let release!: () => void;
+    const confirmation = new Promise<void>(resolve => { release = resolve; });
+    const slow = new Set(ids.slice(0, 6));
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementation(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+      input.onSubmitted?.({ sessionId: input.sessionId, length: 0 });
+      if (slow.has(input.nodeId)) await confirmation;
+    });
+    for (const id of ids) session(id).ready = true;
+    const runs = ids.map(id => agentInboxService.drain(workspace.id, id));
+    try {
+      await vi.waitFor(() => expect(new Set(prompts.map(prompt => prompt.nodeId)).size).toBe(30), { timeout: 1500 });
+      for (const id of slow) expect(await controlCenterRepository.inboxEnvelopes(id, ['delivered'])).toHaveLength(0);
+    } finally {
+      release();
+      await Promise.all(runs);
+    }
+    expect(prompts).toHaveLength(30);
+  });
+
+  it('keeps at most six terminal submissions active and releases each writer once', async () => {
+    const { workspace, nodes } = await team(30);
+    const ids = Object.values(nodes);
+    for (const id of ids) session(id).ready = false;
+    for (const id of ids) await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: id, kind: 'handoff', content: `Continue ${id}` });
+    await Promise.all(ids.map(id => agentInboxService.drain(workspace.id, id)));
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let active = 0, peak = 0;
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementation(async input => {
+      active++; peak = Math.max(peak, active);
+      await gate;
+      active--;
+      input.onSubmitted?.({ sessionId: input.sessionId, length: 0 });
+      input.onSubmitted?.({ sessionId: input.sessionId, length: 0 });
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+    });
+    for (const id of ids) session(id).ready = true;
+    const runs = ids.map(id => agentInboxService.drain(workspace.id, id));
+    try { await vi.waitFor(() => expect(active).toBe(6)); }
+    finally { release(); await Promise.all(runs); }
+    expect(peak).toBe(6);
+    expect(prompts).toHaveLength(30);
+  });
+
+  it('reports prolonged dispatch or event-loop delays with rate-limited numeric data only', () => {
+    const service = new AgentInboxService();
+    const internal = service as unknown as { drainStarted: Map<string, number>; reportHealth(now: number): void };
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      internal.reportHealth(1000);
+      internal.reportHealth(2500);
+      expect(log).not.toHaveBeenCalled();
+      internal.drainStarted.set('PRIVATE_NODE_ID', 1000);
+      internal.reportHealth(32_000);
+      expect(log).toHaveBeenCalledOnce();
+      internal.reportHealth(40_000);
+      expect(log).toHaveBeenCalledOnce();
+      internal.reportHealth(100_000);
+      expect(log).toHaveBeenCalledTimes(2);
+      const text = String(log.mock.calls[0][0]);
+      const metrics = JSON.parse(text.slice('[orkestrai:orchestration-health] '.length));
+      expect(metrics).toMatchObject({ oldestDrainMs: 31_000, submitting: 0, waitingForWriter: 0 });
+      expect(Object.values(metrics).every(value => typeof value === 'number' && Number.isFinite(value))).toBe(true);
+      expect(text).not.toContain('PRIVATE_NODE_ID');
+    } finally { service.reset(); log.mockRestore(); }
+  });
+
+  it('does not reserve all delivery slots for six stalled transcript readiness reads', async () => {
+    const { workspace, nodes } = await team(30);
+    const ids = Object.values(nodes);
+    for (const id of ids) session(id).ready = false;
+    for (const id of ids) await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: id, kind: 'handoff', content: `Continue ${id}` });
+    await Promise.all(ids.map(id => agentInboxService.drain(workspace.id, id)));
+    let release!: () => void;
+    const readiness = new Promise<void>(resolve => { release = resolve; });
+    const slow = new Set(ids.slice(0, 6).map(id => session(id).agentSessionId));
+    vi.mocked(transcript.latestTurnBoundary).mockImplementation(async (_provider, _cwd, conversation) => {
+      if (slow.has(conversation)) await readiness;
+      return { ready: true, startedAt: null, finishedAt: null };
+    });
+    for (const id of ids) session(id).ready = true;
+    const runs = ids.map(id => agentInboxService.drain(workspace.id, id));
+    try {
+      await vi.waitFor(() => expect(prompts).toHaveLength(24), { timeout: 1500 });
+    } finally {
+      release();
+      await Promise.all(runs);
+    }
+    expect(prompts).toHaveLength(30);
   });
 
   it('still captures the answer to a question delivered before a restart, without typing it again', async () => {

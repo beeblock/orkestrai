@@ -16,7 +16,7 @@ const path = require('node:path');
 const net = require('node:net');
 const { canInstallUpdatesAutomaticallyAsync, isNewerVersion } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
-const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic } = require('./diagnostic-filter.cjs');
+const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
 const { createAdventureWindowController } = require('./adventure-window.cjs');
@@ -712,6 +712,11 @@ async function startServer(port) {
       if (startupPreparing) showSplashPreparing();
     }
     for (const line of lines) {
+      const health = orchestrationHealthDiagnostic(line);
+      if (health) {
+        diagnostics?.write('info', 'orchestration', health);
+        continue;
+      }
       const structuredMatch = line.match(/\[orkestrai:notify\] (\{.+\})/);
       if (structuredMatch) {
         try {
