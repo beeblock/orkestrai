@@ -65,6 +65,11 @@
   // A request opened from Needs you, waiting to be scrolled into view once its channel has loaded.
   let revealId = $state<string | null>(null);
   let highlightedId = $state<string | null>(null);
+  // A return to the same channel is a new view too: an earlier send must not
+  // clear its new draft. These tickets never change the persisted recipient.
+  let conversationGeneration = 0;
+  let workspaceGeneration = 0;
+  let workspaceDetailsGeneration = 0;
 
   const workspace = $derived(workspaces.find((candidate) => candidate.id === workspaceId) ?? null);
   const agentById = $derived(new Map(agents.map((agent) => [agent.id, agent])));
@@ -115,27 +120,44 @@
     void goto(`/chat?${params.toString()}`, { replaceState: true, keepFocus: true, noScroll: true });
   }
 
-  async function loadWorkspace(id: string) {
+  function conversationRequest() {
+    const id = workspaceId;
+    const current = channel;
+    const generation = conversationGeneration;
+    const matches = () => id === workspaceId && current === channel;
+    return { id, channel: current, matches, isCurrent: () => matches() && generation === conversationGeneration };
+  }
+
+  async function loadWorkspace(id: string, includeDetails = true) {
+    const generation = ++workspaceGeneration;
+    const detailsGeneration = includeDetails ? ++workspaceDetailsGeneration : 0;
     const [nodes, summaries] = await Promise.all([
       api<CanvasNode[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/nodes`),
       api<{ channels: ChannelSummary[] }>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels`),
     ]);
     if (id !== workspaceId) return;
-    agents = nodes
-      .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
-      .map((node) => ({ id: node.id, title: node.title ?? m['canvas.fallback_terminal'](), payload: node.payload as TerminalNodePayload }));
-    channels = summaries.channels;
-    // A conversation asked for in the link but with no such agent here opens the team channel.
-    const requested = directChannelNode(channel);
-    if (requested && !agents.some((agent) => agent.id === requested)) {
-      channel = TEAM_CHANNEL;
-      syncUrl();
+    if (generation === workspaceGeneration) {
+      agents = nodes
+        .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
+        .map((node) => ({ id: node.id, title: node.title ?? m['canvas.fallback_terminal'](), payload: node.payload as TerminalNodePayload }));
+      channels = summaries.channels;
+      if (profileNodeId && !agents.some((agent) => agent.id === profileNodeId)) profileNodeId = null;
+      // A conversation asked for in the link but with no such agent here opens the team channel.
+      const requested = directChannelNode(channel);
+      if (requested && !agents.some((agent) => agent.id === requested)) {
+        resetConversation(TEAM_CHANNEL);
+        syncUrl();
+        if (!includeDetails) void loadMessages();
+      }
     }
+    // A lightweight structural refresh must not discard the initial routines
+    // and bindings that a full workspace load is still fetching.
+    if (!includeDetails || detailsGeneration !== workspaceDetailsGeneration) return;
     const [routineList, bindingList] = await Promise.all([
       api<Routine[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/routines`).catch(() => []),
       api<ChannelBinding[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channel-bindings`).catch(() => []),
     ]);
-    if (id !== workspaceId) return;
+    if (id !== workspaceId || detailsGeneration !== workspaceDetailsGeneration) return;
     routines = Array.isArray(routineList) ? routineList : [];
     bindings = Array.isArray(bindingList) ? bindingList : [];
   }
@@ -159,41 +181,41 @@
   }
 
   async function loadMessages(older = false) {
-    if (!workspaceId) return;
-    const id = workspaceId;
-    const current = channel;
+    const scope = conversationRequest();
+    if (!scope.id) return;
     const cursor = older ? oldestCursor(messages) : null;
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), ...(cursor ?? {}) });
     if (older) loadingOlder = true;
     try {
-      const page = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels/${encodeURIComponent(current)}/messages?${params.toString()}`);
-      if (id !== workspaceId || current !== channel) return;
+      const page = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(scope.id)}/channels/${encodeURIComponent(scope.channel)}/messages?${params.toString()}`);
+      if (!scope.isCurrent()) return;
       hasOlder = page.length >= PAGE_SIZE;
       if (older) {
         const height = scroller?.scrollHeight ?? 0;
         messages = mergeOlder(page, messages);
         await tick();
-        if (scroller) scroller.scrollTop += scroller.scrollHeight - height;
+        if (scope.isCurrent() && scroller) scroller.scrollTop += scroller.scrollHeight - height;
       } else {
-        messages = mergeLoaded(page, messages.filter((message) => message.channel === current));
+        messages = mergeLoaded(page, messages.filter((message) => message.channel === scope.channel));
         void loadOpenQuestions();
         await tick();
-        scrollToEnd();
+        if (scope.isCurrent()) scrollToEnd();
       }
     } catch {
-      if (!older) messages = [];
+      if (scope.isCurrent() && !older) messages = [];
     } finally {
-      loadingOlder = false;
-      loading = false;
+      if (scope.isCurrent()) {
+        loadingOlder = false;
+        loading = false;
+      }
     }
   }
 
   async function loadOpenQuestions() {
-    if (!workspaceId) return;
-    const id = workspaceId;
-    const current = channel;
-    const list = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels/${encodeURIComponent(current)}/messages?questions=open`).catch(() => null);
-    if (list && id === workspaceId && current === channel) openQuestions = list;
+    const scope = conversationRequest();
+    if (!scope.id) return;
+    const list = await api<ChannelMessage[]>(`/api/agent-room/workspaces/${encodeURIComponent(scope.id)}/channels/${encodeURIComponent(scope.channel)}/messages?questions=open`).catch(() => null);
+    if (list && scope.isCurrent()) openQuestions = list;
   }
 
   function askedLabel(iso: string): string {
@@ -209,14 +231,23 @@
     return !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
   }
 
-  function selectChannel(next: string) {
-    if (next === channel) return;
+  function resetConversation(next: string) {
+    conversationGeneration += 1;
     channel = next;
     messages = [];
     openQuestions = [];
     loading = true;
+    loadingOlder = false;
+    hasOlder = false;
     draft = '';
     sendError = '';
+    mentionOpen = false;
+    mentionFilter = '';
+  }
+
+  function selectChannel(next: string) {
+    if (next === channel) return;
+    resetConversation(next);
     syncUrl();
     void loadMessages();
   }
@@ -255,14 +286,21 @@
   }
 
   async function post(body: string, replyToId: string | null = null, attachments: WorkspaceAttachment[] = []): Promise<boolean> {
-    if (!workspaceId) return false;
+    const scope = conversationRequest();
+    if (!scope.id) return false;
     const result = await api<{ message: ChannelMessage; answer?: ChannelMessage | null; delivered: Array<{ nodeId: string; ok: boolean }> }>(
-      `/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`,
+      `/api/agent-room/workspaces/${encodeURIComponent(scope.id)}/channels/${encodeURIComponent(scope.channel)}/messages`,
       { method: 'POST', body: JSON.stringify({ body, replyToId, attachments }) },
     );
+    // The message is still committed, with its files and original destination,
+    // when the owner opens a different conversation while this request runs.
+    // Persisted messages still belong here after leaving and returning. Draft,
+    // error and scroll changes below require the original view generation.
+    if (!scope.matches()) return true;
     messages = upsertMessage(messages, result.message);
     if (result.answer) messages = upsertMessage(messages, result.answer);
     await tick();
+    if (!scope.isCurrent()) return true;
     scrollToEnd();
     const failed = result.delivered.filter((entry) => !entry.ok);
     if (failed.length) sendError = m['chat.delivery_failed']({ names: failed.map((entry) => titleOf(entry.nodeId)).join(', ') });
@@ -272,17 +310,20 @@
   async function send() {
     const text = draft.trim();
     if ((!text && !staged.items.length) || sending || staged.busy) return;
+    const scope = conversationRequest();
     const submission = staged.reserve();
     sending = true;
     sendError = '';
     try {
       await post(text, null, submission.attachments);
       submission.commit();
-      if (draft.trim() === text) draft = '';
-      onInput();
+      if (scope.isCurrent()) {
+        if (draft.trim() === text) draft = '';
+        onInput();
+      }
     } catch (error) {
       submission.release();
-      sendError = error instanceof Error ? error.message : m['chat.send_failed']();
+      if (scope.isCurrent()) sendError = error instanceof Error ? error.message : m['chat.send_failed']();
     } finally {
       sending = false;
     }
@@ -336,14 +377,21 @@
     const unregister = registerWorkspaceSelector((id) => {
       if (id === workspaceId) return;
       localStorage.setItem('orkestrai.activeWorkspaceId', id);
+      workspaceGeneration += 1;
+      workspaceDetailsGeneration += 1;
       workspaceId = id;
-      channel = TEAM_CHANNEL;
-      messages = [];
-      openQuestions = [];
+      resetConversation(TEAM_CHANNEL);
+      agents = [];
+      channels = [];
+      routines = [];
+      bindings = [];
       profileNodeId = null;
       profileHidden = false;
     });
     return () => {
+      conversationGeneration += 1;
+      workspaceGeneration += 1;
+      workspaceDetailsGeneration += 1;
       unregister();
       clearWorkspaceContext('chat');
     };
@@ -402,6 +450,7 @@
     let reconnect: ReturnType<typeof setTimeout> | null = null;
     let channelsTimer: ReturnType<typeof setTimeout> | null = null;
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let workspaceTimer: ReturnType<typeof setTimeout> | null = null;
     const refreshSoon = () => {
       if (channelsTimer) return;
       channelsTimer = setTimeout(() => { channelsTimer = null; void refreshChannels(); }, 400);
@@ -410,9 +459,10 @@
       if (disposed) return;
       socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent-room/pty`);
       socket.onopen = () => {
-        socket?.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged'] }));
+        socket?.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged', 'workspaceChanged'] }));
         // Messages sent before this subscription (first load or a reconnect) come from a reload.
-        if (workspaceId) void loadMessages();
+        const id = workspaceId;
+        if (id) void loadWorkspace(id).then(() => { if (id === workspaceId) return loadMessages(); }).catch(() => undefined);
       };
       socket.onmessage = async (event) => {
         let frame: { type?: string; workspaceId?: string; channel?: string; message?: ChannelMessage };
@@ -431,6 +481,17 @@
           reloadTimer = setTimeout(() => { reloadTimer = null; void loadMessages(); }, 600);
         }
         if (frame.type === 'controlCenterChanged') scheduleAgentStatusRefresh();
+        if (frame.type === 'workspaceChanged' && !workspaceTimer) {
+          // Structural changes and leadership transfers are debounced; ordinary
+          // status/message events never re-fetch the full Canvas node payloads.
+          workspaceTimer = setTimeout(() => {
+            workspaceTimer = null;
+            // A workspace switch may happen during the debounce. Refresh the
+            // active workspace so its newer event is not lost behind this one.
+            const id = workspaceId;
+            if (id) void loadWorkspace(id, false).catch(() => undefined);
+          }, 300);
+        }
         if (frame.type === 'attentionChanged') {
           scheduleAttentionRefresh();
           // A question the leader escalated or closed changes what waits here.
@@ -448,6 +509,7 @@
       if (reconnect) clearTimeout(reconnect);
       if (channelsTimer) clearTimeout(channelsTimer);
       if (reloadTimer) clearTimeout(reloadTimer);
+      if (workspaceTimer) clearTimeout(workspaceTimer);
       socket?.close();
     };
   });
