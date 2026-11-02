@@ -169,7 +169,7 @@ export class AgentSessionService {
     }
     let resumableAgentSessionId = payload.agentSessionId ?? null;
     if (resumableAgentSessionId && adapter) {
-      const valid = tracker.isAgentSessionResumable(adapter.sessionStorage, trackingCwd, resumableAgentSessionId);
+      const valid = await tracker.isAgentSessionResumable(adapter.sessionStorage, trackingCwd, resumableAgentSessionId);
       if (valid === false) resumableAgentSessionId = null;
     }
     const freshAgentSessionId = !resumableAgentSessionId && adapter?.freshSessionArgs ? randomUUID() : null;
@@ -307,6 +307,10 @@ export class AgentSessionService {
       }
     }
     notifyWorkspaceChanged(workspaceId);
+    // Session restoration also runs without a mounted Canvas terminal.
+    // RoleService deduplicates this with the viewer's readiness callback.
+    if (payload.provider && adapter) void import('./RoleService.js').then(({roleService}) => roleService.applyToTerminal(workspaceId,target.id,resumableAgentSessionId ? 'resume' : 'fresh'))
+      .catch(() => console.warn('[agent-session] Startup work queue will be retried when the terminal is ready.'));
     return {
       nodeId: target.id,
       sessionId: session.id,

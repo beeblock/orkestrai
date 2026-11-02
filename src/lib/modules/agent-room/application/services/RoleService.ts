@@ -222,11 +222,26 @@ export class RoleService {
    * Prepara uma sessão PTY nova ou retomada. Roles só entram em conversas
    * novas; numa retomada, apenas agentes com trabalho aberto são acordados.
    */
-  async applyToTerminal(
+  async applyToTerminal(workspaceId: string, nodeId: string, mode: 'fresh' | 'resume' | 'role' = 'fresh'): Promise<{ applied: boolean; tasksDelivered: number }> {
+    const node = await workspaceRepository.getNode(nodeId);
+    const payload = node?.payload as {sessionId?:string;role?:string;maestro?:boolean;deputy?:boolean} | undefined;
+    const key = JSON.stringify([workspaceId,nodeId,payload?.sessionId ?? null,payload?.role ?? null,Boolean(payload?.maestro),Boolean(payload?.deputy),mode === 'role' ? 'role' : 'startup']);
+    const state = globalThis as typeof globalThis & { __orkestraiRoleApplications?: Map<string, Promise<{applied:boolean;tasksDelivered:number}>> };
+    const applications = state.__orkestraiRoleApplications ??= new Map();
+    if(mode !== 'role' && applications.has(key)) return applications.get(key)!;
+    const run = this.applyCurrentTerminal(workspaceId,nodeId,mode).then(result => {
+      if(!result.settled) applications.delete(key);
+      return {applied:result.applied,tasksDelivered:result.tasksDelivered};
+    }).catch(error => { applications.delete(key); throw error; });
+    if(mode !== 'role') { applications.set(key,run); while(applications.size>512) applications.delete(applications.keys().next().value!); }
+    return run;
+  }
+
+  private async applyCurrentTerminal(
     workspaceId: string,
     nodeId: string,
     mode: 'fresh' | 'resume' | 'role' = 'fresh',
-  ): Promise<{ applied: boolean; tasksDelivered: number }> {
+  ): Promise<{ applied: boolean; tasksDelivered: number; settled?: boolean }> {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal') {
       throw new Error('Terminal não encontrado neste workspace.');
@@ -254,10 +269,10 @@ export class RoleService {
       : (await taskBoardService.list(workspaceId)).filter((task) => {
           if (task.status === 'done') return false;
           if (task.completionReview && ['collecting', 'pending', 'approved'].includes(task.completionReview.status) && !payload.maestro && !payload.deputy) return false;
-          return task.assigneeNodeId === nodeId || (payload.maestro && !task.assigneeNodeId);
+          return task.assigneeNodeId === nodeId || Boolean(payload.maestro);
         });
     let leaderContext = Boolean((payload.maestro || payload.deputy) && (mode === 'fresh' || (mode === 'resume' && tasks.length > 0)));
-    if (!shouldApplyRole && tasks.length === 0 && !leaderContext) return { applied: false, tasksDelivered: 0 };
+    if (!shouldApplyRole && tasks.length === 0 && !leaderContext) return { applied: false, tasksDelivered: 0, settled: true };
     if (!payload.sessionId) throw new Error('O terminal ainda não tem sessão PTY.');
 
     const session = ptySessionManager.get(payload.sessionId);
@@ -271,7 +286,7 @@ export class RoleService {
       const covered = await Promise.all(tasks.map((task) => agentInboxService.recoveryDelivered(nodeId, task.id, sessionId).catch(() => false)));
       tasks = tasks.filter((_, index) => !covered[index]);
       leaderContext = Boolean((payload.maestro || payload.deputy) && tasks.length > 0);
-      if (!shouldApplyRole && tasks.length === 0) return { applied: false, tasksDelivered: 0 };
+      if (!shouldApplyRole && tasks.length === 0) return { applied: false, tasksDelivered: 0, settled: true };
     }
 
     let applied = false;
@@ -287,8 +302,18 @@ export class RoleService {
       applied = true;
     }
 
+    // Managed agents resume through the same durable admission path as new assignments.
+    // Plain Shell fixtures keep their immediate terminal behavior.
+    if (session.provider && !payload.maestro && !payload.deputy && tasks.length) {
+      let queued = 0;
+      for (const task of tasks) if (await taskBoardService.queueResumedTask(workspaceId,task.id,nodeId,sessionId)) queued++;
+      return { applied, tasksDelivered: queued, settled: true };
+    }
+
     if (tasks.length || leaderContext) {
-      const briefs = tasks.map((task) => {
+      const summaries = session.provider && (payload.maestro || payload.deputy);
+      const briefs = (summaries ? tasks.slice(0,25) : tasks).map((task) => {
+        if (summaries) return JSON.stringify({id:task.id,title:task.title.slice(0,160),status:task.status,assigneeNodeId:task.assigneeNodeId,execution:task.execution?.state ?? null,dependencies:task.dependencies});
         const images = task.images.length ? task.images.map((image) => `- ${image}`).join('\n') : '(nenhuma)';
         const ownership = task.assigneeNodeId
           ? `Responsável: ${task.assigneeTitle ?? node.title ?? nodeId}`
@@ -317,7 +342,7 @@ export class RoleService {
         for (const task of tasks) await agentInboxService.withdrawRecovery(nodeId, task.id, sessionId).catch(() => false);
       }
     }
-    return { applied, tasksDelivered: tasks.length };
+    return { applied, tasksDelivered: tasks.length, settled: true };
   }
 
   private async requireRole(workspaceId: string, nameOrSlug: string): Promise<AgentRole> {

@@ -69,15 +69,23 @@ export function findTranscriptFile(root: string, sessionId: string, maxDepth: nu
   return value;
 }
 
-export function recentTranscriptFiles(root: string, maxDepth: number): Promise<Array<{ path: string; mtime: number }>> {
+export function invalidateTranscriptListing(root: string, maxDepth: number): void {
+  listings.delete(JSON.stringify([root, maxDepth]));
+}
+
+export function recentTranscriptFiles(root: string, maxDepth: number, fresh = false): Promise<Array<{ path: string; mtime: number }>> {
   const key = JSON.stringify([root, maxDepth]);
   const cached = listings.get(key);
-  if (cached && Date.now() - cached.at < 1_000) return cached.value;
+  if (cached && !fresh && Date.now() - cached.at < 1_000) return cached.value;
   const value = (async () => {
     const files: Array<{ path: string; mtime: number }> = [];
+    let visited = 0;
     const walk = async (dir: string, depth: number): Promise<void> => {
-      if (depth > maxDepth) return;
-      for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (depth > maxDepth || visited >= 20_000) return;
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      entries.sort((a,b) => b.name.localeCompare(a.name));
+      for (const entry of entries) {
+        if (++visited > 20_000) break;
         const path = join(dir, entry.name);
         if (entry.isDirectory()) await walk(path, depth + 1);
         else if (entry.isFile() && entry.name.endsWith('.jsonl')) {

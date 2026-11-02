@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, win32, posix, resolve } from 'node:path';
 import type { TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../domain/types.js';
@@ -213,18 +213,16 @@ export function guestWorkingDirectory(
     if (!relative) return runtime.linuxWorkingDir;
   }
 
-  if (process.platform === 'win32') {
-    try {
-      return execFileSync(
-        'wsl.exe',
-        ['--distribution', runtime.distribution, '--exec', 'wslpath', '-u', hostCwd],
-        { encoding: 'utf8', windowsHide: true, timeout: 10_000 }
-      ).trim();
-    } catch {
-      // The workspace root remains the safest valid fallback for a stale floor path.
-    }
-  }
   return runtime.linuxWorkingDir;
+}
+
+export async function guestWorkingDirectoryAsync(runtime: Extract<WorkspaceExecutionRuntime, { kind: 'wsl' }>, hostCwd: string, workspaceRoot?: string): Promise<string> {
+  const mapped = guestWorkingDirectory(runtime, hostCwd, workspaceRoot);
+  if (inferWslRuntimeFromPath(hostCwd)?.distribution === runtime.distribution
+    || (workspaceRoot && (win32.relative(workspaceRoot, hostCwd) === ''
+      || !win32.relative(workspaceRoot, hostCwd).startsWith('..') && !win32.isAbsolute(win32.relative(workspaceRoot, hostCwd))))) return mapped;
+  if (process.platform !== 'win32') return mapped;
+  return windowsPathToWsl(runtime.distribution, hostCwd);
 }
 
 function wslFailure(error: unknown, runtime: Extract<WorkspaceExecutionRuntime, { kind: 'wsl' }>, command?: string): WslLaunchError {
@@ -245,7 +243,7 @@ export async function resolveWslTrackingContext(input: {
   hostCwd: string;
   workspaceRoot?: string;
 }): Promise<WslTrackingContext> {
-  const linuxWorkingDir = guestWorkingDirectory(input.runtime, input.hostCwd, input.workspaceRoot);
+  const linuxWorkingDir = await guestWorkingDirectoryAsync(input.runtime, input.hostCwd, input.workspaceRoot);
   try {
     const { stdout } = await execFileAsync('wsl.exe', [
       '--distribution', input.runtime.distribution,
@@ -315,6 +313,7 @@ export function buildWslLaunch(input: {
   command: string;
   args: string[];
   hostCwd: string;
+  resolvedGuestCwd?: string;
   workspaceRoot?: string;
   hostEnv: Record<string, string>;
   /** Names resolved from a server-side Provider Profile. Values stay in the
@@ -361,7 +360,7 @@ export function buildWslLaunch(input: {
       '--distribution',
       runtime.distribution,
       '--cd',
-      guestWorkingDirectory(runtime, input.hostCwd, input.workspaceRoot),
+      input.resolvedGuestCwd ?? guestWorkingDirectory(runtime, input.hostCwd, input.workspaceRoot),
       '--exec',
       '/bin/bash',
       '-lic',

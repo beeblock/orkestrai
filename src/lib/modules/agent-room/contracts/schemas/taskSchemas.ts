@@ -1,7 +1,10 @@
 import { z } from 'zod/v3';
 import { MAX_WORKSPACE_ATTACHMENTS, workspaceAttachmentSchema } from './workspaceAttachmentSchemas.js';
 
+export const taskDependenciesSchema = z.array(z.string().uuid()).max(64).transform(ids => [...new Set(ids)]);
+
 export const createBoardTaskSchema = z.object({
+  dependencies: taskDependenciesSchema.optional(),
   title: z.string().trim().min(1, 'Informe o titulo da tarefa.'),
   description: z.string().trim().nullish(),
   images: z.array(z.string().trim().min(1)).max(6).optional(),
@@ -13,6 +16,7 @@ export const createBoardTaskSchema = z.object({
 });
 
 export const updateBoardTaskSchema = z.object({
+  dependencies: taskDependenciesSchema.optional(),
   title: z.string().trim().min(1).optional(),
   description: z.string().trim().nullish(),
   status: z.string().trim().min(1).max(48).optional(),
@@ -22,6 +26,7 @@ export const updateBoardTaskSchema = z.object({
 });
 
 export const bridgeBoardTaskSchema = z.object({
+  dependencies: taskDependenciesSchema.optional(),
   leaderWork: z.enum(['coordination', 'review']).optional(),
   token: z.string().trim().min(1).nullish(),
   title: z.string().trim().min(1, 'Informe o titulo da tarefa.'),
@@ -33,6 +38,7 @@ export const bridgeBoardTaskSchema = z.object({
 });
 
 export const bridgeBoardTaskUpdateSchema = z.object({
+  dependencies: taskDependenciesSchema.optional(),
   leaderWork: z.enum(['coordination', 'review']).optional(),
   token: z.string().trim().min(1).nullish(),
   status: z.string().trim().min(1).max(48).optional(),

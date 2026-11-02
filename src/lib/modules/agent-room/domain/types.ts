@@ -683,6 +683,7 @@ export type TerminalNodePayload = {
   /** Automatic work pauses when any known provider quota reaches this percentage. */
   agentRuntimeUsageLimit?: number;
   agentRuntimeLastWakeAt?: string | null;
+  agentRuntimeSleepReason?: string | null;
   agentRuntimeLastSleepAt?: string | null;
   agentRuntimeLastError?: string | null;
 };

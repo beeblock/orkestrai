@@ -28,6 +28,16 @@ test.describe('quadro de tarefas (kanban)', () => {
     await expect(board.locator('.tb-card')).toHaveCount(2);
     await expect(board.locator('.tb-column').first()).toContainText('A fazer');
 
+    // Dependency editing remains reachable without covering the title or review action.
+    const dependencyButton = board.locator('.tb-card').first().getByRole('button', { name: 'Tarefas pré-requisito', exact: true });
+    await dependencyButton.click();
+    await page.getByRole('menuitemcheckbox', { name: 'Escrever testes do parser', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await dependencyButton.click();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Escrever testes do parser', exact: true })).toHaveAttribute('data-state', 'checked');
+    await page.getByRole('menuitem', { name: 'Remover pré-requisitos', exact: true }).click();
+    await page.keyboard.press('Escape');
+
     // Arrasta a primeira tarefa para "Fazendo" (drag and drop)
     const firstCard = board.locator('.tb-card').first();
     const doingColumn = board.locator('.tb-column').nth(1);

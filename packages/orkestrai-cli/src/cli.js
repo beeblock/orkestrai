@@ -146,6 +146,7 @@ Uso:
   orkestrai task list [--status open|all|<column>] [--assignee <agent>] [--limit 25] [--cursor <id>] [--json]
   orkestrai task read <taskId> [--json]
   orkestrai task columns [--json]
+  orkestrai task dependencies <taskId> [--ids <id,id>]
   orkestrai task add <titulo> [--description <md>] [--assign <agente>] [--note <nota>] [--column <coluna>] [--from <agente>]
   orkestrai task done <taskId>
   orkestrai task move <taskId> <coluna>
@@ -486,6 +487,12 @@ async function runCommand(argv, options, sink) {
   }
 
   const config = { ...resolveConfig(env, cwd), [INBOX_SINK]: sink };
+
+  if (command === 'guide') {
+    const data = await bridge(config, 'GET', `/api/agent-room/bridge/guide${rest[0] ? `?topic=${encodeURIComponent(rest.join(' '))}` : ''}`);
+    out(data.text ?? data.sections.map(section => `${section.id}: ${section.title}`).join('\n'));
+    return 0;
+  }
 
   if (command === 'model-access') {
     const operation = rest[0] ?? 'status';
@@ -2041,12 +2048,19 @@ async function runCommand(argv, options, sink) {
         out(JSON.stringify(await bridge(config, 'GET', `/api/agent-room/bridge/tasks/${encodeURIComponent(taskId)}`), null, 2));
         return 0;
       }
+      if (action === 'dependencies') {
+        if (!values[0]) throw new Error('Usage: orkestrai task dependencies <taskId> --ids <id,id> (empty clears)');
+        if (flags.ids === undefined) return out(JSON.stringify(await bridge(config, 'GET', `/api/agent-room/bridge/tasks/${encodeURIComponent(values[0])}`), null, 2));
+        out(JSON.stringify(await bridge(config, 'PATCH', `/api/agent-room/bridge/tasks/${encodeURIComponent(values[0])}`, { dependencies: String(flags.ids).split(',').map(id => id.trim()).filter(Boolean) }), null, 2));
+        return 0;
+      }
       if (action === 'add') {
         const title = values.join(' ');
         if (!title) throw new Error('Uso: orkestrai task add <titulo> [--description <md>] [--assign <agente>] [--note <nota>] [--from <agente>]');
         const data = await bridge(config, 'POST', '/api/agent-room/bridge/tasks', {
           title,
           description: flags.description,
+          dependencies: flags.depends === undefined ? undefined : String(flags.depends).split(',').map(id => id.trim()).filter(Boolean),
           assignee: flags.assign,
           leaderWork: flags['leader-work'],
           note: flags.note,

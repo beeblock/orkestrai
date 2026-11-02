@@ -1085,14 +1085,11 @@ function preferredTranscriptPath(storage: string | undefined, cwd: string, sessi
  * Size of an agent conversation's persisted transcript, or null when it
  * cannot be located. Used to retire conversations too large to resume well.
  */
-export function transcriptSizeBytes(provider: string, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): number | null {
-  try {
-    const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
-    const path = preferredTranscriptPath(storage, cwd, sessionId, options);
-    return path ? statSync(path).size : null;
-  } catch {
-    return null;
-  }
+export async function transcriptSizeBytes(provider: string, cwd: string, sessionId: string, options: TranscriptLookupOptions = {}): Promise<number | null> {
+  const file = await conversationFile(provider, cwd, sessionId, options);
+  if (!file) return null;
+  const { stat } = await import('node:fs/promises');
+  return stat(file.path).then(value => value.size, () => null);
 }
 
 function recentFiles(
@@ -1150,19 +1147,19 @@ function candidateTranscriptPaths(storage: string | undefined, cwd: string, sinc
   return [];
 }
 
-function candidateSessionIds(
+async function candidateSessionIds(
   storage: string | undefined,
   cwd: string,
   preferredSessionId: string | null,
   options: TranscriptLookupOptions,
-): string[] {
+): Promise<string[]> {
   const ids: string[] = [];
   const exclude = new Set<string>(preferredSessionId ? [preferredSessionId] : []);
   const tracker = options.homeDir || options.posixCwd || options.claudeConfigDir || options.codexHome
     ? new AgentSessionTracker(options.homeDir ?? homedir(), options.posixCwd ? posix.normalize : null, options)
     : agentSessionTracker;
   for (let index = 0; index < 12; index += 1) {
-    const id = tracker.findLatestAgentSessionId(storage, cwd, exclude);
+    const id = await tracker.findLatestAgentSessionId(storage, cwd, exclude);
     if (!id) break;
     ids.push(id);
     exclude.add(id);
@@ -1563,7 +1560,7 @@ export async function findPromptInTranscript(
       return match ? { sessionId: match.sessionId } : null;
     }
     if (storage === 'opencode-session-json') {
-      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
+      const sessionIds = [preferredSessionId, ...await candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));
       for (const sessionId of sessionIds) {
         const turn = openCodeTurn(sessionId, options);
@@ -1587,7 +1584,7 @@ export async function findPromptInTranscript(
       const sessionId = sessionIdForPath(storage, path);
       if (sessionId) return { sessionId };
     }
-    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId, options)) {
+    for (const sessionId of await candidateSessionIds(storage, cwd, preferredSessionId, options)) {
       const path = preferredTranscriptPath(storage, cwd, sessionId, options);
       if (!path || path === preferredPath || !transcriptModifiedSince(path, since)) continue;
       if (promptAtPath(storage, path, expectedPrompt)) return { sessionId };
@@ -1615,7 +1612,7 @@ export async function transcriptMarks(
   const marks: Record<string, TranscriptMark> = {};
   const storage = hasAgentAdapter(provider) ? getAgentAdapter(provider).sessionStorage : undefined;
   if (!storage || !(APPENDED_UNTIMED_STORAGES.has(storage) || REWRITTEN_UNTIMED_STORAGES.has(storage))) return marks;
-  const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
+  const sessionIds = [preferredSessionId, ...await candidateSessionIds(storage, cwd, preferredSessionId, options)]
     .filter((sessionId): sessionId is string => Boolean(sessionId));
   for (const sessionId of sessionIds) {
     try {
@@ -1654,7 +1651,7 @@ export async function findReplyToPrompt(
       return match?.reply ? { sessionId: match.sessionId, ...match.reply } : null;
     }
     if (storage === 'opencode-session-json') {
-      const sessionIds = [preferredSessionId, ...candidateSessionIds(storage, cwd, preferredSessionId, options)]
+      const sessionIds = [preferredSessionId, ...await candidateSessionIds(storage, cwd, preferredSessionId, options)]
         .filter((sessionId): sessionId is string => Boolean(sessionId));
       for (const sessionId of sessionIds) {
         const turn = openCodeTurn(sessionId, options);
@@ -1679,7 +1676,7 @@ export async function findReplyToPrompt(
       const reply = replyAtPath(storage, path, expectedPrompt, options, sessionId);
       if (reply) return { sessionId, ...reply };
     }
-    for (const sessionId of candidateSessionIds(storage, cwd, preferredSessionId, options)) {
+    for (const sessionId of await candidateSessionIds(storage, cwd, preferredSessionId, options)) {
       const path = preferredTranscriptPath(storage, cwd, sessionId, options);
       if (!path || path === preferredPath || !transcriptModifiedSince(path, since)) continue;
       const reply = replyAtPath(storage, path, expectedPrompt, options, sessionId);

@@ -2012,7 +2012,7 @@
   "term.workspace_suspended": "Este workspace está pausado. Abra-o novamente antes de iniciar um terminal.",
   "term.conversation_in_use": "Esta conversa pertence a outro agente ativo. O terminal dele foi preservado; restaure a conversa própria deste agente antes de tentar novamente.",
   "term.connection_closed": "Conexão encerrada.",
-  "term.reconnecting": "Reconectando ({attempt}/6)...",
+  "term.reconnecting": "Reconectando ({attempt})...",
   "term.idle": "Terminal ocioso",
   "term.esc_closes": "Esc fecha",
   "term.process_exited": "Processo finalizado (código {code}).",
@@ -6148,5 +6148,12 @@
   "leadership.handoff_pending": "Transição registrada; o novo líder será avisado pela caixa de entrada.",
   "leadership.handoff_acknowledged": "Contexto recebido pelo novo líder",
   "leadership.transfer_before_delete": "Transfira a liderança antes de remover este agente.",
-  "leadership.floor_kept": "Este Andar abriga o líder ou sublíder atual. Transfira esse papel para outro agente antes de retirar o checkout."
+  "leadership.floor_kept": "Este Andar abriga o líder ou sublíder atual. Transfira esse papel para outro agente antes de retirar o checkout.",
+  "tasks.dependencies": "Tarefas pré-requisito",
+  "tasks.clear_dependencies": "Remover pré-requisitos",
+  "tasks.execution_queued": "Na fila deste agente",
+  "tasks.execution_dispatching": "Entregando tarefa",
+  "tasks.execution_running": "Executando tarefa",
+  "tasks.execution_reported": "Aguardando revisão",
+  "tasks.execution_waiting": "Aguardando ou precisa de coordenação"
 }

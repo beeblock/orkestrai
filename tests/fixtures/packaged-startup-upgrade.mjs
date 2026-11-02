@@ -10,6 +10,7 @@ import { createServer } from 'node:net';
 import { createInterface } from 'node:readline';
 import assert from 'node:assert/strict';
 import { reportedGroupsDDL } from './reported-workspace-schema.mjs';
+import { verifyPackagedPtyRecovery } from './packaged-pty-recovery.mjs';
 import { verifyForgeSignatureValidation } from './forge-signature-validation.mjs';
 
 const appRoot = resolve(process.argv[2]);
@@ -112,6 +113,7 @@ try {
   const search = await searchResponse.json();
   assert.equal(searchResponse.ok, true);
   assert.ok(search.data.some(symbol => symbol.name === 'greeting'), 'Packaged graph must return the indexed function');
+  const ptyRecovery = await verifyPackagedPtyRecovery({ require, apiUrl: `http://127.0.0.1:${port}`, cwd: projectRoot });
   await stopChild();
   configure();
   assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);
@@ -133,7 +135,7 @@ try {
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
   } finally { backup.close(); }
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', packagedCodeGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', ptyRecovery, reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', packagedCodeGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
 } finally {
   await stopChild();
   await Connection.disconnect();

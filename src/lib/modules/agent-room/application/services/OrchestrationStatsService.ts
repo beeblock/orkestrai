@@ -1,3 +1,4 @@
+import { taskExecutionRepository } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { AgentFloor } from '../../domain/models/AgentFloor.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -6,6 +7,8 @@ import { heavyRunService } from './HeavyRunService.js';
 
 export type OrchestrationStats = {
   windowHours: number;
+  executions: { states: Record<string, number>; queueSeconds: { p50: number | null; p95: number | null };
+    submissionSeconds: { p50: number | null; p95: number | null }; confirmationSeconds: { p50: number | null; p95: number | null } };
   messages: {
     total: number;
     replied: number;
@@ -67,8 +70,20 @@ export class OrchestrationStatsService {
     }
     const titles = await workspaceRepository.listNodeTitles(workspaceId, [...byRecipient.keys()]);
     const inWindow = (value: unknown) => String(value instanceof Date ? value.toISOString() : value ?? '') >= since;
+    const states: Record<string, number> = {}, queueTimes: number[] = [], submitTimes: number[] = [], confirmationTimes: number[] = [];
+    for await (const page of taskExecutionRepository.statsPages(workspaceId, since, through)) for (const attempt of page) {
+      states[attempt.state] = (states[attempt.state] ?? 0) + 1;
+      const queue = seconds(attempt.createdAt, attempt.claimedAt);
+      const submit = attempt.claimedAt ? seconds(attempt.claimedAt, attempt.submittedAt) : null;
+      const confirm = attempt.submittedAt ? seconds(attempt.submittedAt, attempt.acceptedAt) : null;
+      if (queue !== null) queueTimes.push(queue);
+      if (submit !== null) submitTimes.push(submit);
+      if (confirm !== null) confirmationTimes.push(confirm);
+    }
+    const percentiles = (times: number[]) => ({ p50: percentile(times, .5), p95: percentile(times, .95) });
     return {
       windowHours: hours,
+      executions: { states, queueSeconds: percentiles(queueTimes), submissionSeconds: percentiles(submitTimes), confirmationSeconds: percentiles(confirmationTimes) },
       messages: {
         total, replied, failed, queued,
         deliverySeconds: { p50: percentile(delivery, 0.5), p95: percentile(delivery, 0.95) },

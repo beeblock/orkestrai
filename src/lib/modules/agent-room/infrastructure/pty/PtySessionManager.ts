@@ -95,17 +95,14 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
   }
 
   if (platform() === 'win32') {
+    // Stopping many owned agents must not block every heartbeat/HTTP request
+    // for five seconds per process. Callers wait for the actual PTY exit.
     try {
-      execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        timeout: 5_000,
-        windowsHide: true,
-      });
-      return;
-    } catch {
-      pty.kill();
-      return;
-    }
+      execFile('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        timeout: 5_000, windowsHide: true,
+      }, error => { if (error) { try { pty.kill(); } catch { /* already exited */ } } });
+    } catch { pty.kill(); }
+    return;
   }
 
   try {
@@ -402,6 +399,7 @@ export class PtySessionManager {
           command: input.command,
           args: input.args ?? [],
           hostCwd: input.cwd,
+          resolvedGuestCwd: input.transcriptCwd?.startsWith('/') ? input.transcriptCwd : undefined,
           workspaceRoot: input.workspaceRoot,
           hostEnv: env,
           forwardEnvToWsl: input.forwardEnvToWsl,

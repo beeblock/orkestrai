@@ -138,7 +138,7 @@ describe('WorkspaceService.reloadNode', () => {
   });
 
   it('remove sessionId obsoleto no restart e preserva a conversa do provider', async () => {
-    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockReturnValue(true);
+    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockResolvedValue(true);
     const workspace = await workspaceRepository.createWorkspace({ name: 'restart', workingDir: '/tmp' });
     const node = await workspaceRepository.createNode({
       workspaceId: workspace.id,
@@ -253,7 +253,7 @@ describe('WorkspaceService.reloadNode', () => {
         role: 'Lider',
       },
     });
-    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockReturnValue(false);
+    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockResolvedValue(false);
 
     const listed = await workspaceService.listNodes(workspace.id);
     const payload = listed.find((item) => item.id === node.id)!.payload as Record<string, unknown>;

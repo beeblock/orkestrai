@@ -16,7 +16,7 @@ describe('Terminal conversation ownership during recovery', () => {
   const sessions: string[] = [];
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'ork-pty-ownership-'));
-    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockReturnValue(true);
+    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockResolvedValue(true);
     vi.spyOn(workspaceService, 'get').mockImplementation(async id => {
       const workspace = await workspaceRepository.getWorkspace(id);
       if (!workspace) throw new Error('Workspace not found');

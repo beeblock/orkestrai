@@ -33,7 +33,7 @@ function touch(path: string, when: Date) {
 }
 
 describe('AgentSessionTracker', () => {
-  it('mantem o session id real vinculado ao PTY ativo', () => {
+  it('mantem o session id real vinculado ao PTY ativo', async () => {
     const { tracker } = isolatedTracker();
     tracker.bind('pty-1', 'provider-session-1');
     expect(tracker.agentSessionIdForPty('pty-1')).toBe('provider-session-1');
@@ -41,7 +41,7 @@ describe('AgentSessionTracker', () => {
     expect(tracker.agentSessionIdForPty('pty-1')).toBeNull();
   });
 
-  it('encontra sessao do claude pelo jsonl mais novo apos o spawn', () => {
+  it('encontra sessao do claude pelo jsonl mais novo apos o spawn', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'meu-projeto');
     const { home, tracker } = isolatedTracker();
@@ -54,16 +54,16 @@ describe('AgentSessionTracker', () => {
     const older = join(claudeDir, 'old-session.jsonl');
     touch(older, new Date(Date.now() - 3_600_000));
 
-    const found = tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
+    const found = await tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
     expect(found).toBe('abc-123-session');
   });
 
-  it('retorna null quando nao ha sessao nova', () => {
+  it('retorna null quando nao ha sessao nova', async () => {
     const { tracker } = isolatedTracker();
-    expect(tracker.findAgentSessionId(claudeAdapter.sessionStorage, join(tmpdir(), 'nao-existe-' + Date.now()), Date.now())).toBeNull();
+    expect(await tracker.findAgentSessionId(claudeAdapter.sessionStorage, join(tmpdir(), 'nao-existe-' + Date.now()), Date.now())).toBeNull();
   });
 
-  it('atribui ids distintos a agentes no mesmo diretorio (mais antigo nao reivindicado)', () => {
+  it('atribui ids distintos a agentes no mesmo diretorio (mais antigo nao reivindicado)', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'projeto-multi-' + Date.now());
     const { home, tracker } = isolatedTracker();
@@ -76,17 +76,17 @@ describe('AgentSessionTracker', () => {
     touch(second, new Date());
 
     // Primeiro agente pega a mais antiga; o id fica reivindicado...
-    const foundA = tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
+    const foundA = await tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
     expect(foundA).toBe('sessao-a');
     tracker.claim(foundA!);
 
     // ...e o segundo agente NAO recebe o mesmo id.
-    const foundB = tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
+    const foundB = await tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since);
     expect(foundB).toBe('sessao-b');
     expect(foundB).not.toBe(foundA);
   });
 
-  it('ignora transcripts de subagentes do claude', () => {
+  it('ignora transcripts de subagentes do claude', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'projeto-claude-subagent-' + Date.now());
     const { home, tracker } = isolatedTracker();
@@ -96,10 +96,10 @@ describe('AgentSessionTracker', () => {
     touch(join(claudeDir, 'agent-a2a88b5.jsonl'), new Date(Date.now() - 5_000));
     touch(join(claudeDir, 'sessao-principal.jsonl'), new Date());
 
-    expect(tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since)).toBe('sessao-principal');
+    expect(await tracker.findAgentSessionId(claudeAdapter.sessionStorage, cwd, since)).toBe('sessao-principal');
   });
 
-  it('ignora transcript principal vazio do claude', () => {
+  it('ignora transcript principal vazio do claude', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'projeto-claude-vazio-' + Date.now());
     const { home, tracker } = isolatedTracker();
@@ -111,10 +111,10 @@ describe('AgentSessionTracker', () => {
     utimesSync(empty, new Date(), new Date());
     touch(join(claudeDir, 'sessao-valida.jsonl'), new Date(Date.now() - 5_000));
 
-    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-valida');
+    expect(await tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-valida');
   });
 
-  it('ignora transcript do claude que ainda contem apenas snapshots de startup', () => {
+  it('ignora transcript do claude que ainda contem apenas snapshots de startup', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), 'projeto-claude-snapshot-' + Date.now());
     const { home, tracker } = isolatedTracker();
@@ -126,10 +126,10 @@ describe('AgentSessionTracker', () => {
     utimesSync(snapshotOnly, new Date(), new Date());
     touch(join(claudeDir, 'sessao-retomavel.jsonl'), new Date(Date.now() - 5_000));
 
-    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-retomavel');
+    expect(await tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, cwd)).toBe('sessao-retomavel');
   });
 
-  it('vincula a sessao do Codex somente ao workspace do terminal', () => {
+  it('vincula a sessao do Codex somente ao workspace do terminal', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `codex-workspace-${Date.now()}`);
     const otherCwd = join(tmpdir(), `codex-other-${Date.now()}`);
@@ -148,11 +148,11 @@ describe('AgentSessionTracker', () => {
     utimesSync(otherPath, new Date(Date.now() - 5_000), new Date(Date.now() - 5_000));
     utimesSync(targetPath, new Date(), new Date());
 
-    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(targetId);
-    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, otherCwd, since)).toBe(otherId);
+    expect(await tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(targetId);
+    expect(await tracker.findAgentSessionId(codexAdapter.sessionStorage, otherCwd, since)).toBe(otherId);
   });
 
-  it('does not claim an older Codex conversation just because another agent resumed it', () => {
+  it('does not claim an older Codex conversation just because another agent resumed it', async () => {
     const { home, tracker } = isolatedTracker();
     const sessions = join(home, '.codex', 'sessions', '2026', '09', '16');
     mkdirSync(sessions, { recursive: true });
@@ -164,12 +164,12 @@ describe('AgentSessionTracker', () => {
     const ownPath = join(sessions, `rollout-new-${ownId}.jsonl`);
     writeFileSync(oldPath, `${JSON.stringify({ type: 'session_meta', timestamp: new Date().toISOString(), payload: { cwd, timestamp: new Date(since - 60_000).toISOString() } })}\n`);
     utimesSync(oldPath, new Date(), new Date());
-    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
+    expect(await tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
     writeFileSync(ownPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date(since + 1_000).toISOString() } })}\n`);
-    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(ownId);
+    expect(await tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBe(ownId);
     tracker.claim(ownId);
-    expect(tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
-    expect(tracker.findLatestAgentSessionId(codexAdapter.sessionStorage, cwd, new Set([ownId]))).toBe(oldId);
+    expect(await tracker.findAgentSessionId(codexAdapter.sessionStorage, cwd, since)).toBeNull();
+    expect(await tracker.findLatestAgentSessionId(codexAdapter.sessionStorage, cwd, new Set([ownId]))).toBe(oldId);
   });
 
   it('never guesses between two Codex terminals launched together in the same cwd', async () => {
@@ -193,14 +193,14 @@ describe('AgentSessionTracker', () => {
       tracker.bind('pty-leader', leaderId);
       writeFileSync(join(sessions, `rollout-b-${directorId}.jsonl`), `${JSON.stringify({ type: 'session_meta', payload: { cwd, timestamp: new Date().toISOString() } })}\n`);
       await vi.advanceTimersByTimeAsync(3_100);
-      expect(found).toEqual({ director: directorId });
+      await vi.waitFor(() => expect(found).toEqual({ director: directorId }));
       expect(tracker.agentSessionIdForPty('pty-leader')).toBe(leaderId);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('vincula a sessao do Kimi pelo hash exato mesmo com pastas de mesmo nome', () => {
+  it('vincula a sessao do Kimi pelo hash exato mesmo com pastas de mesmo nome', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `kimi-a-${Date.now()}`, 'app');
     const otherCwd = join(tmpdir(), `kimi-b-${Date.now()}`, 'app');
@@ -217,11 +217,11 @@ describe('AgentSessionTracker', () => {
     sessionDir(otherCwd, 'session_other');
     sessionDir(cwd, 'session_target');
 
-    expect(tracker.findAgentSessionId(kimiAdapter.sessionStorage, cwd, since)).toBe('session_target');
-    expect(tracker.findAgentSessionId(kimiAdapter.sessionStorage, otherCwd, since)).toBe('session_other');
+    expect(await tracker.findAgentSessionId(kimiAdapter.sessionStorage, cwd, since)).toBe('session_target');
+    expect(await tracker.findAgentSessionId(kimiAdapter.sessionStorage, otherCwd, since)).toBe('session_other');
   });
 
-  it('vincula sessoes atuais do OpenCode pelo SQLite e diretorio exato', () => {
+  it('vincula sessoes atuais do OpenCode pelo SQLite e diretorio exato', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `opencode-workspace-${Date.now()}`);
     const otherCwd = join(tmpdir(), `opencode-other-${Date.now()}`);
@@ -242,12 +242,12 @@ describe('AgentSessionTracker', () => {
     insertMessage.run('msg_target', 'ses_target', now, now, JSON.stringify({ role: 'user' }));
     database.close();
 
-    expect(tracker.findAgentSessionId(openCodeAdapter.sessionStorage, cwd, since)).toBe('ses_target');
-    expect(tracker.findAgentSessionId(openCodeAdapter.sessionStorage, otherCwd, since)).toBe('ses_other');
-    expect(tracker.findAgentSessionId(openCodeAdapter.sessionStorage, cwd, since, new Set(['ses_target']))).toBeNull();
+    expect(await tracker.findAgentSessionId(openCodeAdapter.sessionStorage, cwd, since)).toBe('ses_target');
+    expect(await tracker.findAgentSessionId(openCodeAdapter.sessionStorage, otherCwd, since)).toBe('ses_other');
+    expect(await tracker.findAgentSessionId(openCodeAdapter.sessionStorage, cwd, since, new Set(['ses_target']))).toBeNull();
   });
 
-  it('valida um id exato do Claude apenas quando o transcript e retomavel', () => {
+  it('valida um id exato do Claude apenas quando o transcript e retomavel', async () => {
     const cwd = join(tmpdir(), 'projeto-claude-validacao-' + Date.now());
     const { home, tracker } = isolatedTracker();
     const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
@@ -255,13 +255,13 @@ describe('AgentSessionTracker', () => {
     writeFileSync(join(claudeDir, 'reservada.jsonl'), `${JSON.stringify({ type: 'file-history-snapshot' })}\n`);
     touch(join(claudeDir, 'valida.jsonl'), new Date());
 
-    expect(tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'ausente')).toBe(false);
-    expect(tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'reservada')).toBe(false);
-    expect(tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'valida')).toBe(true);
-    expect(tracker.isAgentSessionResumable(codexAdapter.sessionStorage, cwd, 'qualquer')).toBeNull();
+    expect(await tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'ausente')).toBe(false);
+    expect(await tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'reservada')).toBe(false);
+    expect(await tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, cwd, 'valida')).toBe(true);
+    expect(await tracker.isAgentSessionResumable(codexAdapter.sessionStorage, cwd, 'qualquer')).toBeNull();
   });
 
-  it('rastreia a sessao do Claude na home isolada de uma distribuicao WSL', () => {
+  it('rastreia a sessao do Claude na home isolada de uma distribuicao WSL', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orkestrai-wsl-home-'));
     temporaryHomes.push(home);
     const tracker = new AgentSessionTracker(home, (cwd) => posix.normalize(cwd));
@@ -271,11 +271,11 @@ describe('AgentSessionTracker', () => {
     mkdirSync(claudeDir, { recursive: true });
     touch(join(claudeDir, 'wsl-session.jsonl'), new Date());
 
-    expect(tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, linuxCwd)).toBe('wsl-session');
-    expect(tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, linuxCwd, 'wsl-session')).toBe(true);
+    expect(await tracker.findLatestAgentSessionId(claudeAdapter.sessionStorage, linuxCwd)).toBe('wsl-session');
+    expect(await tracker.isAgentSessionResumable(claudeAdapter.sessionStorage, linuxCwd, 'wsl-session')).toBe(true);
   });
 
-  it('encontra a sessao do Cursor apenas no projeto correspondente', () => {
+  it('encontra a sessao do Cursor apenas no projeto correspondente', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `cursor-workspace-${Date.now()}`);
     const { home, tracker } = isolatedTracker();
@@ -285,10 +285,10 @@ describe('AgentSessionTracker', () => {
     mkdirSync(transcriptDir, { recursive: true });
     writeFileSync(join(transcriptDir, `${sessionId}.jsonl`), '{"role":"user"}\n');
 
-    expect(tracker.findAgentSessionId(cursorAdapter.sessionStorage, cwd, since)).toBe(sessionId);
+    expect(await tracker.findAgentSessionId(cursorAdapter.sessionStorage, cwd, since)).toBe(sessionId);
   });
 
-  it('resolve a conversa do Antigravity pelo cache do workspace', () => {
+  it('resolve a conversa do Antigravity pelo cache do workspace', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `antigravity-workspace-${Date.now()}`);
     const { home, tracker } = isolatedTracker();
@@ -296,10 +296,10 @@ describe('AgentSessionTracker', () => {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(join(cacheDir, 'last_conversations.json'), JSON.stringify({ [cwd]: 'agy-session-1' }));
 
-    expect(tracker.findAgentSessionId(antigravityAdapter.sessionStorage, cwd, since)).toBe('agy-session-1');
+    expect(await tracker.findAgentSessionId(antigravityAdapter.sessionStorage, cwd, since)).toBe('agy-session-1');
   });
 
-  it('filtra manifestos do Cline pelo diretorio do workspace', () => {
+  it('filtra manifestos do Cline pelo diretorio do workspace', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `cline-workspace-${Date.now()}`);
     const otherCwd = join(tmpdir(), `cline-other-${Date.now()}`);
@@ -314,10 +314,10 @@ describe('AgentSessionTracker', () => {
       writeFileSync(join(sessionDir, `${id}.json`), JSON.stringify({ session_id: id, cwd: manifestCwd }));
     }
 
-    expect(tracker.findAgentSessionId(clineAdapter.sessionStorage, cwd, since)).toBe('cline-session-1');
+    expect(await tracker.findAgentSessionId(clineAdapter.sessionStorage, cwd, since)).toBe('cline-session-1');
   });
 
-  it('resolve sessoes concorrentes do Devin pelo banco e cwd exatos', () => {
+  it('resolve sessoes concorrentes do Devin pelo banco e cwd exatos', async () => {
     const since = Date.now() - 60_000;
     const cwd = join(tmpdir(), `devin-workspace-${Date.now()}`);
     const otherCwd = join(tmpdir(), `devin-other-${Date.now()}`);
@@ -336,16 +336,16 @@ describe('AgentSessionTracker', () => {
     insert.run('hidden-helper', cwd, now, 1);
     database.close();
 
-    const first = tracker.findAgentSessionId(devinAdapter.sessionStorage, cwd, since);
+    const first = await tracker.findAgentSessionId(devinAdapter.sessionStorage, cwd, since);
     expect(first).toBe('calm-river');
     tracker.claim(first!);
-    expect(tracker.findAgentSessionId(devinAdapter.sessionStorage, cwd, since)).toBe('bright-piano');
-    expect(tracker.findLatestAgentSessionId(devinAdapter.sessionStorage, cwd)).toBe('bright-piano');
+    expect(await tracker.findAgentSessionId(devinAdapter.sessionStorage, cwd, since)).toBe('bright-piano');
+    expect(await tracker.findLatestAgentSessionId(devinAdapter.sessionStorage, cwd)).toBe('bright-piano');
   });
 });
 
 describe('resume exato dos adapters', () => {
-  it('claude resume exato com id e fresh sem id', () => {
+  it('claude resume exato com id e fresh sem id', async () => {
     expect(claudeAdapter.resumeArgs('abc-123')).toEqual(['--resume', 'abc-123']);
     // Sem id: comeca fresco — "claude --continue" sai com erro quando nao ha
     // conversa no diretorio (ex.: agente novo que nunca recebeu mensagem).
@@ -353,22 +353,22 @@ describe('resume exato dos adapters', () => {
     expect(claudeAdapter.freshSessionArgs?.('novo-uuid')).toEqual(['--session-id', 'novo-uuid']);
   });
 
-  it('codex resume exato com id e resume --last sem id', () => {
+  it('codex resume exato com id e resume --last sem id', async () => {
     expect(codexAdapter.resumeArgs('uuid-1')).toEqual(['resume', 'uuid-1']);
     expect(codexAdapter.resumeArgs()).toEqual(['resume', '--last']);
   });
 
-  it('kimi resume exato com id e --continue sem id', () => {
+  it('kimi resume exato com id e --continue sem id', async () => {
     expect(kimiAdapter.resumeArgs('session_x')).toEqual(['-r', 'session_x']);
     expect(kimiAdapter.resumeArgs()).toEqual(['--continue']);
   });
 
-  it('opencode resume exato com id e --continue sem id', () => {
+  it('opencode resume exato com id e --continue sem id', async () => {
     expect(openCodeAdapter.resumeArgs('ses_1')).toEqual(['--session', 'ses_1']);
     expect(openCodeAdapter.resumeArgs()).toEqual(['--continue']);
   });
 
-  it('devin resume apenas com id exato', () => {
+  it('devin resume apenas com id exato', async () => {
     expect(devinAdapter.resumeArgs('calm-river')).toEqual(['--resume', 'calm-river']);
     expect(devinAdapter.resumeArgs()).toBeNull();
   });

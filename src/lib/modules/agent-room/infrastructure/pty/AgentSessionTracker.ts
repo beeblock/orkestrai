@@ -1,3 +1,4 @@
+import { invalidateTranscriptListing, recentTranscriptFiles, transcriptCwd, transcriptRevision, transcriptTail } from '../transcript/TranscriptFiles.ts';
 import { managedTranscriptPath } from './ManagedAgentTranscript.ts';
 import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -89,15 +90,15 @@ export class AgentSessionTracker {
 
   /** Busca o session-id mais ANTIGO nao reivindicado criado apos `since`
       (o primeiro arquivo que aparece depois do meu spawn tende a ser o meu). */
-  findAgentSessionId(storage: string | undefined, cwd: string, since: number, exclude?: Set<string>): string | null {
-    return this.findByStrategy(storage, cwd, since, exclude ?? this.claimed, 'oldest');
+  async findAgentSessionId(storage: string | undefined, cwd: string, since: number, exclude?: Set<string>): Promise<string | null> {
+    return this.findByStrategyAsync(storage, cwd, since, exclude ?? this.claimed, 'oldest');
   }
 
   /** Sessao mais recente do workspace sem considerar reivindicacoes de outros
       terminais. Usada apenas para reparar metadata persistida; o chamador ainda
       precisa confirmar o turno exato antes de aceitar a sessao. */
-  findLatestAgentSessionId(storage: string | undefined, cwd: string, exclude = new Set<string>()): string | null {
-    return this.findByStrategy(storage, cwd, 0, exclude, 'newest');
+  async findLatestAgentSessionId(storage: string | undefined, cwd: string, exclude = new Set<string>()): Promise<string | null> {
+    return this.findByStrategyAsync(storage, cwd, 0, exclude, 'newest');
   }
 
   /**
@@ -105,17 +106,47 @@ export class AgentSessionTracker {
    * ser retomado. `null` significa que o formato ainda nao oferece validacao
    * exata; nesse caso o chamador preserva o comportamento anterior.
    */
-  isAgentSessionResumable(storage: string | undefined, cwd: string, agentSessionId: string): boolean | null {
+  async isAgentSessionResumable(storage: string | undefined, cwd: string, agentSessionId: string): Promise<boolean | null> {
     if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return null;
-    try {
-      const slug = this.realCwd(cwd).replace(/[^a-zA-Z0-9]/g, '-');
-      const transcript = storage === 'orkestrai-jsonl' ? managedTranscriptPath(this.realCwd(cwd), agentSessionId) : join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', slug, `${agentSessionId}.jsonl`);
-      if (!existsSync(transcript)) return false;
-      const stat = statSync(transcript);
-      return stat.isFile() && (storage === 'orkestrai-jsonl' ? stat.size > 0 : this.isResumableClaudeTranscript(transcript, agentSessionId, stat.size));
-    } catch {
-      return false;
+    const path = storage === 'orkestrai-jsonl' ? managedTranscriptPath(await transcriptCwd(cwd, Boolean(this.cwdNormalizer)), agentSessionId)
+      : join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects',
+        (await transcriptCwd(cwd, Boolean(this.cwdNormalizer))).replace(/[^a-zA-Z0-9]/g, '-'), `${agentSessionId}.jsonl`);
+    if (storage === 'orkestrai-jsonl') return Boolean(await transcriptRevision(path, 0));
+    const text = await transcriptTail(path, 256 * 1024, true);
+    return Boolean(text?.split('\n').some(line => {
+      try { const event=JSON.parse(line); return event.sessionId === agentSessionId && event.isSidechain === false && ['user','assistant'].includes(event.type); }
+      catch { return false; }
+    }));
+  }
+
+  private async findByStrategyAsync(storage: string | undefined, cwd: string, since: number, exclude: Set<string>, strategy: 'oldest' | 'newest'): Promise<string | null> {
+    if (!['claude-project-jsonl', 'codex-rollout-jsonl'].includes(storage ?? '')) return this.findByStrategy(storage, cwd, since, exclude, strategy);
+    const actualCwd = await transcriptCwd(cwd, Boolean(this.cwdNormalizer));
+    const root = storage === 'codex-rollout-jsonl'
+      ? join(this.storageRoots.codexHome ?? join(this.homeDir, '.codex'), 'sessions')
+      : join(this.storageRoots.claudeConfigDir ?? join(this.homeDir, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'));
+    const entries = (await recentTranscriptFiles(root, storage === 'codex-rollout-jsonl' ? 4 : 0))
+      .filter(file => file.mtime >= since);
+    if (strategy === 'oldest') entries.reverse();
+    for (const entry of entries) {
+      const name = basename(entry.path);
+      const id = storage === 'codex-rollout-jsonl' ? name.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/)?.[1] : name.slice(0,-6);
+      if (!id || exclude.has(id) || name.startsWith('agent-')) continue;
+      if (storage === 'claude-project-jsonl') {
+        if (await this.isAgentSessionResumable(storage, cwd, id)) return id;
+      } else {
+        const text = await transcriptTail(entry.path, 64 * 1024, true);
+        try {
+          const event = JSON.parse(text?.split('\n',1)[0] ?? '');
+          const created = Date.parse(String(event.payload?.timestamp ?? event.timestamp ?? ''));
+          if (event.type === 'session_meta' && typeof event.payload?.cwd === 'string'
+            && (since === 0 || (Number.isFinite(created) && created >= since))
+            && await transcriptCwd(event.payload.cwd, Boolean(this.cwdNormalizer)) === actualCwd) return id;
+        } catch { /* partial transcript */ }
+      }
     }
+    invalidateTranscriptListing(root, storage === 'codex-rollout-jsonl' ? 4 : 0);
+    return null;
   }
 
   private findByStrategy(
@@ -165,9 +196,11 @@ export class AgentSessionTracker {
   ): void {
     this.unwatch(ptySessionId);
     const started = Date.now();
-    const target = { storage, cwd: this.realCwd(cwd), startedAt };
+    const target = { storage, cwd: this.cwdNormalizer ? this.cwdNormalizer(cwd) : resolve(cwd), startedAt };
     this.pending.set(ptySessionId, target);
-    const timer = setInterval(() => {
+    let inspecting = false;
+    const timer = setInterval(async () => {
+      if (inspecting) return;
       // Two terminals of the same provider launched together in the same cwd
       // cannot be told apart by "oldest new transcript": whichever polls first
       // would take the other's conversation. Wait for an exact binding instead
@@ -176,7 +209,12 @@ export class AgentSessionTracker {
         if (Date.now() - started > timeoutMs) this.unwatch(ptySessionId);
         return;
       }
-      const found = this.findAgentSessionId(storage, cwd, startedAt);
+      inspecting = true;
+      let found: string | null = null;
+      try { found = await this.findAgentSessionId(storage, cwd, startedAt); }
+      catch { /* Retry on the next bounded discovery pass. */ }
+      finally { inspecting = false; }
+      if (this.watchers.get(ptySessionId) !== timer || this.isAmbiguousLaunch(ptySessionId)) return;
       if (found) {
         this.bind(ptySessionId, found);
         onFound(found);
@@ -216,8 +254,16 @@ export class AgentSessionTracker {
     if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return false;
     this.unwatch(ptySessionId);
     const started = Date.now();
-    const inspect = () => {
-      if (this.isAgentSessionResumable(storage, cwd, agentSessionId)) {
+    let inspecting = false;
+    const inspect = async () => {
+      if (inspecting) return;
+      inspecting = true;
+      let valid = false;
+      try { valid = await this.isAgentSessionResumable(storage, cwd, agentSessionId) === true; }
+      catch { /* retry */ }
+      finally { inspecting = false; }
+      if (this.watchers.get(ptySessionId) !== timer) return;
+      if (valid) {
         this.unwatch(ptySessionId);
         this.bind(ptySessionId, agentSessionId);
         onFound(agentSessionId);

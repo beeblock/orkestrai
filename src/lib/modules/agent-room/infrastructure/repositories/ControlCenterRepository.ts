@@ -1,3 +1,4 @@
+import { taskExecutionRepository } from './TaskExecutionRepository.js';
 import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { createHash } from 'node:crypto';
@@ -369,6 +370,29 @@ export class ControlCenterRepository {
       .limit(limit)
       .get();
     return rows.map(mapEnvelope);
+  }
+
+  /** Deferred implementation never hides an owner message or a ready independent task. */
+  async inboxCandidates(workspaceId: string, nodeId: string, limit = 50): Promise<AgentMessageEnvelopeData[]> {
+    const selection = await taskExecutionRepository.inboxSelection(workspaceId, nodeId);
+    const base = () => AgentMessageEnvelope.query().where('workspace_id', workspaceId).where('to_node_id', nodeId)
+      .where('state', 'queued').where('metadata_json', 'like', '%"inbox":true%').orderBy('created_at', 'asc').orderBy('id', 'asc').limit(limit);
+    const correlations = (ids: string[]) => ids.map(id => `task:${id}`);
+    const legacy = base().whereIn('kind', ['task', 'task_recovery']);
+    if (selection.known.length) legacy.whereNotIn('correlation_id', correlations(selection.known));
+    const pages = await Promise.all([
+      base().whereNotIn('kind', ['task', 'task_recovery']).get(),
+      selection.ready.length ? base().where('kind', 'task').whereIn('correlation_id', correlations(selection.ready)).get() : [],
+      selection.recovery.length ? base().where('kind', 'task_recovery').whereIn('correlation_id', correlations(selection.recovery)).get() : [],
+      legacy.get(),
+    ]);
+    return pages.flat().map(mapEnvelope).sort((a,b) => Number(b.kind === 'owner') - Number(a.kind === 'owner')
+      || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  async hasPendingTaskEnvelope(workspaceId: string, nodeId: string, taskId: string): Promise<boolean> {
+    return Boolean(await AgentMessageEnvelope.query().where('workspace_id',workspaceId).where('to_node_id',nodeId)
+      .where('correlation_id',`task:${taskId}`).whereIn('state',['queued','sent']).whereIn('kind',['task','task_recovery']).count());
   }
 
   /** Questions this agent asked that are still unanswered, since a given time. */

@@ -34,6 +34,8 @@ Devin, GitHub Copilot, Gemini CLI, Qwen Code, Aider, goose, Amp, Pi, Oh My Pi, s
 browsers, and Git worktrees into one persistent canvas where developers, vibe
 coders, designers, marketers, and creators can direct an AI team in real time.
 
+Task assignments use durable execution attempts and prerequisite tasks: one implementation runs per terminal, questions remain independent, and results or proven unresolved stops wake the coordinator. Leaders orchestrate and validate; specialists implement. Inspect queue, submission and confirmation timing separately with `orkestrai stats`. Discover only the needed version-matched reference with `orkestrai guide` / `workspace_guide`; all agent capabilities and the shared Karpathy delivery principles remain available.
+
 ## Autonomous workspace delivery
 
 A direct task authorizes its normal implementation, validation and integration

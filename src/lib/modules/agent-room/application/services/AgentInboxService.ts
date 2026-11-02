@@ -1,3 +1,5 @@
+import { taskExecutionService } from './TaskExecutionService.js';
+import { taskExecutionRepository } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { Event } from '@beeblock/svelar/events';
 import type { AgentMessageEnvelope } from '../../domain/types.js';
@@ -47,6 +49,7 @@ export type InboxKind =
   | 'task_completion'
   | 'task_recovery'
   | 'leader_supervision'
+  | 'task_stopped'
   | 'handoff'
   | 'owner'
   | 'owner_question'
@@ -295,7 +298,7 @@ export class AgentInboxService {
    */
   async claim(workspaceId: string, nodeId: string, limit = CLAIM_LIMIT): Promise<{ items: InboxItem[]; remaining: number }> {
     return this.withLock(nodeId, async () => {
-      const queued = await controlCenterRepository.inboxEnvelopes(nodeId, ['queued'], Math.max(1, Math.min(limit, 50)));
+      const queued = await controlCenterRepository.inboxCandidates(workspaceId, nodeId, Math.max(1, Math.min(limit, 50)));
       const titles = await this.titles(workspaceId);
       const items: InboxItem[] = [];
       let chars = 0;
@@ -305,14 +308,18 @@ export class AgentInboxService {
           await this.cancel(envelope, 'obsolete');
           continue;
         }
-        if (items.length && chars + envelope.content.length > CLAIM_CHARS) break;
+        if (items.length >= Math.max(1, Math.min(limit, 50)) || (items.length && chars + envelope.content.length > CLAIM_CHARS)) break;
+        if (!await taskExecutionService.admit(envelope, null)) continue;
         chars += envelope.content.length;
         const delivered = await controlCenterService.recordInboxTransition(envelope.id, {
           state: 'delivered',
           metadata: { ...envelope.metadata, via: 'inbox' },
         });
         items.push(this.toItem(envelope, titles));
-        if (delivered) await this.fireDelivered(delivered);
+        if (delivered) {
+          if (typeof delivered.metadata.executionId === 'string') await taskExecutionRepository.accepted(delivered.metadata.executionId);
+          await this.fireDelivered(delivered);
+        }
       }
       const remaining = await controlCenterRepository.countInbox(nodeId, ['queued']);
       return { items, remaining };
@@ -702,7 +709,7 @@ export class AgentInboxService {
   }
 
   private async prepareBatch(workspaceId: string, nodeId: string): Promise<(BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }) | null> {
-    const queued = await controlCenterRepository.inboxEnvelopes(nodeId, ['queued']);
+    const queued = await controlCenterRepository.inboxCandidates(workspaceId, nodeId);
     if (!queued.length) {
       const sent = await controlCenterRepository.countInbox(nodeId, ['sent']);
       if (!sent) this.recipients.delete(nodeId);
@@ -741,9 +748,11 @@ export class AgentInboxService {
     for (const envelope of live) {
       if (batch.length >= MAX_BATCH_ITEMS) break;
       if (batch.length && chars + envelope.content.length > MAX_BATCH_CHARS) break;
+      if (!await taskExecutionService.admit(envelope, session.id)) continue;
       batch.push(envelope);
       chars += envelope.content.length;
     }
+    if (!batch.length) return null;
     const titles = await this.titles(workspaceId);
     let contextTimer: ReturnType<typeof setTimeout> | undefined;
     const ownerBatch = batch.every(envelope => envelope.kind === 'owner' && !['telegram', 'slack'].includes(String(envelope.metadata.via)));
@@ -784,6 +793,8 @@ export class AgentInboxService {
   }
 
   private async deliverBatch(batch: BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }, onSubmitted: () => void): Promise<void> {
+    let submitted = false;
+    let submissionWrites: Promise<unknown> = Promise.resolve();
     try {
       await agentTerminalDeliveryService.deliver({
         workspaceId: batch.workspaceId,
@@ -792,24 +803,36 @@ export class AgentInboxService {
         message: batch.prompt,
         submitDelayMs: 120,
         queueTimeoutMs: 30_000,
-        onSubmitted,
+        onSubmitted: () => {
+          submitted = true;
+          const at = new Date().toISOString();
+          onSubmitted();
+          submissionWrites = Promise.all(batch.envelopes.map(envelope => typeof envelope.metadata.executionId === 'string'
+            ? taskExecutionRepository.submitted(envelope.metadata.executionId, at) : Promise.resolve()));
+          // Confirmation may take minutes; handle an early write failure immediately
+          // while preserving its rejection for the awaited uncertain-delivery path.
+          void submissionWrites.catch(() => undefined);
+        },
         isStillRelevant: async () => {
           for (const envelope of batch.envelopes) if (await this.isRelevant(envelope)) return true;
           return false;
         },
       });
-      await this.markDelivered(batch.batchId, batch);
+      await submissionWrites;
+      const verified = batch.context.provider && hasAgentAdapter(batch.context.provider) && getAgentAdapter(batch.context.provider).sessionStorage;
+      await this.markDelivered(batch.batchId, batch, verified ? 'transcript' : 'unverified');
     } catch (error) {
+      await submissionWrites.catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
       if ((error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE') {
         for (const envelope of batch.envelopes) await this.cancel(envelope, 'obsolete');
         return;
       }
-      if (UNCERTAIN_DELIVERY.test(message) || (error as { code?: string }).code === 'PTY_DELIVERY_UNCONFIRMED') {
+      if (submitted || UNCERTAIN_DELIVERY.test(message) || (error as { code?: string }).code === 'PTY_DELIVERY_UNCONFIRMED') {
         const provider = batch.context.provider;
         if (!provider || !hasAgentAdapter(provider) || !getAgentAdapter(provider).sessionStorage) {
           // Nothing can prove consumption later; typing it again risks a duplicate turn.
-          await this.markDelivered(batch.batchId, batch);
+          await this.markDelivered(batch.batchId, batch, 'unverified');
           return;
         }
         // Submitted but not yet visible in the transcript: never type it again
@@ -824,7 +847,10 @@ export class AgentInboxService {
       }
       for (const envelope of batch.envelopes) {
         const current = await controlCenterRepository.findEnvelope(envelope.id);
-        if (current) await this.requeue(current, message);
+        if (current) {
+          if (typeof current.metadata.executionId === 'string') await taskExecutionRepository.releaseUnsubmitted(current.metadata.executionId);
+          await this.requeue(current, message);
+        }
       }
     }
   }
@@ -841,6 +867,7 @@ export class AgentInboxService {
       });
       if (delivered) {
         envelopes.push(delivered);
+        if (typeof delivered.metadata.executionId === 'string') await taskExecutionRepository.accepted(delivered.metadata.executionId, confirmation === 'transcript');
         await controlCenterService.recordActivity({
           workspaceId: delivered.workspaceId,
           nodeId: delivered.toNodeId,

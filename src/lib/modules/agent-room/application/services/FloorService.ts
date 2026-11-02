@@ -11,7 +11,7 @@ import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentEnv, IS_WIN } from '../../infrastructure/agent-path.js';
-import { buildWorkspaceRuntimeLaunch, guestWorkingDirectory, workspaceExecutionRuntime } from '../../infrastructure/WslRuntime.js';
+import { buildWorkspaceRuntimeLaunch, guestWorkingDirectoryAsync, workspaceExecutionRuntime } from '../../infrastructure/WslRuntime.js';
 import { assertFreeDisk, DISK_LIMITS, freeDiskBytes } from '../../infrastructure/disk-guard.js';
 
 const execFileAsync = promisify(execFile);
@@ -1117,7 +1117,7 @@ export class FloorService {
       ORKESTRAI_FLOOR_NAME: floor.name,
       ORKESTRAI_BRANCH_NAME: floor.branch,
       ORKESTRAI_FLOOR_PATH: runtime.kind === 'wsl'
-        ? guestWorkingDirectory(runtime, floor.path, workspace.workingDir)
+        ? await guestWorkingDirectoryAsync(runtime, floor.path, workspace.workingDir)
         : floor.path,
       ORKESTRAI_ROOT_PATH: runtime.kind === 'wsl' ? runtime.linuxWorkingDir : workspace.workingDir,
       ORKESTRAI_PROJECT_NAME: workspace.name,

@@ -1,3 +1,6 @@
+import { Connection } from '@beeblock/svelar/database';
+import { taskExecutionService } from './TaskExecutionService.js';
+import { taskExecutionRepository, taskDependencies, type TaskExecution } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { agentLearningService } from './AgentLearningService.js';
 import { channelService } from './ChannelService.js';
@@ -7,6 +10,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { boardColumnService } from './BoardColumnService.js';
 import { nativeNotificationService } from './NativeNotificationService.js';
+import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { isRasterWorkspaceAttachment, type WorkspaceAttachment } from '../../domain/types.js';
 import {
@@ -24,6 +28,8 @@ import { leadershipReviewSummary, type LeadershipReview, type LeadershipReviewSu
 import { workspaceLeadershipRepository } from '../../infrastructure/repositories/WorkspaceLeadershipRepository.js';
 
 export type BoardTask = {
+  dependencies: string[];
+  execution?: TaskExecution | null;
   completionReview?: LeadershipReviewSummary | null;
   id: string;
   workspaceId: string;
@@ -135,6 +141,7 @@ function mapTask(model: AgentBoardTask, assigneeTitle: string | null = null, not
     workspaceId: model.getAttribute('workspace_id'),
     title: model.getAttribute('title'),
     description: model.getAttribute('description') ?? null,
+    dependencies: taskDependencies(model),
     status: model.getAttribute('status') as BoardTask['status'],
     assigneeNodeId: model.getAttribute('assignee_node_id'),
     assigneeTitle,
@@ -189,7 +196,7 @@ export class TaskBoardService {
 
   /** Keep the owner's complete board separate from bounded model context. */
   async agentPage(workspaceId: string, input: { limit: number; cursor?: string; status: string; assigneeNodeId?: string }, history = false) {
-    const columns = ['id', 'workspace_id', 'title', 'status', 'assignee_node_id', 'note_node_id', 'created_at', 'updated_at', 'archived_at'];
+    const columns = ['id', 'workspace_id', 'title', 'status', 'dependencies_json', 'assignee_node_id', 'note_node_id', 'created_at', 'updated_at', 'archived_at'];
     const makeQuery = () => {
       const query = AgentBoardTask.query().select(...columns).where('workspace_id', workspaceId);
       if (input.cursor) query.where('id', '<', input.cursor);
@@ -211,9 +218,12 @@ export class TaskBoardService {
     const page = rows.slice(0, input.limit);
     const ids = page.flatMap((row) => [row.getAttribute('assignee_node_id'), row.getAttribute('note_node_id')]).filter((id): id is string => typeof id === 'string');
     const titles = await workspaceRepository.listNodeTitles(workspaceId, ids);
+    const executions = await taskExecutionRepository.forTasks(workspaceId, page.map(row => String(row.getAttribute('id'))));
     const data = page.map((row) => ({
       id: String(row.getAttribute('id')),
       title: String(row.getAttribute('title')).slice(0, 240),
+      dependencies: taskDependencies(row),
+      execution: executions.get(String(row.getAttribute('id'))) ?? null,
       status: row.getAttribute('status'),
       assigneeNodeId: row.getAttribute('assignee_node_id') ?? null,
       assigneeTitle: (titles.get(String(row.getAttribute('assignee_node_id'))) ?? null)?.slice(0, 80) ?? null,
@@ -269,10 +279,12 @@ export class TaskBoardService {
     const reviewIds = rows.map((row) => row.getAttribute('leadership_review_id')).filter(Boolean) as string[];
     const reviews = await workspaceLeadershipRepository.reviewSummaries(workspaceId, reviewIds);
     const reviewsById = new Map(reviews.map((review) => [review.id, review]));
+    const executions = await taskExecutionRepository.forTasks(workspaceId, rows.map(row => String(row.getAttribute('id'))));
     return rows.map((row) => {
       const assigneeId = row.getAttribute('assignee_node_id') as string | null;
       const noteId = row.getAttribute('note_node_id') as string | null;
       return { ...mapTask(row, assigneeId ? (titles.get(assigneeId) ?? null) : null, noteId ? (titles.get(noteId) ?? null) : null),
+        execution: executions.get(String(row.getAttribute('id'))) ?? null,
         completionReview: reviewsById.get(String(row.getAttribute('leadership_review_id') ?? '')) ?? null };
     });
   }
@@ -354,6 +366,7 @@ export class TaskBoardService {
     ]);
     const reviewId = model.getAttribute('leadership_review_id');
     return { ...mapTask(model, assignee?.title ?? null, note?.title ?? null),
+      execution: await taskExecutionRepository.current(String(model.getAttribute('workspace_id')), String(model.getAttribute('id'))),
       completionReview: reviewId ? (await workspaceLeadershipRepository.reviewSummaries(String(model.getAttribute('workspace_id')), [String(reviewId)]))[0] ?? null : null };
   }
 
@@ -429,6 +442,7 @@ export class TaskBoardService {
     workspaceId: string,
     input: {
       title: string;
+      dependencies?: string[];
       description?: string | null;
       images?: string[];
       attachments?: WorkspaceAttachment[];
@@ -445,6 +459,7 @@ export class TaskBoardService {
     if (input.noteId) await this.requireNote(workspaceId, input.noteId);
     const now = new Date().toISOString();
     const id = uuidv7();
+    await taskExecutionService.validateDependencies(workspaceId, id, input.dependencies ?? []);
     const images = normalizeImages(input.images);
     const attachments = normalizeAttachments(input.attachments);
     for (const attachment of attachments) {
@@ -459,6 +474,7 @@ export class TaskBoardService {
       id,
       workspace_id: workspaceId,
       title,
+      dependencies_json: input.dependencies?.length ? JSON.stringify(input.dependencies) : null,
       description: input.description?.trim() || null,
       image_path: images[0] ?? null,
       images_json: images.length ? JSON.stringify(images) : null,
@@ -509,7 +525,7 @@ export class TaskBoardService {
   async update(
     workspaceId: string,
     taskId: string,
-    input: { title?: string; description?: string | null; status?: string; assigneeNodeId?: string | null; imagePath?: string | null; noteId?: string | null; notifyCompletion?: boolean; completedBy?: string | null }
+    input: { dependencies?: string[]; title?: string; description?: string | null; status?: string; assigneeNodeId?: string | null; imagePath?: string | null; noteId?: string | null; notifyCompletion?: boolean; completedBy?: string | null }
   ): Promise<BoardTask> {
     const task = await this.requireTask(workspaceId, taskId);
     const resolvedStatus = input.status !== undefined
@@ -518,6 +534,12 @@ export class TaskBoardService {
     await this.assertDesignStageComplete(workspaceId, task, resolvedStatus);
     const wasDone = task.getAttribute('status') === 'done';
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.dependencies !== undefined) {
+      if (input.status === 'done') throw new Error('Change dependencies before requesting completion.');
+      patch.dependencies_json = input.dependencies.length ? JSON.stringify(input.dependencies) : null;
+    }
+    if (resolvedStatus === 'done' && !await taskExecutionRepository.dependenciesReady(workspaceId, taskDependencies(task)))
+      throw new Error('Complete prerequisite tasks before this task.');
     if (input.title !== undefined) {
       const title = input.title.trim();
       if (!title) throw new Error('Informe o título da tarefa.');
@@ -554,18 +576,29 @@ export class TaskBoardService {
       completionGate = await leadershipReviewService.commitCompletion(workspaceId, taskId, patch);
       if (completionGate.alreadyDone) return this.mapWithTitles(await this.requireTask(workspaceId, taskId));
       if (completionGate.pending) {
+          await taskExecutionService.changed(workspaceId, taskId, true);
           notifyWorkspaceChanged(workspaceId);
           return { ...await this.mapWithTitles(await this.requireTask(workspaceId, taskId)),
             ...(completionFloor ? { completionFloor } : {}), completionReview: completionGate.review ? leadershipReviewSummary(completionGate.review) : null };
       }
     }
     if (!completionGate) {
-      if (task.getAttribute('leadership_review_id')) {
-        const { leadershipReviewService } = await import('./LeadershipReviewService.js');
-        await leadershipReviewService.commitMetadataPatch(workspaceId, taskId, patch);
-      } else await AgentBoardTask.query().where('id', taskId).update(patch);
+      const save = async () => {
+        if (input.dependencies !== undefined) await taskExecutionService.validateDependencies(workspaceId, taskId, input.dependencies);
+        if (task.getAttribute('leadership_review_id')) {
+          const { leadershipReviewService } = await import('./LeadershipReviewService.js');
+          await leadershipReviewService.commitMetadataPatch(workspaceId, taskId, patch);
+        } else await AgentBoardTask.query().where('id', taskId).update(patch);
+      };
+      if (input.dependencies !== undefined) await Connection.transaction(save); else await save();
     }
-    if (assignedNow) {
+    await taskExecutionService.changed(workspaceId, taskId);
+    const resumed = resolvedStatus === 'doing' && task.getAttribute('status') !== 'doing' && Boolean(task.getAttribute('assignee_node_id'));
+    if (resumed) {
+      const prior = await taskExecutionRepository.current(workspaceId, taskId);
+      if (prior && !['running', 'dispatching'].includes(prior.state)) await taskExecutionRepository.finish(prior, 'cancelled');
+    }
+    if (assignedNow || resumed) {
       try {
         await this.dispatch(workspaceId, taskId);
       } catch (error) {
@@ -825,7 +858,7 @@ export class TaskBoardService {
       // A busy leader reads it at its next turn boundary; an offline one on resume.
       await agentInboxService.enqueue({
         workspaceId, toNodeId: leader.id, kind: 'task_created', taskId, content,
-        dedupKey: `task-created:${taskId}:${leader.id}`, metadata: { wake: false },
+        dedupKey: `task-created:${taskId}:${leader.id}`, metadata: { wake: true },
       });
       return;
     }
@@ -942,7 +975,7 @@ export class TaskBoardService {
     if (leaderIsAgent) {
       await agentInboxService.enqueue({
         workspaceId, toNodeId: leader.id, fromNodeId: completer?.id ?? null, kind: 'task_completion', taskId: task.id, content,
-        dedupKey: `task-completion:${task.id}:${leader.id}`, metadata: { wake: false, taskTitle: task.title },
+        dedupKey: `task-completion:${task.id}:${leader.id}`, metadata: { wake: true, taskTitle: task.title },
       });
       return { status: session && !session.exited ? 'queued' : 'leader_offline', leaderTitle: leader.title ?? 'Lider' };
     }
@@ -1042,8 +1075,33 @@ export class TaskBoardService {
   async redispatch(workspaceId: string, taskId: string): Promise<{ dispatched: boolean }> {
     const task = await this.requireTask(workspaceId, taskId);
     if (!task.getAttribute('assignee_node_id')) throw new Error('Tarefa sem responsável para despachar.');
+    const previous = await taskExecutionRepository.current(workspaceId, taskId);
+    if (previous && ['dispatching', 'running'].includes(previous.state)) throw new Error('Task execution is already active; inspect its receipt before retrying.');
+    if (previous) await taskExecutionRepository.finish(previous, 'cancelled');
     await this.dispatch(workspaceId, taskId);
     return { dispatched: true };
+  }
+
+  /** Adopt pre-upgrade assignments without bypassing terminal custody or repeating a live prompt. */
+  async queueResumedTask(workspaceId: string, taskId: string, nodeId: string, sessionId: string): Promise<boolean> {
+    const task = await this.requireTask(workspaceId, taskId);
+    if (task.getAttribute('assignee_node_id') !== nodeId || ['todo', 'done', 'blocked', 'error', 'failed'].includes(task.getAttribute('status'))) return false;
+    const current = await taskExecutionRepository.current(workspaceId, taskId);
+    if (current?.state === 'queued' && await controlCenterRepository.hasPendingTaskEnvelope(workspaceId,nodeId,taskId)) { agentInboxService.kick(workspaceId, nodeId); return true; }
+    if (current && (['waiting', 'blocked', 'reported'].includes(current.state) || current.sessionId === sessionId)) return false;
+    if (current?.sessionId) {
+      const prior = ptySessionManager.get(current.sessionId);
+      if (prior && !prior.exited) return false;
+    }
+    const previous = await controlCenterRepository.latestSemanticTaskActivity(nodeId, taskId);
+    if (previous && ['waiting_input', 'waiting_permission', 'blocked'].includes(previous.state)) return false;
+    if (await agentInboxService.recoveryDelivered(nodeId, taskId, sessionId)) return false;
+    if (!current) await taskExecutionRepository.schedule(workspaceId,taskId,nodeId);
+    await agentInboxService.enqueue({ workspaceId, toNodeId: nodeId, fromNodeId: await this.briefingSender(workspaceId, task, nodeId),
+      kind: 'task_recovery', taskId, dedupKey: taskRecoveryKey(taskId, sessionId),
+      content: `[retomada do workspace #${taskId.slice(0,8)}] Resume this assigned package from its existing files and conversation. Verify what already landed; do not repeat completed work. Read the current shared guide.\n${await taskBrief(task)}\nFinish with orkestrai task done ${taskId}; report a real blocker on this card and keep independent work moving.`,
+      metadata: { taskTitle: String(task.getAttribute('title')), resumeQueue: true, sessionId } });
+    return true;
   }
 
   async recoverBlockedTask(input: {
@@ -1201,13 +1259,14 @@ export class TaskBoardService {
     }
     // A entrega espera o composer estabilizar e, em ConPTY/WSL, confirma no
     // transcript que o provider realmente iniciou o turno.
+    const execution = agentSession ? await taskExecutionRepository.schedule(workspaceId, taskId, node.id) : null;
     const prompt = `[nova tarefa do quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\nQuando terminar, marque com: orkestrai task done ${taskId}`;
     if (agentSession) {
       await agentInboxService.enqueue({
         workspaceId, toNodeId: node.id, kind: 'task', taskId, content: prompt,
         // Replies to a briefing (checkpoints, questions) must reach whoever coordinates it.
         fromNodeId: await this.briefingSender(workspaceId, task, node.id),
-        dedupKey: `task-dispatch:${taskId}:${node.id}`, metadata: { taskTitle: String(task.getAttribute('title')) },
+        dedupKey: `task-dispatch:${taskId}:${node.id}:${execution?.id ?? 'legacy'}`, metadata: { taskTitle: String(task.getAttribute('title')), ...(execution ? { executionId: execution.id } : {}) },
       });
       return;
     }
@@ -1335,3 +1394,12 @@ recoveryLifecycle.__orkestraiRecoverBlockedTask = (input) => {
 for (const pending of recoveryLifecycle.__orkestraiPendingTaskRecoveries?.splice(0) ?? []) {
   recoveryLifecycle.__orkestraiRecoverBlockedTask(pending);
 }
+
+agentInboxService.registerRelevance('task_stopped', async envelope => {
+  const taskId = inboxTaskId(envelope);
+  if (!taskId) return false;
+  const execution = await taskExecutionRepository.current(envelope.workspaceId, taskId);
+  const leader = await workspaceRepository.getNode(envelope.toNodeId);
+  return Boolean(execution && execution.id === envelope.metadata.executionId && execution.state === 'stopped'
+    && leader?.workspaceId === envelope.workspaceId && (leader.payload as { maestro?: boolean }).maestro);
+});

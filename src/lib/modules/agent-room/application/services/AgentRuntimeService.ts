@@ -1,3 +1,5 @@
+import { taskExecutionService } from './TaskExecutionService.js';
+import { taskExecutionRepository } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { createHash } from 'node:crypto';
 import type { AgentRuntimeData, UpdateAgentRuntimeInput } from '../../contracts/schemas/agent-runtime.schema.js';
@@ -85,7 +87,7 @@ export class AgentRuntimeService {
   private supervisorGeneration = 0;
   private leaderChecks = new Map<string, AbortController>();
   private readonly waking = new Set<string>();
-  private readonly pendingWakes = new Map<string, { workspaceId: string; generation: number; leader: boolean }>();
+  private readonly pendingWakes = new Map<string, { workspaceId: string; generation: number; leader: boolean; taskRecovery?: boolean }>();
 
   async status(workspaceId: string, nodeId: string): Promise<AgentRuntimeData> {
     const node = await this.requireAgent(workspaceId, nodeId);
@@ -137,6 +139,7 @@ export class AgentRuntimeService {
           ...((fresh?.payload ?? node.payload) as TerminalNodePayload),
           sessionId: ensured.sessionId,
           agentRuntimeLastWakeAt: new Date().toISOString(),
+          agentRuntimeSleepReason: null,
           agentRuntimeLastError: null,
         },
       });
@@ -175,6 +178,7 @@ export class AgentRuntimeService {
         ...payload,
         sessionId: undefined,
         agentRuntimeLastSleepAt: new Date().toISOString(),
+        agentRuntimeSleepReason: reason,
         agentRuntimeLastError: null,
       },
     });
@@ -243,9 +247,9 @@ export class AgentRuntimeService {
     for (const check of this.leaderChecks.values()) check.abort();
   }
 
-  private queuePersistentWake(workspaceId: string, nodeId: string, leader: boolean, generation: number): void {
+  private queuePersistentWake(workspaceId: string, nodeId: string, leader: boolean, generation: number, taskRecovery = false): void {
     if (this.waking.has(nodeId) || this.pendingWakes.has(nodeId)) return;
-    this.pendingWakes.set(nodeId, { workspaceId, generation, leader });
+    this.pendingWakes.set(nodeId, { workspaceId, generation, leader, taskRecovery });
     this.drainPersistentWakes();
   }
 
@@ -256,7 +260,7 @@ export class AgentRuntimeService {
       this.pendingWakes.delete(nodeId);
       if (pending.generation !== this.supervisorGeneration) continue;
       this.waking.add(nodeId);
-      void this.wakePersistentIfCurrent(pending.workspaceId, nodeId, pending.generation)
+      void this.wakePersistentIfCurrent(pending.workspaceId, nodeId, pending.generation, pending.taskRecovery)
         .catch(() => undefined)
         .finally(() => {
           this.waking.delete(nodeId);
@@ -265,7 +269,7 @@ export class AgentRuntimeService {
     }
   }
 
-  private async wakePersistentIfCurrent(workspaceId: string, nodeId: string, generation: number): Promise<void> {
+  private async wakePersistentIfCurrent(workspaceId: string, nodeId: string, generation: number, taskRecovery = false): Promise<void> {
     // A queued start must respect a later pause, deletion or mode change.
     const [workspace, node] = await Promise.all([
       workspaceRepository.getWorkspace(workspaceId), workspaceRepository.getNode(nodeId),
@@ -274,7 +278,11 @@ export class AgentRuntimeService {
       || !node || node.workspaceId !== workspaceId || node.type !== 'terminal') return;
     const payload = node.payload as TerminalNodePayload;
     const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
-    if (!payload.provider || config(payload).mode !== 'persistent' || (session && !session.exited)) return;
+    if (!payload.provider || (!taskRecovery && config(payload).mode !== 'persistent') || (session && !session.exited)) return;
+    if (payload.agentRuntimeSleepReason === 'manual') return;
+    if (!(await autonomyPolicyService.runWindow(workspaceId, 'leader_supervision')).allowed) return;
+    if (taskRecovery && !(payload.maestro ? (await this.pendingLeaderTasks(workspaceId)).length : await this.hasActiveTask(workspaceId, nodeId))) return;
+    if (taskRecovery && payload.maestro && !await this.leaderCanContinue(workspaceId, nodeId, await this.pendingLeaderTasks(workspaceId), await controlCenterRepository.latestActivity(nodeId))) return;
     await this.wake(workspaceId, nodeId, false);
   }
 
@@ -303,6 +311,11 @@ export class AgentRuntimeService {
             // A slow provider/WSL startup must not suspend this leader, the
             // remaining agents or the next workspace's supervision.
             this.queuePersistentWake(workspace.id, node.id, Boolean(payload.maestro), generation);
+            continue;
+          }
+          if ((!session || session.exited) && payload.agentRuntimeSleepReason !== 'manual'
+            && (payload.maestro ? (await this.pendingLeaderTasks(workspace.id)).length : await this.hasActiveTask(workspace.id, node.id))) {
+            this.queuePersistentWake(workspace.id, node.id, Boolean(payload.maestro), generation, true);
             continue;
           }
           if (settings.mode !== 'on_demand' || !session || session.exited || !session.waiting) continue;
@@ -486,6 +499,7 @@ export class AgentRuntimeService {
    * activity, and never while it waits on someone or has messages queued.
    */
   async nudgeIdleAssignee(workspaceId: string, nodeId: string): Promise<boolean> {
+    await taskExecutionService.observeStop(workspaceId, nodeId);
     const node = await workspaceRepository.getNode(nodeId);
     const payload = node?.payload as TerminalNodePayload | undefined;
     if (!node || node.workspaceId !== workspaceId || !payload?.provider || payload.maestro || !payload.sessionId) return false;
@@ -515,6 +529,7 @@ export class AgentRuntimeService {
         && !(await controlCenterRepository.openAsksFrom(nodeId, asksSince, String(candidate.getAttribute('id'))))) { task = candidate; break; }
     }
     if (!task) return false;
+    if (await taskExecutionRepository.current(workspaceId, String(task.getAttribute('id')))) return false;
     const taskId = String(task.getAttribute('id'));
     let dedupKey: string | null = null;
     for (let index = 1; index <= MAX_IDLE_CARD_NUDGES; index += 1) {

@@ -17,7 +17,7 @@ describe('AgentSessionService provider profiles', () => {
     const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Saved agent',
       payload: { command: 'codex', provider: 'codex', agentSessionId },
     });
-    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockReturnValue(false);
+    vi.spyOn(agentSessionTracker, 'isAgentSessionResumable').mockResolvedValue(false);
     const create = vi.spyOn(ptySessionManager, 'create');
     await expect(agentSessionService.ensure(workspace.id, node.id, { requireResume: true })).rejects.toThrow('AGENT_SAVED_CONVERSATION_UNAVAILABLE');
     expect(create).not.toHaveBeenCalled();

@@ -2012,7 +2012,7 @@
   "term.workspace_suspended": "This workspace is paused. Open it again before starting a terminal.",
   "term.conversation_in_use": "This conversation belongs to another active agent. Its terminal was preserved; restore this agent's own conversation before retrying.",
   "term.connection_closed": "Connection closed.",
-  "term.reconnecting": "Reconnecting ({attempt}/6)...",
+  "term.reconnecting": "Reconnecting ({attempt})...",
   "term.idle": "Terminal idle",
   "term.esc_closes": "Esc closes",
   "term.process_exited": "Process finished (code {code}).",
@@ -6148,5 +6148,12 @@
   "leadership.handoff_pending": "Handoff recorded; the new leader will be notified through its inbox.",
   "leadership.handoff_acknowledged": "Context received by the new leader",
   "leadership.transfer_before_delete": "Transfer leadership before removing this agent.",
-  "leadership.floor_kept": "This Floor hosts the current leader or deputy. Transfer that role to another agent before retiring its checkout."
+  "leadership.floor_kept": "This Floor hosts the current leader or deputy. Transfer that role to another agent before retiring its checkout.",
+  "tasks.dependencies": "Prerequisite tasks",
+  "tasks.clear_dependencies": "Clear prerequisites",
+  "tasks.execution_queued": "Queued for this agent",
+  "tasks.execution_dispatching": "Delivering task",
+  "tasks.execution_running": "Executing task",
+  "tasks.execution_reported": "Awaiting review",
+  "tasks.execution_waiting": "Waiting or needs coordination"
 }

@@ -1,3 +1,4 @@
+import { hasAgentAdapter } from '../adapters/registry.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   AgentActivity,
@@ -124,12 +125,14 @@ export class ControlCenterService {
   async recordLifecycleActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
     input = { ...input, metadata: { ...input.metadata, lifecycle: true } };
     if (input.taskId) return this.recordActivity(input);
+    const { taskExecutionRepository } = await import('../../infrastructure/repositories/TaskExecutionRepository.js');
+    const execution = await taskExecutionRepository.activeForNode(input.workspaceId, input.nodeId);
     const candidates = await AgentBoardTask.query()
       .where('workspace_id', input.workspaceId)
       .where('assignee_node_id', input.nodeId)
       .orderBy('updated_at', 'desc')
       .get();
-    const task = candidates.find((candidate) => {
+    const task = candidates.find(candidate => candidate.getAttribute('id') === execution?.taskId) ?? candidates.find((candidate) => {
       const status = String(candidate.getAttribute('status'));
       return !candidate.getAttribute('archived_at') && status !== 'todo' && status !== 'done';
     });
@@ -218,6 +221,15 @@ export class ControlCenterService {
         throw error;
       }
       this.latest.set(key, event);
+      void import('./TaskExecutionService.js').then(({ taskExecutionService }) => taskExecutionService.activity(event)).catch(() => undefined);
+      if (input.metadata?.lifecycle && input.state === 'idle') void import('./TaskExecutionService.js')
+        .then(({ taskExecutionService }) => taskExecutionService.observeStop(input.workspaceId, input.nodeId)).catch(() => undefined);
+      if (input.metadata?.lifecycle && input.state === 'idle' && typeof input.metadata.sessionId === 'string') {
+        const session = ptySessionManager.get(input.metadata.sessionId);
+        if (session && !session.exited && session.provider && hasAgentAdapter(session.provider)
+          && session.nodeId === input.nodeId && session.workspaceId === input.workspaceId) void import('./RoleService.js')
+          .then(({roleService}) => roleService.applyToTerminal(input.workspaceId,input.nodeId,'resume')).catch(() => undefined);
+      }
       try {
         await attentionService.syncActivity(event);
       } finally {

@@ -1917,6 +1917,14 @@ export class BridgeController extends Controller {
     }
   }
 
+  async workspaceGuide(event: any) {
+    try {
+      await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const topic = z.string().trim().min(1).max(120).optional().parse(event.url.searchParams.get('topic') ?? undefined);
+      return this.json({ data: bridgeService.guide(topic) });
+    } catch (error) { return this.errorResponse(error, 'Could not read workspace guide.'); }
+  }
+
   async taskCreate(event: any) {
     try {
       const input = bridgeBoardTaskSchema.parse(await event.request.json());
@@ -1927,6 +1935,7 @@ export class BridgeController extends Controller {
       const task = await taskBoardService.create(workspace.id, {
         title: input.title,
         description: input.description ?? null,
+        dependencies: input.dependencies,
         assigneeNodeId,
         // Self-authored work is already in progress in this terminal.
         dispatch: !caller || caller !== assigneeNodeId,
@@ -1951,6 +1960,7 @@ export class BridgeController extends Controller {
       const task = await taskBoardService.update(workspace.id, event.params.taskId, {
         status: input.status,
         description: input.description,
+        dependencies: input.dependencies,
         assigneeNodeId,
         noteId: await this.noteNodeId(workspace.id, input.note),
         notifyCompletion: true,

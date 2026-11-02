@@ -19,7 +19,7 @@ function stable(value: unknown): string {
 }
 function digest(value: unknown): string { return createHash('sha256').update(stable(value)).digest('hex'); }
 export function leadershipTaskRevision(task: AgentBoardTask, patch: Record<string, unknown> = {}): string {
-  const keys = ['title', 'description', 'assignee_node_id', 'note_node_id', 'image_path', 'images_json', 'attachments_json'];
+  const keys = ['title', 'description', 'dependencies_json', 'assignee_node_id', 'note_node_id', 'image_path', 'images_json', 'attachments_json'];
   return digest(Object.fromEntries(keys.map((key) => [key, Object.hasOwn(patch, key) ? patch[key] : task.getAttribute(key) ?? null])));
 }
 

@@ -68,7 +68,7 @@ describe('managed guest conversation', () => {
     const alias=directory+'-alias';await symlink(directory,alias,'dir');
     try{const state=setup(alias);await state.service.run(state.dto('turn','Symlinked work'),state.context);
       const sessionId=state.dto('open').input.sessionId;
-      expect(new AgentSessionTracker().isAgentSessionResumable('orkestrai-jsonl',alias,sessionId)).toBe(true);
+      expect(await new AgentSessionTracker().isAgentSessionResumable('orkestrai-jsonl',alias,sessionId)).toBe(true);
       expect(await lastReplyText('shared',alias,sessionId)).toBe('New answer');
     }finally{await rm(alias);}
   });

@@ -1583,6 +1583,43 @@ export class BridgeService {
     return { command: spec.command, args: spec.args, env: spec.env };
   }
 
+  /** Small shared discovery guide; every capability remains in the version-matched reference. */
+  bridgeDiscoveryContent(): string {
+    return `---
+name: orkestrai-bridge
+description: Coordinate agents, tasks, messages, Floors, memory, code graphs, Portals, devices, Computer, designs, APIs and creative workflows through the Orkestrai bridge.
+---
+# Orkestrai workspace bridge
+
+## Focused delivery (all agents)
+Inspired by the MIT-licensed karpathy-guidelines: https://github.com/multica-ai/andrej-karpathy-skills/tree/main/skills/karpathy-guidelines
+- State material assumptions and concrete acceptance checks. Resolve routine reversible choices autonomously.
+- Make the smallest sufficient change, preserve others' work and avoid speculative features or unrelated refactors.
+- Reproduce, fix and verify a usable outcome. Status, tests and reports are evidence, not a substitute for delivery.
+
+## Roles and continuity
+The current workspace leader coordinates, delegates, unblocks, integrates and validates; specialists implement. Never assign implementation to the leader or use leaderWork to bypass that rule. A direct owner task authorizes routine implementation, validation and integration. Explicit owner instructions, notes/Markdown, pauses, provider limits, configured gates and OS consent remain authoritative. A blocker belongs to its card; continue independent work.
+
+Task assignment dispatches once. Do not duplicate it with ask/run. The runtime admits one implementation attempt per terminal and queues later work until its prerequisites and slot are ready. Use task_read / orkestrai task read for the full brief and execution state; task_list returns bounded open-task summaries. Set dependencies with task_dependencies / orkestrai task dependencies <id> --ids <id,id>.
+
+Specialists implement, validate and report task done; report a concrete blocked/waiting state on that task when necessary. Questions and answers remain available independently of the implementation queue. Use orkestrai reply <messageId> to answer a received question. Informational replies do not require an acknowledgement. The leader reviews returned evidence and integrates with floor land; delivery means integrated, committed and verified. Both reviewers must approve when a deputy is configured.
+
+After dispatching independent work and completing available coordination actions, end the waiting model turn. Results, questions and proven unresolved worker stops wake the leader. A waiting turn does not end the delivery. Do not poll, negotiate GO windows or repeatedly reload tool catalogs. Use orkestrai heavy for heavy commands.
+
+## Discover only the needed operation
+All workspace features remain available to leaders and specialists with their existing identity/scope rules. Load the current reference index with workspace_guide (CLI orkestrai guide); request a section by its id, then consult only the sections needed for the next action. REFERENCE.md beside this skill is the complete version-matched guide. Internal Canvas, Shell and Portal operations use native bridge tools; never require Computer to unlock them. Portal screenshots return a PNG path; open that file instead of starting another browser.
+`;
+  }
+
+  guide(topic?: string): { sections: Array<{ id: string; title: string }>; text?: string } {
+    const parts = this.bridgeSkillContent().split(/(?=^## )/m).filter(part => part.startsWith('## '));
+    const sections = parts.map((part,index) => ({ id: String(index + 1), title: part.split('\n',1)[0].replace(/^## /,'') }));
+    if (!topic) return { sections };
+    const index = sections.findIndex(section => section.id === topic || section.title.toLocaleLowerCase() === topic.toLocaleLowerCase());
+    if (index < 0) throw new Error('Unknown guide section; list sections first.');
+    return { sections: [sections[index]], text: parts[index] };
+  }
+
   /** Conteúdo da skill da ponte (extraido para comparar/atualizar installs antigas). */
   bridgeSkillContent(): string {
     const providerIds = listAgentAdapters().map((adapter) => adapter.id).join('|');
@@ -1776,7 +1813,8 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
       ];
       for (const dir of dirs) {
         await mkdir(dir, { recursive: true });
-        await writeFile(resolve(dir, 'SKILL.md'), skill);
+        await writeFile(resolve(dir, 'REFERENCE.md'), skill);
+        await writeFile(resolve(dir, 'SKILL.md'), this.bridgeDiscoveryContent());
       }
       if (wslRuntime) {
         const launcherDir = resolve(workspace.workingDir, '.orkestrai', 'bin');

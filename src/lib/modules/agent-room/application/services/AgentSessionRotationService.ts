@@ -42,7 +42,7 @@ export class AgentSessionRotationService {
           const floor = await floorService.get(node.floorId).catch(() => null);
           if (floor?.path) cwd = floor.path;
         }
-        const sizeBytes = transcriptSizeBytes(payload.provider, cwd, payload.agentSessionId);
+        const sizeBytes = await transcriptSizeBytes(payload.provider, cwd, payload.agentSessionId);
         if (sizeBytes === null || sizeBytes < limit) continue;
         const title = node.title ?? 'agente';
         const next: Record<string, unknown> = {

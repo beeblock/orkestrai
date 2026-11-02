@@ -181,7 +181,7 @@ export class WorkspaceService {
     const bridgeRuntime = await this.preferredBridgeRuntime(workspace);
     const cliEntry = process.env.ORKESTRAI_CLI_JS ?? resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
     const [skillCurrent, hasConfig, agentsMdCurrent, hasWslLauncher] = await Promise.all([
-      readFile(skillPath, 'utf8').then((content) => content === bridgeService.bridgeSkillContent()).catch(() => false),
+      readFile(skillPath, 'utf8').then((content) => content === bridgeService.bridgeDiscoveryContent()).catch(() => false),
       access(resolve(workspace.workingDir, '.orkestrai', 'workspace.json')).then(() => true).catch(() => false),
       readFile(resolve(workspace.workingDir, 'AGENTS.md'), 'utf8').catch(() => ''),
       bridgeRuntime?.kind === 'wsl'
@@ -390,7 +390,7 @@ export class WorkspaceService {
           if (trackingHome || Object.keys(roots).length) tracker = agentSessionTrackerForRuntime(
             executionRuntime.kind === 'wsl' ? `${executionRuntime.distribution}:${trackingHome}` : 'native',
             trackingHome ?? homedir(), executionRuntime.kind === 'wsl' ? posix.normalize : null, roots);
-          resumable = tracker.isAgentSessionResumable(
+          resumable = await tracker.isAgentSessionResumable(
             getAgentAdapter(provider).sessionStorage,
             trackingCwd,
             agentSessionId,

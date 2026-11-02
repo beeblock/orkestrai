@@ -5,9 +5,19 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.51.0 - 2026-11-02
+
+### Added
+- Persist task execution attempts with database-enforced single-terminal custody, explicit dependency readiness, execution-state badges and queue/submission/confirmation latency metrics. Expose prerequisite editing through the owner task menu and the shared CLI/MCP command path; preserve conversations, task history and independent questions/replies.
+- Deliver idempotent coordinator notifications when an exact worker transcript proves its turn ended without completion or a declared wait. Keep the leader responsible for coordination, integration and validation; allow waiting model turns to end while the runtime carries result and recovery events.
+- Provision compact common agent skills and version-matched reference sections through `orkestrai guide` and `workspace_guide`, retaining every capability and the focused Karpathy delivery principles for leaders and specialists.
 
 ### Fixed
+- Keep Kanban card actions in normal layout so dependency controls cannot cover title editing or joint-review buttons, and allow clearing prerequisites even when a referenced task was removed.
+- Keep terminal viewers recovering after six connection failures, retain retry counts across brief attaches and allow fresh heartbeat replies after renderer suspension. Preserve live PTYs and durable inbox messages across viewer disconnection.
+- Discover Claude/Codex sessions and read rotation metadata through asynchronous filesystem operations with bounded reads and listings; avoid blocking Core heartbeats with synchronous Windows process-tree cleanup or WSL path conversion.
+- Restore disconnected agents with unfinished authorized work through the bounded startup queue, preserving exact conversations, explicit manual sleep, workspace pauses and provider limits.
+
 - Tell agents that informational replies do not require receipt-only acknowledgements, while preserving concrete questions, explicit acknowledgement requests and reply routing.
 - Bound agent task lists to paginated open-card summaries, with status/assignee filters, explicit task details and cursor-based history. Preserve the complete owner board and its records.
 - Recover unfinished work assigned to missing agents, preserve briefs and completed history, and return pending work to the backlog when its agent is removed. Keep repeated identical status reports from generating false supervisory progress.

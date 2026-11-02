@@ -10,6 +10,7 @@ export class AgentBoardTask extends Model {
     'workspace_id',
     'title',
     'description',
+    'dependencies_json',
     'status',
     'assignee_node_id',
     'image_path',

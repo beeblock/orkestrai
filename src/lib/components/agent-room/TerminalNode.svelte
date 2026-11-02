@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TerminalConnectionHealth } from './terminal-connection-health.js';
   import { onMount } from 'svelte';
   import { TerminalInputBuffer, terminalInputFrame } from './terminal-input-buffer.js';
   import { Terminal } from '@xterm/xterm';
@@ -544,7 +545,8 @@
 
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
     let socket: WebSocket;
-    let reconnectAttempts = 0;
+    const connectionHealth = new TerminalConnectionHealth();
+    let attachTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let lastPongAt = 0;
@@ -672,10 +674,13 @@
       viewAttachPending = 0;
       lastReportedSize = null;
       lastPongAt = Date.now();
+      connectionHealth.opened(Date.now());
+      if (attachTimer) clearTimeout(attachTimer);
+      attachTimer = setTimeout(() => { if (!attached) socket.close(); }, 15_000);
       send({ type: 'subscribe', workspaceId, events: ['agentSession', 'agentReply', 'say', ...(onTalking ? ['talking'] : [])] });
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => {
-        if (Date.now() - lastPongAt > 30_000) {
+        if (connectionHealth.heartbeat(Date.now()) === 'reconnect') {
           socket.close();
           return;
         }
@@ -708,6 +713,7 @@
     };
 
     const handleMessage = (event: MessageEvent) => {
+      connectionHealth.received(Date.now());
       const message = JSON.parse(String(event.data));
       switch (message.type) {
         case 'pong':
@@ -721,7 +727,8 @@
             .catch(() => undefined);
           if (message.streamingOutput !== false) replayScrollback(message.scrollback);
           statusMessage = '';
-          reconnectAttempts = 0;
+          if (attachTimer) clearTimeout(attachTimer);
+          connectionHealth.attached(Date.now());
           flushPendingInput();
           if (typeof message.streamingOutput === 'boolean' && outputBuffer.isVisible !== message.streamingOutput) requestOutputSnapshot();
           break;
@@ -731,7 +738,8 @@
           attached = true;
           if (message.streamingOutput !== false) replayScrollback(message.scrollback);
           statusMessage = '';
-          reconnectAttempts = 0;
+          if (attachTimer) clearTimeout(attachTimer);
+          connectionHealth.attached(Date.now());
           waiting = Boolean(message.session?.waiting);
           if (message.session?.exited) exited = message.session.exitCode ?? 0;
           flushPendingInput();
@@ -817,13 +825,11 @@
       // Suspensao/hibernacao derruba a conexao (Windows em sleep): tenta
       // re-attach com backoff. Se a sessao PTY morreu junto, o 'error' do
       // attach aciona o respawn com resume (o contexto volta sozinho).
-      if (reconnectAttempts >= 6) {
-        statusMessage = m['term.connection_closed']();
-        return;
-      }
-      reconnectAttempts += 1;
-      statusMessage = m['term.reconnecting']({ attempt: reconnectAttempts });
-      reconnectTimer = setTimeout(connect, 2_000 * reconnectAttempts);
+      if (attachTimer) clearTimeout(attachTimer);
+      const retry = connectionHealth.disconnected();
+      statusMessage = m['term.reconnecting']({ attempt: retry.attempt });
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, retry.delay);
     };
 
     function connect() {
@@ -871,6 +877,7 @@
       if (speakTimer) clearTimeout(speakTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (attachTimer) clearTimeout(attachTimer);
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       captureAfterDictation = false;
       pendingDictation = false;

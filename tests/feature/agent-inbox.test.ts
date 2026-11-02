@@ -4,6 +4,7 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { agentInboxService, AgentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { taskExecutionRepository } from '$lib/modules/agent-room/infrastructure/repositories/TaskExecutionRepository.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
@@ -463,6 +464,26 @@ describe('Agent inbox', () => {
     expect(prompts).toHaveLength(1);
   });
 
+  it('contains a failed submission receipt while confirmation is pending without resending', async () => {
+    const { workspace, nodes } = await team();
+    session(nodes.Web).ready = false;
+    const task = await taskBoardService.create(workspace.id, { title: 'Receipt failure', assigneeNodeId: nodes.Web, dispatch: false, createdBy: 'Web' });
+    await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: nodes.Web, kind: 'task', taskId: task.id, content: 'Implement once' });
+    vi.spyOn(taskExecutionRepository, 'submitted').mockRejectedValueOnce(new Error('database is locked'));
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementationOnce(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+      input.onSubmitted?.({ sessionId: input.sessionId, length: input.message.length });
+      await new Promise(resolve => setTimeout(resolve, 25));
+    });
+    session(nodes.Web).ready = true;
+    await agentInboxService.drain(workspace.id, nodes.Web);
+    await agentInboxService.drain(workspace.id, nodes.Web);
+    expect(prompts).toHaveLength(1);
+    const envelopes = await controlCenterRepository.inboxEnvelopes(nodes.Web, ['sent']);
+    expect(envelopes).toHaveLength(1);
+    expect(await taskExecutionRepository.current(workspace.id, task.id)).toMatchObject({ state: 'dispatching' });
+  });
+
   it('requeues an attempt that never reached the provider and delivers it on the next pass', async () => {
     const { workspace, nodes } = await team();
     vi.mocked(agentTerminalDeliveryService.deliver).mockRejectedValueOnce(new Error('Terminal delivery queue timed out. The message was not submitted.'));
@@ -539,19 +560,22 @@ describe('Agent inbox', () => {
     expect(toWeb().filter((prompt) => prompt.message.includes('automatic task recovery'))).toHaveLength(1);
     await expect(agentInboxService.recoveryDelivered(nodes.Web, first.id, sessionId)).resolves.toBe(true);
 
-    // The second card's recovery is still queued (the agent is busy) when the canvas resume is typed.
+    // Resume now joins the durable queue instead of typing a second implementation over the first.
     session(nodes.Web).ready = false;
     await recover(second.id);
     const result = await roleService.applyToTerminal(workspace.id, nodes.Web, 'resume');
     expect(result.tasksDelivered).toBe(1);
-    const resume = toWeb().find((prompt) => prompt.message.startsWith('[retomada do workspace]'))!;
-    expect(resume.message).toContain('Company bio backend');
-    expect(resume.message).not.toContain('Company logo backend');
-    const [withdrawn] = await controlCenterRepository.inboxByDedupKey(nodes.Web, `task-recovery:${second.id}:${sessionId}`);
-    expect(withdrawn).toMatchObject({ state: 'failed', metadata: expect.objectContaining({ cancelled: true, cancelReason: 'superseded' }) });
+    expect(toWeb()).toHaveLength(1);
+    const [queued] = await controlCenterRepository.inboxByDedupKey(nodes.Web, `task-recovery:${second.id}:${sessionId}`);
+    expect(queued.state).toBe('queued');
     session(nodes.Web).ready = true;
     await agentInboxService.drain(workspace.id, nodes.Web);
-    expect(toWeb().filter((prompt) => prompt.message.includes('automatic task recovery'))).toHaveLength(1);
+    expect(toWeb()).toHaveLength(1);
+    await taskBoardService.update(workspace.id,first.id,{status:'done'});
+    await agentInboxService.drain(workspace.id,nodes.Web);
+    const next = toWeb().filter(prompt=>prompt.message.includes('Company bio backend'));
+    expect(next).toHaveLength(1);expect(next[0].message).not.toContain('Company logo backend');
+    expect(toWeb().filter(prompt=>prompt.message.includes('automatic task recovery'))).toHaveLength(2);
   });
 
   it('records and forwards concurrent answers to the same message exactly once', async () => {

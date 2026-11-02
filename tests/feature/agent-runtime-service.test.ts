@@ -498,8 +498,16 @@ describe('AgentRuntimeService', () => {
     await supervisorTick(service);
   });
 
+  it('recovers a disconnected interactive leader with pending work through the bounded wake queue', async () => {
+    const {workspace,node,session}=await setupLeader();session.exited=true;
+    const service=new AgentRuntimeService();const wake=vi.spyOn(service,'wake').mockResolvedValue({} as never);
+    await supervisorTick(service);await vi.waitFor(()=>expect(wake).toHaveBeenCalledWith(workspace.id,node.id,false));
+    service.stopSupervisor();
+  });
+
   it('does not wake manually sleeping leaders just because the board has work', async () => {
-    const { session, deliver } = await setupLeader();
+    const { session, deliver, workspace, node } = await setupLeader();
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, maestro: true, agentRuntimeSleepReason: 'manual' } });
     session.exited = true;
     const ensure = vi.spyOn(ptySessionManager, 'create');
     await supervisorTick(new AgentRuntimeService());

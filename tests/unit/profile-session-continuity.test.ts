@@ -57,11 +57,11 @@ describe('profile conversation continuity', () => {
     expect(await readFile(join(f.sourceRoot, f.transcript), 'utf8')).toBe(f.text + extra);
     const options = { claudeConfigDir: f.targetRoot };
     const tracker = new AgentSessionTracker(f.root, null, options);
-    expect(tracker.isAgentSessionResumable('claude-project-jsonl', f.cwd, f.sessionId)).toBe(true);
+    expect(await tracker.isAgentSessionResumable('claude-project-jsonl', f.cwd, f.sessionId)).toBe(true);
     expect(await findPromptInTranscript('claude', f.cwd, f.sessionId, 'Continue the exact task', Date.now() - 5000, options)).toEqual({ sessionId: f.sessionId });
     expect(await findReplyToPrompt('claude', f.cwd, f.sessionId, 'Continue the exact task', Date.now() - 5000, options)).toMatchObject({ sessionId: f.sessionId, complete: true, text: 'Task context retained.' });
     expect(await latestTurnComplete('claude', f.cwd, f.sessionId, options)).toBe(true);
-    expect(new AgentSessionTracker(f.root).isAgentSessionResumable('claude-project-jsonl', f.cwd, f.sessionId)).toBe(false);
+    expect(await new AgentSessionTracker(f.root).isAgentSessionResumable('claude-project-jsonl', f.cwd, f.sessionId)).toBe(false);
   });
 
   it('refuses divergent destination history without modifying either conversation', async () => {

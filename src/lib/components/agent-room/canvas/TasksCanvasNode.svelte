@@ -25,6 +25,8 @@
 
   type BoardTask = {
     id: string;
+    dependencies?: string[];
+    execution?: { state: string } | null;
     completionReview?: LeadershipReviewSummary | null;
     title: string;
     description: string | null;
@@ -63,6 +65,14 @@
 
   let reviewOpen = $state<{ taskId: string } | null>(null);
   let { id, data, selected } = $props<NodeProps & { data: TasksNodeData }>();
+
+  function executionLabel(state: string): string {
+    if (state === 'queued') return m['tasks.execution_queued']();
+    if (state === 'dispatching') return m['tasks.execution_dispatching']();
+    if (state === 'running') return m['tasks.execution_running']();
+    if (state === 'reported') return m['tasks.execution_reported']();
+    return m['tasks.execution_waiting']();
+  }
 
   function defaultColumnLabel(key: string): string {
     if (key === 'todo') return m['tasks.col_todo']();
@@ -720,6 +730,7 @@
                 {:else}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <span class="tb-title" title={undefined} ondblclick={() => startEdit(task)}>{task.title}</span>
+                  {#if task.execution}<span class="text-[10px] text-[var(--app-text-muted)]">{executionLabel(task.execution.state)}</span>{/if}
                   {#if task.completionReview}
                     <button type="button" class="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-[var(--app-text-muted)] hover:bg-[var(--app-hover)] focus-visible:outline focus-visible:outline-2" title={leadershipReviewLabel(task.completionReview.status)} aria-label={m['leadership.review_badge']()} onclick={() => (reviewOpen = { taskId: task.id })}><Scale size={11}/><span class="truncate">{leadershipReviewLabel(task.completionReview.status)}</span></button>
                   {/if}
@@ -735,6 +746,19 @@
                         <DropdownMenu.Item onclick={() => patchTask(task.id, { status: column.status })}>
                           <span class="tb-menu-dot" style:background={column.hint}></span>{column.label}
                         </DropdownMenu.Item>
+                      {/each}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger class="tb-icon-btn subtle" aria-label={m['tasks.dependencies']()} title={m['tasks.dependencies']()}><Link2 size={12}/></DropdownMenu.Trigger>
+                    <DropdownMenu.Content class="max-h-72 w-64 overflow-y-auto">
+                      <DropdownMenu.Label>{m['tasks.dependencies']()}</DropdownMenu.Label>
+                      <DropdownMenu.Item disabled={!task.dependencies?.length} onclick={() => patchTask(task.id, { dependencies: [] })}>{m['tasks.clear_dependencies']()}</DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      {#each tasks.filter(candidate => candidate.id !== task.id) as candidate (candidate.id)}
+                        <DropdownMenu.CheckboxItem checked={(task.dependencies ?? []).includes(candidate.id)} onCheckedChange={(checked) => patchTask(task.id, { dependencies: checked ? [...(task.dependencies ?? []), candidate.id] : (task.dependencies ?? []).filter(id => id !== candidate.id) })}>
+                          <span class="truncate">{candidate.title}</span>
+                        </DropdownMenu.CheckboxItem>
                       {/each}
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
@@ -1296,12 +1320,10 @@
     opacity: 1;
   }
 
-  /* No topo, as acoes flutuam sobre o fim do titulo: nao roubam largura
-     do texto quando estao ocultas. */
+  /* Keep actions in their own row so they never cover editing or review. */
   .tb-card-top .tb-reveal {
-    position: absolute;
-    top: 5px;
-    right: 5px;
+    position: static;
+    margin-left: auto;
     padding: 1px;
     border-radius: 7px;
     background: var(--app-surface-raised);
@@ -1422,8 +1444,14 @@
 
   .tb-card-top {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 6px;
+  }
+
+  .tb-card-top > .tb-title,
+  .tb-card-top > .tb-edit {
+    flex-basis: 100%;
   }
 
   .tb-title {

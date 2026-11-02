@@ -43,6 +43,7 @@ export class TaskBoardController extends Controller {
         {
           data: await taskBoardService.create(event.params.id, {
             title: input.title,
+            dependencies: input.dependencies,
             description: input.description ?? null,
             images: input.images ?? [],
             attachments: input.attachments ?? [],
@@ -65,6 +66,7 @@ export class TaskBoardController extends Controller {
       return this.json({
         data: await taskBoardService.update(event.params.id, event.params.taskId, {
           title: input.title,
+          dependencies: input.dependencies,
           description: input.description,
           status: input.status,
           assigneeNodeId: input.assigneeNodeId,
