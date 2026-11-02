@@ -149,6 +149,13 @@ describe('orkestrai CLI inbox, reply and heavy runs', () => {
 });
 
 describe('MCP inbox hand-off', () => {
+  it('discourages receipt loops while preserving concrete questions and explicit requests', () => {
+    const text = formatInbox([QUESTION, { ...QUESTION, messageId: 'answer', kind: 'reply', content: 'Implemented; what should I review next?' }]);
+    expect(text).toContain('orkestrai reply <messageId>');
+    expect(text).toContain('Respostas informativas nao exigem outra confirmacao, salvo pedido explicito');
+    expect(text).toContain('Implemented; what should I review next?');
+    expect(formatInbox([QUESTION])).not.toContain('Respostas informativas');
+  });
   it('appends pending messages to the tool result and exposes reply and inbox tools', async () => {
     const input = new PassThrough();
     const chunks: string[] = [];

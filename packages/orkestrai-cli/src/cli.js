@@ -50,6 +50,9 @@ export function formatInbox(items, remaining = 0) {
   if (items.some((item) => item.kind === 'ask' && item.fromTitle)) {
     lines.push('Responda perguntas com: orkestrai reply <messageId> "<resposta>". Nao reenvie mensagens ja recebidas.');
   }
+  if (items.some((item) => item.kind === 'reply')) {
+    lines.push('Respostas informativas nao exigem outra confirmacao, salvo pedido explicito. Evite responder apenas recebido/ciente/ok; responda perguntas ou decisoes concretas e continue a tarefa.');
+  }
   if (remaining > 0) lines.push(`(+${remaining} pendentes: orkestrai inbox)`);
   return lines.join('\n');
 }

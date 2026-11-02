@@ -1119,9 +1119,12 @@ export class AgentInboxService {
 
   private compose(batch: AgentMessageEnvelope[], titles: Map<string, string>): string {
     const asks = batch.filter((envelope) => envelope.kind === 'ask' && envelope.fromNodeId);
-    const footer = asks.length
+    let footer = asks.length
       ? ` -- Para responder a uma pergunta: orkestrai reply ${asks.length === 1 ? asks[0].id : '<messageId>'} "<resposta>" (tool MCP reply). Sua resposta final neste turno também é encaminhada. Não peça reenvio.`
       : '';
+    if (batch.some((envelope) => envelope.kind === 'reply')) {
+      footer += ' -- Respostas informativas nao exigem outra confirmacao, salvo pedido explicito. Evite responder apenas recebido/ciente/ok; responda perguntas ou decisoes concretas e continue a tarefa.';
+    }
     if (batch.length === 1) return `${this.itemPrompt(batch[0], titles)}${footer}`;
     const items = batch.map((envelope, index) => `[${index + 1}/${batch.length}] ${this.itemPrompt(envelope, titles)}`);
     return `[orkestrai:inbox] ${batch.length} mensagens chegaram enquanto você trabalhava; trate todas, mais antigas primeiro. ${items.join(' ')}${footer}`;

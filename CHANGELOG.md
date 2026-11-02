@@ -8,6 +8,7 @@ pt-BR, English, and Spanish translations.
 ## Unreleased
 
 ### Fixed
+- Tell agents that informational replies do not require receipt-only acknowledgements, while preserving concrete questions, explicit acknowledgement requests and reply routing.
 - Bound agent task lists to paginated open-card summaries, with status/assignee filters, explicit task details and cursor-based history. Preserve the complete owner board and its records.
 - Recover unfinished work assigned to missing agents, preserve briefs and completed history, and return pending work to the backlog when its agent is removed. Keep repeated identical status reports from generating false supervisory progress.
 - Calculate message metrics across all matching pages without reading message bodies. Scope workspace token totals and daily charts consistently and visibly label incomplete local session coverage.
