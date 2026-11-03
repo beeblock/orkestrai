@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
-import { controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
+import { ControlCenterService, controlCenterService } from '$lib/modules/agent-room/application/services/ControlCenterService.js';
+import * as transcript from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -15,6 +16,115 @@ import { orchestrationStatsService } from '$lib/modules/agent-room/application/s
 describe('ControlCenterService', () => {
   useSvelarTest({ refreshDatabase: true });
   afterEach(() => vi.restoreAllMocks());
+
+  it('bounds transcript reconciliation to four reads and drains the remaining agents fairly', async () => {
+    const service = new ControlCenterService();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'large quiet team', workingDir: '/tmp' });
+    const sessions = new Map<string, any>();
+    for (let i = 0; i < 9; i++) {
+      const id = `quiet-${i}`;
+      const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: { provider: 'codex', sessionId: id } });
+      sessions.set(id, { id, nodeId: node.id, workspaceId: workspace.id, provider: 'codex', agentSessionId: `conversation-${i}`,
+        cwd: '/tmp', runtimeKey: 'native', waiting: true, exited: false, createdAt: '2026-11-03T12:00:00Z', lastActivityAt: '2026-11-03T13:00:00Z' });
+    }
+    vi.spyOn(ptySessionManager, 'get').mockImplementation(id => sessions.get(id) ?? null);
+    const releases: Array<() => void> = [];
+    let active = 0, peak = 0;
+    const boundary = vi.spyOn(transcript, 'latestTurnBoundary').mockImplementation(() => {
+      peak = Math.max(peak, ++active);
+      return new Promise(resolve => releases.push(() => { active--; resolve({ ready: false, startedAt: Date.now(), finishedAt: null }); }));
+    });
+    for (const id of sessions.keys()) { service.queueTerminalActivity(id); service.queueTerminalActivity(id); }
+    await vi.waitFor(() => expect(boundary).toHaveBeenCalledTimes(4));
+    // A slow member occupies one read, leaving the remaining slots for its peers.
+    for (let expected = 5; expected <= 9; expected++) {
+      releases.shift()!();
+      await vi.waitFor(() => expect(boundary).toHaveBeenCalledTimes(expected));
+    }
+    for (const release of releases.splice(0)) release();
+    await vi.waitFor(async () => expect((await service.snapshot(workspace.id)).counts.working).toBe(9));
+    expect(peak).toBe(4);
+    expect(boundary).toHaveBeenCalledTimes(9); // Snapshot itself never reads a transcript.
+  });
+
+  it('does not multiply stalled UNC reads across retries or hold the status request', async () => {
+    const service = new ControlCenterService();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'unavailable transcript', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: { provider: 'codex', sessionId: 'unc-pty' } });
+    const session = { id: 'unc-pty', nodeId: node.id, workspaceId: workspace.id, provider: 'codex', agentSessionId: 'conversation',
+      cwd: '/home/worker/project', runtimeKey: 'wsl:Ubuntu', waiting: true, exited: false,
+      createdAt: '2026-11-03T12:00:00Z', lastActivityAt: '2026-11-03T13:00:00Z' };
+    vi.spyOn(ptySessionManager, 'get').mockReturnValue(session as never);
+    let release!: (value: transcript.TranscriptTurnBoundary) => void;
+    const boundary = vi.spyOn(transcript, 'latestTurnBoundary').mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    await service.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working' });
+    const first = service.reconcileTerminalActivity(session.id);
+    await vi.waitFor(() => expect(boundary).toHaveBeenCalledTimes(1));
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 6_000);
+    const retry = service.reconcileTerminalActivity(session.id);
+    const before = performance.now();
+    expect((await service.snapshot(workspace.id)).agents[0].state).toBe('working');
+    expect(performance.now() - before).toBeLessThan(1_000);
+    await Promise.all([first, retry]); // Caller timeout does not release the actual I/O slot.
+    expect(boundary).toHaveBeenCalledTimes(1);
+    release({ ready: null, startedAt: null, finishedAt: null });
+    expect((await controlCenterRepository.latestActivity(node.id))?.state).toBe('working');
+  });
+
+  it('keeps a quiet provider working until its exact turn completes, then broadcasts idle without a terminal redraw', async () => {
+    const service = new ControlCenterService();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'quiet inference', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal',
+      payload: { provider: 'codex', sessionId: 'quiet-pty' } });
+    const session = { id: 'quiet-pty', workspaceId: workspace.id, nodeId: node.id, provider: 'codex',
+      cwd: '/tmp', runtimeKey: 'native', agentSessionId: 'exact-conversation', waiting: true, exited: false,
+      createdAt: '2026-11-03T12:00:00Z', lastActivityAt: '2026-11-03T13:00:00Z' };
+    vi.spyOn(ptySessionManager, 'get').mockImplementation(id => id === session.id ? session as never : null);
+    const boundary = vi.spyOn(transcript, 'latestTurnBoundary').mockResolvedValue({ ready: false, startedAt: Date.parse(session.lastActivityAt), finishedAt: null });
+    await service.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working' });
+    await service.recordLifecycleActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'idle', metadata: { sessionId: session.id } });
+    expect((await service.snapshot(workspace.id)).agents[0].state).toBe('working');
+    // Completion is written only to the transcript; no new PTY data wakes the quiet timer.
+    boundary.mockResolvedValue({ ready: true, startedAt: Date.parse(session.lastActivityAt), finishedAt: Date.now() });
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16_000);
+    await service.reconcileTerminalActivity(session.id);
+    expect((await service.snapshot(workspace.id)).agents[0].state).toBe('idle');
+    expect(session.waiting).toBe(true); // Composer admission remains independent of the activity label.
+    expect(boundary).toHaveBeenCalledWith('codex', '/tmp', 'exact-conversation', expect.objectContaining({ processStartedAt: Date.parse(session.createdAt), posixCwd: false }));
+    await service.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'done', action: 'Delivery verified' });
+    await service.reconcileTerminalActivity(session.id);
+    expect((await service.snapshot(workspace.id)).agents[0].state).toBe('done');
+    boundary.mockResolvedValue({ ready: false, startedAt: Date.now(), finishedAt: null });
+    vi.mocked(Date.now).mockReturnValue(Date.now() + 16_000);
+    await service.reconcileTerminalActivity(session.id);
+    expect((await service.snapshot(workspace.id)).agents[0].state).toBe('working');
+  });
+
+  it('does not let slow transcript reads overwrite a newer terminal or an explicit blocker', async () => {
+    const service = new ControlCenterService();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'stale observation', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', payload: { provider: 'claude', sessionId: 'old-pty' } });
+    let session = { id: 'old-pty', workspaceId: workspace.id, nodeId: node.id, provider: 'claude',
+      cwd: '/home/worker/project', transcriptHome: '/host/wsl/home/worker', runtimeKey: 'wsl:Ubuntu',
+      agentSessionId: 'conversation', waiting: true, exited: false, createdAt: '2026-11-03T12:00:00Z', lastActivityAt: '2026-11-03T13:00:00Z' };
+    vi.spyOn(ptySessionManager, 'get').mockImplementation(id => id === session.id ? session as never : null);
+    vi.spyOn(ptySessionManager, 'transcriptStorageRoots').mockReturnValue({ claudeConfigDir: '/host/wsl/work-profile' });
+    let resolve!: (value: transcript.TranscriptTurnBoundary) => void;
+    const boundary = vi.spyOn(transcript, 'latestTurnBoundary').mockImplementation(() => new Promise(done => { resolve = done; }));
+    await service.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'working' });
+    const pending = service.recordLifecycleActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'idle', metadata: { sessionId: 'old-pty' } });
+    await vi.waitFor(() => expect(boundary).toHaveBeenCalledTimes(1));
+    session = { ...session, id: 'replacement-pty' };
+    resolve({ ready: true, startedAt: 1, finishedAt: 2 });
+    await pending;
+    expect((await controlCenterRepository.latestActivity(node.id))?.state).toBe('working');
+    expect(boundary).toHaveBeenCalledWith('claude', '/home/worker/project', 'conversation', expect.objectContaining({ homeDir: '/host/wsl/home/worker', claudeConfigDir: '/host/wsl/work-profile', posixCwd: true }));
+    await workspaceRepository.updateNode(node.id, { payload: { provider: 'claude', sessionId: session.id } });
+    boundary.mockResolvedValue({ ready: false, startedAt: Date.now(), finishedAt: null });
+    await service.recordActivity({ workspaceId: workspace.id, nodeId: node.id, state: 'blocked', action: 'Explicit workspace gate' });
+    await service.reconcileTerminalActivity(session.id);
+    expect((await controlCenterRepository.latestActivity(node.id))?.state).toBe('blocked');
+  });
 
   it('counts and finds queued messages after the former 5,000-envelope cutoff without loading content', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'stats pages', workingDir: '/tmp' });

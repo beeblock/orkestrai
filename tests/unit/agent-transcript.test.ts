@@ -78,6 +78,25 @@ describe('async transcript lookup', () => {
 });
 
 describe('latest turn completion for supervision', () => {
+  it('recognizes Codex work when the turn start has fallen outside the bounded tail', () => {
+    const at = '2026-11-03T14:08:01Z';
+    const work = { timestamp: at, type: 'event_msg', payload: { type: 'item_completed', item: { type: 'Reasoning' } } };
+    const text = (events: unknown[]) => events.map(event => JSON.stringify(event)).join('\n');
+    const completed = { timestamp: '2026-11-03T14:09:00Z', type: 'event_msg', payload: { type: 'task_complete' } };
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([work])))
+      .toEqual({ ready: false, startedAt: Date.parse(at), finishedAt: null });
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([work, completed])))
+      .toMatchObject({ ready: true, finishedAt: Date.parse(completed.timestamp) });
+    // Settings/usage do not start work after a completed turn.
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([completed,
+      { timestamp: '2026-11-03T14:10:00Z', type: 'event_msg', payload: { type: 'thread_settings_applied' } },
+      { timestamp: '2026-11-03T14:10:01Z', type: 'event_msg', payload: { type: 'token_count' } },
+    ])).ready).toBe(true);
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([work]), Date.parse('2026-11-03T14:10:00Z')))
+      .toMatchObject({ ready: true, finishedAt: null });
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([completed, { ...work, timestamp: '2026-11-03T14:10:00Z' }])))
+      .toMatchObject({ ready: false, finishedAt: null });
+  });
   it('distinguishes a completed or aborted Codex composer from an actual reply', () => {
     const start = '2026-10-23T12:00:00Z', end = '2026-10-23T12:00:10Z';
     const prompt = { timestamp: start, type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Continue' }] } };

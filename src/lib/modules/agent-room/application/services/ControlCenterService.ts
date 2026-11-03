@@ -1,4 +1,4 @@
-import { hasAgentAdapter } from '../adapters/registry.js';
+import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   AgentActivity,
@@ -16,6 +16,10 @@ import { controlCenterRepository } from '../../infrastructure/repositories/Contr
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
 import { attentionService } from './AttentionService.js';
+import { latestTurnBoundary } from '../../infrastructure/transcript/AgentTranscript.js';
+
+const OBSERVED_TURN_STORAGES = new Set(['orkestrai-jsonl', 'claude-project-jsonl', 'codex-rollout-jsonl', 'kimi-session-dir']);
+const TURN_REFRESH_MS = 5_000;
 
 const ACTIVITY_STATES: AgentActivityState[] = [
   'starting',
@@ -116,6 +120,84 @@ function projectMessages(
 export class ControlCenterService {
   private latest = new Map<string, AgentActivity>();
   private writes = new Map<string, Promise<AgentActivity | null>>();
+  private turnReads = new Map<string, { at: number; identity: string; pending: boolean; value: Promise<'idle' | 'working' | null> }>();
+  private activeTurnReads = 0;
+  private activityQueue = new Set<string>();
+  private activityChecks = new Set<string>();
+
+  queueTerminalActivity(sessionId: string): void {
+    if (!this.activityChecks.has(sessionId)) this.activityQueue.add(sessionId);
+    while (this.activityQueue.size > 128) this.activityQueue.delete(this.activityQueue.values().next().value!);
+    this.drainActivityQueue();
+  }
+
+  private drainActivityQueue(): void {
+    while (this.activityChecks.size < 4 && this.activityQueue.size) {
+      const sessionId = this.activityQueue.values().next().value!;
+      this.activityQueue.delete(sessionId);
+      this.activityChecks.add(sessionId);
+      void this.reconcileTerminalActivity(sessionId).catch(() => undefined).finally(() => {
+        this.activityChecks.delete(sessionId);
+        this.drainActivityQueue();
+      });
+    }
+  }
+
+  /** Background reconciliation also sees completions that produce no terminal redraw.
+   * Never put transcript I/O in the status HTTP request or change composer readiness. */
+  async reconcileTerminalActivity(sessionId: string): Promise<void> {
+    const session = ptySessionManager.get(sessionId);
+    if (!session || session.exited || !session.waiting || !session.workspaceId || !session.nodeId
+      || !session.provider || !session.agentSessionId || !hasAgentAdapter(session.provider)
+      || !OBSERVED_TURN_STORAGES.has(getAgentAdapter(session.provider).sessionStorage ?? '')) return;
+    const current = await this.currentState(session.workspaceId, session.nodeId);
+    if (!['working', 'idle', 'starting', 'done'].includes(current)) return;
+    await this.recordLifecycleActivity({ workspaceId: session.workspaceId, nodeId: session.nodeId,
+      state: 'idle', metadata: { sessionId, transcriptPoll: true } });
+  }
+
+  private async quietTurnState(input: RecordActivityInput): Promise<'idle' | 'working' | null> {
+    const sessionId = input.metadata?.sessionId;
+    if (typeof sessionId !== 'string') return 'idle';
+    const session = ptySessionManager.get(sessionId);
+    if (!session || session.exited || session.workspaceId !== input.workspaceId || session.nodeId !== input.nodeId) return null;
+    if (!session.waiting) return null;
+    if (!session.provider || !session.agentSessionId || !hasAgentAdapter(session.provider)
+      || !OBSERVED_TURN_STORAGES.has(getAgentAdapter(session.provider).sessionStorage ?? '')) return 'idle';
+    const roots = ptySessionManager.transcriptStorageRoots(session.id);
+    const identity = JSON.stringify([session.createdAt, session.agentSessionId, session.provider,
+      session.transcriptCwd ?? session.cwd, session.transcriptHome, session.runtimeKey, roots]);
+    const cached = this.turnReads.get(sessionId);
+    let value: Promise<'idle' | 'working' | null>;
+    if (cached?.identity === identity && (cached.pending || Date.now() - cached.at < TURN_REFRESH_MS)) value = cached.value;
+    else {
+      // UNC storage may be slow or unavailable. Bound real outstanding I/O,
+      // including timed-out callers, instead of spawning a read per status poll.
+      if (this.activeTurnReads >= 4) return null;
+      this.activeTurnReads++;
+      const entry = { at: Date.now(), identity, pending: true, value: null as unknown as Promise<'idle' | 'working' | null> };
+      value = latestTurnBoundary(session.provider, session.transcriptCwd ?? session.cwd, session.agentSessionId, {
+        ...roots, homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
+        processStartedAt: Date.parse(session.createdAt),
+      }).then(boundary => boundary.ready === null ? null : boundary.ready ? 'idle' as const : 'working' as const)
+        .catch(() => null).finally(() => { this.activeTurnReads--; entry.pending = false; });
+      entry.value = value;
+      this.turnReads.delete(sessionId);
+      this.turnReads.set(sessionId, entry);
+      while (this.turnReads.size > 128) this.turnReads.delete(this.turnReads.keys().next().value!);
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const state = await Promise.race([value, new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), 1_500);
+      timer.unref?.();
+    })]).finally(() => { if (timer) clearTimeout(timer); });
+    const live = ptySessionManager.get(sessionId);
+    const node = await workspaceRepository.getNode(input.nodeId);
+    if (!live || live.exited || !live.waiting || live.createdAt !== session.createdAt
+      || live.agentSessionId !== session.agentSessionId || live.lastActivityAt !== session.lastActivityAt
+      || node?.workspaceId !== input.workspaceId || (node.payload as { sessionId?: string }).sessionId !== sessionId) return null;
+    return state;
+  }
 
   /**
    * PTY lifecycle events do not know which Kanban card owns the terminal.
@@ -124,6 +206,19 @@ export class ControlCenterService {
    */
   async recordLifecycleActivity(input: RecordActivityInput): Promise<AgentActivity | null> {
     input = { ...input, metadata: { ...input.metadata, lifecycle: true } };
+    if (input.state === 'idle') {
+      const state = await this.quietTurnState(input);
+      // Missing/partial evidence preserves the last observed state; silence
+      // alone must never announce that an exact provider turn is finished.
+      if (state === null) return null;
+      input = { ...input, state };
+      // The periodic observer must not re-query every card or erase a useful
+      // semantic action just because an unchanged turn was checked again.
+      if (input.metadata?.transcriptPoll) {
+        const current = await this.currentState(input.workspaceId, input.nodeId);
+        if (state === current || state === 'idle' && current === 'done') return null;
+      }
+    }
     if (input.taskId) return this.recordActivity(input);
     const { taskExecutionRepository } = await import('../../infrastructure/repositories/TaskExecutionRepository.js');
     const execution = await taskExecutionRepository.activeForNode(input.workspaceId, input.nodeId);

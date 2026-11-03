@@ -1415,12 +1415,20 @@ export function parseLatestTurnBoundary(storage: string, transcript: string, pro
     return { ready: true, startedAt: jsonlEventTime(beginning), finishedAt: null };
   }
   if (storage === 'codex-rollout-jsonl') {
-    const lifecycle = scoped.findLast(event => ['task_started', 'task_complete', 'turn_aborted'].includes(event?.payload?.type));
-    beginning ??= scoped.findLast(event => event?.payload?.type === 'task_started');
+    const lifecycleIndex = scoped.findLastIndex(event => ['task_started', 'task_complete', 'turn_aborted'].includes(event?.payload?.type));
+    const lifecycle = scoped[lifecycleIndex];
+    const isWork = (event: any): boolean => event?.type === 'response_item'
+      && ['message', 'reasoning', 'function_call', 'function_call_output', 'custom_tool_call', 'custom_tool_call_output'].includes(event.payload?.type)
+      || event?.type === 'event_msg' && event.payload?.type === 'item_completed'
+        && ['Reasoning', 'McpToolCall', 'CommandExecution', 'AgentMessage'].includes(event.payload.item?.type);
+    beginning ??= scoped.find(event => event?.payload?.type === 'task_started' || isWork(event));
     if (lifecycle) {
       ready = lifecycle.payload.type !== 'task_started';
       if (ready) finish = lifecycle;
     }
+    // A long tool result can push both prompt and task_started out of the tail.
+    // Structured work still proves an open turn; usage/settings records do not.
+    if (scoped.findLastIndex(isWork) > lifecycleIndex) { ready = false; finish = null; }
   } else if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
     // Scheduled Claude turns are metadata, not owner prompts. A timestamped
     // API request still proves newer provider work when the original prompt

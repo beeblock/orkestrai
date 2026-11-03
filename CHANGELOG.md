@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+- Keep live agent activity aligned with the exact provider turn instead of marking a quiet terminal idle after 2.5 seconds. Reconcile silent completions in the background with bounded asynchronous reads, preserve explicit blockers and replacement sessions, and leave composer admission independent of the activity label.
+- Recognize ongoing Codex reasoning and tool work when the original turn-start record has fallen outside the bounded transcript tail, without treating settings or usage records as new work.
+
 ## 0.51.0 - 2026-11-02
 
 ### Added

@@ -307,6 +307,9 @@ export class AgentRuntimeService {
           const payload = node.payload as TerminalNodePayload;
           const settings = config(payload);
           const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
+          if (session && !session.exited && session.waiting) {
+            controlCenterService.queueTerminalActivity(session.id);
+          }
           if (settings.mode === 'persistent' && (!session || session.exited)) {
             // A slow provider/WSL startup must not suspend this leader, the
             // remaining agents or the next workspace's supervision.
