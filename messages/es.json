@@ -1720,6 +1720,7 @@
   "floor.hook_auto": "Ejecutar setup automático al crear planta",
   "floor.save_hooks": "Guardar hooks",
   "floor.error_create": "Error al crear la planta.",
+  "floor.error_internal_source": "Esta rama contiene archivos internos de Orkestrai. Crea un piso nuevo desde el checkout principal para excluirlos de forma segura. La rama y los archivos existentes se conservaron.",
   "floor.error_preview": "Error en la vista previa.",
   "floor.error_land": "Error al aterrizar.",
   "floor.land_commit_failed": "Los archivos de la planta se aplicaron, pero el commit fue rechazado: {error}. La planta se conservó; corrige la causa e intégrala de nuevo.",

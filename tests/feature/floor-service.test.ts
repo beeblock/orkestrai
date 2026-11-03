@@ -313,6 +313,165 @@ describe('FloorService', () => {
     expect(git(dir, ['log', '--oneline'])).not.toContain('snapshot');
   });
 
+  it('never copies tracked internal state or nested Floors from a clean HEAD into a new snapshot', async () => {
+    const dir = makeRepo();
+    for (const path of ['.orkestrai/floors/old/game/generated/art.png', 'game/.orkestrai/floors/nested/build/game.bin']) {
+      mkdirSync(join(dir, path, '..'), { recursive: true });
+      writeFileSync(join(dir, path), 'Existing owner artifact; do not delete.');
+    }
+    // A previously contaminated repository can track these despite ignore rules.
+    git(dir, ['add', '--force', '.orkestrai', 'game']);
+    git(dir, ['commit', '-m', 'existing tracked internal state']);
+    const head = git(dir, ['rev-parse', 'HEAD']);
+    const index = git(dir, ['ls-files', '--stage']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Internal state', workingDir: dir });
+
+    const floor = await floorService.create(workspace.id, { name: 'safe' });
+
+    expect(existsSync(join(floor.path, '.orkestrai'))).toBe(false);
+    expect(existsSync(join(floor.path, 'game/.orkestrai'))).toBe(false);
+    expect(readFileSync(join(floor.path, 'app.ts'), 'utf8')).toBe('const v = 1;\n');
+    expect(git(dir, ['rev-parse', 'HEAD'])).toBe(head);
+    expect(git(dir, ['ls-files', '--stage'])).toBe(index);
+    expect(readFileSync(join(dir, '.orkestrai/floors/old/game/generated/art.png'), 'utf8')).toContain('Existing owner artifact');
+  });
+
+  it('excludes untracked internal data even if info/exclude only mentions Orkestrai in a comment', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, '.git/info/exclude'), '# .orkestrai is managed by the app\n');
+    mkdirSync(join(dir, '.orkestrai/previous/game/.orkestrai/floors/nested'), { recursive: true });
+    writeFileSync(join(dir, '.orkestrai/previous/game/.orkestrai/floors/nested/art.png'), 'approved artwork');
+    mkdirSync(join(dir, 'generated'));
+    writeFileSync(join(dir, 'generated/art.png'), 'authored generated artwork');
+    writeFileSync(join(dir, 'draft.ts'), 'export const draft = true;');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Untracked state', workingDir: dir });
+
+    const floor = await floorService.create(workspace.id, { name: 'safe-untracked' });
+
+    expect(existsSync(join(floor.path, '.orkestrai'))).toBe(false);
+    expect(readFileSync(join(floor.path, 'generated/art.png'), 'utf8')).toBe('authored generated artwork');
+    expect(readFileSync(join(floor.path, 'draft.ts'), 'utf8')).toContain('draft');
+    expect(git(floor.path, ['ls-files'])).not.toContain('.orkestrai');
+  });
+
+  it('rejects an explicitly selected branch containing internal state before creating its worktree', async () => {
+    const dir = makeRepo();
+    mkdirSync(join(dir, '.orkestrai/floors/legacy'), { recursive: true });
+    writeFileSync(join(dir, '.orkestrai/floors/legacy/build.bin'), 'old build');
+    git(dir, ['add', '--force', '.orkestrai']);
+    git(dir, ['commit', '-m', 'legacy contaminated branch']);
+    git(dir, ['branch', 'legacy']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Legacy branch', workingDir: dir });
+
+    await expect(floorService.create(workspace.id, { name: 'existing', branch: 'legacy', existingBranch: true }))
+      .rejects.toThrow(/internal Orkestrai data/);
+    expect(existsSync(join(dir, '.orkestrai/floors/existing'))).toBe(false);
+    expect(await floorService.list(workspace.id)).toEqual([]);
+    expect(git(dir, ['branch', '--list', 'legacy'])).toContain('legacy');
+  });
+
+  it('repairs exclusions through Git when the selected checkout has a .git file', async () => {
+    const dir = makeRepo();
+    const linked = mkdtempSync(join(tmpdir(), 'orkestrai-floor-linked-'));
+    repos.push(linked);
+    git(dir, ['worktree', 'add', '-b', 'linked', linked]);
+    writeFileSync(join(dir, '.git/info/exclude'), '# .orkestrai only appears in a comment\n');
+    mkdirSync(join(linked, '.orkestrai/generated'), { recursive: true });
+    writeFileSync(join(linked, '.orkestrai/generated/art.png'), 'owner art');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Linked checkout', workingDir: linked });
+
+    const floor = await floorService.create(workspace.id, { name: 'from-linked' });
+
+    expect(existsSync(join(floor.path, '.orkestrai'))).toBe(false);
+    expect(readFileSync(join(dir, '.git/info/exclude'), 'utf8').split(/\r?\n/)).toContain('.orkestrai/');
+    expect(readFileSync(join(linked, '.orkestrai/generated/art.png'), 'utf8')).toBe('owner art');
+  });
+
+  it('reserves the total untracked snapshot before adding assets to Git', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, 'one.bin'), '123456');
+    writeFileSync(join(dir, 'two.bin'), '123456');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Snapshot budget', workingDir: dir });
+    vi.mocked(diskGuard.assertFreeDisk).mockImplementation(async (_path, minimum) => {
+      if (minimum > 3 * 1024 ** 3 + 8) throw new Error('Snapshot exceeds available space');
+    });
+
+    await expect(floorService.create(workspace.id, { name: 'too-large' })).rejects.toThrow('Snapshot exceeds available space');
+
+    expect(git(dir, ['branch', '--list', 'orkestrai/too-large'])).toBe('');
+    expect(git(dir, ['ls-files'])).toBe('app.ts\n');
+    expect(readFileSync(join(dir, 'one.bin'), 'utf8')).toBe('123456');
+    expect(await floorService.list(workspace.id)).toEqual([]);
+  });
+
+  it('excludes internal state across the whole repository when the workspace points at a subdirectory', async () => {
+    const dir = makeRepo();
+    const project = join(dir, 'game[1]');
+    for (const path of ['.orkestrai/floors/old', 'game[1]/.orkestrai/floors/old', 'game[1]/ProjectSettings', 'game[1]/Library']) {
+      mkdirSync(join(dir, path), { recursive: true });
+    }
+    writeFileSync(join(dir, '.orkestrai/floors/old/build.bin'), 'parent state');
+    writeFileSync(join(project, '.orkestrai/floors/old/build.bin'), 'project state');
+    writeFileSync(join(project, 'ProjectSettings/ProjectVersion.txt'), 'm_EditorVersion: 6000.0.0f1');
+    writeFileSync(join(project, 'Library/cache.bin'), 'project cache');
+    git(dir, ['add', '--force', '.']);
+    git(dir, ['commit', '-m', 'existing parent and project state']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Nested project', workingDir: project });
+    const index = git(dir, ['ls-files', '--stage']);
+
+    const floor = await floorService.create(workspace.id, { name: 'nested-source' });
+
+    expect(git(floor.path, ['ls-files'])).not.toContain('.orkestrai');
+    expect(git(floor.path, ['ls-files'])).not.toContain('Library/cache.bin');
+    expect(readFileSync(join(dir, '.orkestrai/floors/old/build.bin'), 'utf8')).toBe('parent state');
+    expect(git(dir, ['ls-files', '--stage'])).toBe(index);
+  });
+
+  it('omits Unity caches from a new snapshot while preserving game source and approved generated art', async () => {
+    const dir = makeRepo();
+    for (const path of ['ProjectSettings', 'Assets', 'Library/PackageCache', 'Temp', 'generated']) mkdirSync(join(dir, path), { recursive: true });
+    writeFileSync(join(dir, 'ProjectSettings/ProjectVersion.txt'), 'm_EditorVersion: 6000.0.0f1');
+    writeFileSync(join(dir, 'Assets/Hero.cs'), 'class Hero {}');
+    writeFileSync(join(dir, 'Library/PackageCache/cache.bin'), 'tracked derived cache');
+    git(dir, ['add', 'ProjectSettings', 'Assets', 'Library']);
+    git(dir, ['commit', '-m', 'existing Unity source and cache']);
+    writeFileSync(join(dir, 'Temp/compile.bin'), 'untracked temporary cache');
+    writeFileSync(join(dir, 'generated/approved.png'), 'approved art');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Unity snapshot', workingDir: dir });
+    const index = git(dir, ['ls-files', '--stage']);
+
+    const floor = await floorService.create(workspace.id, { name: 'unity-source' });
+
+    expect(existsSync(join(floor.path, 'Library'))).toBe(false);
+    expect(existsSync(join(floor.path, 'Temp'))).toBe(false);
+    expect(readFileSync(join(floor.path, 'Assets/Hero.cs'), 'utf8')).toBe('class Hero {}');
+    expect(readFileSync(join(floor.path, 'generated/approved.png'), 'utf8')).toBe('approved art');
+    expect(git(dir, ['ls-files', '--stage'])).toBe(index);
+    expect(readFileSync(join(dir, 'Library/PackageCache/cache.bin'), 'utf8')).toBe('tracked derived cache');
+  });
+
+  it('checks tracked checkout size before Git starts materializing a large tree', async () => {
+    const dir = makeRepo();
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Checkout budget', workingDir: dir });
+    const subject = floorService as unknown as { git: (workspace: unknown, cwd: string, args: string[], env?: Record<string, string>) => Promise<string> };
+    const original = subject.git.bind(subject);
+    vi.spyOn(subject, 'git').mockImplementation(async (workspace, cwd, args, env) => {
+      if (args.slice(0, 4).join(' ') === 'ls-tree -r -l -z') {
+        return `100644 blob ${'a'.repeat(40)} ${6 * 1024 ** 3}\tgame/large-asset.bin\0`;
+      }
+      return original(workspace, cwd, args, env);
+    });
+    vi.mocked(diskGuard.assertFreeDisk).mockImplementation(async (_path, minimum) => {
+      if (minimum > 4 * 1024 ** 3) throw new Error('Checkout exceeds available space');
+    });
+
+    await expect(floorService.create(workspace.id, { name: 'too-large-checkout' })).rejects.toThrow('Checkout exceeds available space');
+
+    expect(existsSync(join(dir, '.orkestrai/floors/too-large-checkout'))).toBe(false);
+    expect(git(dir, ['branch', '--list', 'orkestrai/too-large-checkout'])).toBe('');
+    expect(await floorService.list(workspace.id)).toEqual([]);
+  });
+
   it('removes an untouched snapshot floor and its branch like any merged floor', async () => {
     const dir = makeRepo();
     writeFileSync(join(dir, 'AGENTS.md'), 'provisioned\n');

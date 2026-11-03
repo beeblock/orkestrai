@@ -1720,6 +1720,7 @@
   "floor.hook_auto": "Auto-run setup ao criar andar",
   "floor.save_hooks": "Salvar hooks",
   "floor.error_create": "Falha ao criar andar.",
+  "floor.error_internal_source": "Essa branch contém arquivos internos do Orkestrai. Crie um novo andar a partir do checkout principal para excluí-los com segurança. A branch e os arquivos existentes foram preservados.",
   "floor.error_preview": "Falha no preview.",
   "floor.error_land": "Falha ao aterrissar.",
   "floor.land_commit_failed": "Os arquivos do andar foram aplicados, mas o commit foi recusado: {error}. O andar foi mantido; corrija a causa e integre de novo.",

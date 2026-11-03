@@ -69,7 +69,9 @@
         $formData.cloneLayout = false;
         await refresh();
       } catch (error) {
-        errorMessage = error instanceof Error ? error.message : m['floor.error_create']();
+        errorMessage = error instanceof Error && error.message.startsWith('FLOOR_INTERNAL_DATA:')
+          ? m['floor.error_internal_source']()
+          : error instanceof Error ? error.message : m['floor.error_create']();
       }
     },
   });

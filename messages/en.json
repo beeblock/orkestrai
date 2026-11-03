@@ -1720,6 +1720,7 @@
   "floor.hook_auto": "Auto-run setup on floor create",
   "floor.save_hooks": "Save hooks",
   "floor.error_create": "Failed to create floor.",
+  "floor.error_internal_source": "This branch contains internal Orkestrai files. Create a new floor from the main checkout to exclude them safely. The existing branch and files were preserved.",
   "floor.error_preview": "Preview failed.",
   "floor.error_land": "Failed to land.",
   "floor.land_commit_failed": "The floor's files were applied, but the commit was refused: {error}. The floor was kept; fix the cause and land it again.",
