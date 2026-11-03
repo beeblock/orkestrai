@@ -383,7 +383,7 @@ describe('FloorService', () => {
     const floor = await floorService.create(workspace.id, { name: 'from-linked' });
 
     expect(existsSync(join(floor.path, '.orkestrai'))).toBe(false);
-    expect(readFileSync(join(dir, '.git/info/exclude'), 'utf8').split(/\r?\n/)).toContain('.orkestrai/');
+    expect(readFileSync(join(dir, '.git/info/exclude'), 'utf8').split(/\r?\n/)).toContain('**/.orkestrai/*');
     expect(readFileSync(join(linked, '.orkestrai/generated/art.png'), 'utf8')).toBe('owner art');
   });
 
@@ -402,6 +402,62 @@ describe('FloorService', () => {
     expect(git(dir, ['ls-files'])).toBe('app.ts\n');
     expect(readFileSync(join(dir, 'one.bin'), 'utf8')).toBe('123456');
     expect(await floorService.list(workspace.id)).toEqual([]);
+  });
+
+  it('preserves tracked roles, skills, designs and unknown authored state while omitting runtime copies and tokens', async () => {
+    const dir = makeRepo();
+    const authored = ['.orkestrai/roles/qa/role.json', '.orkestrai/roles/qa/AGENTS.md',
+      '.orkestrai/skills/testing/SKILL.md', '.orkestrai/designs/layout.orkestrai-design.json',
+      '.orkestrai/notes/decision.md', '.orkestrai/images/approved.png',
+      '.orkestrai/bin/project-helper.sh',
+      '.claude/skills/custom/SKILL.md', '.agents/skills/custom/SKILL.md'];
+    for (const path of [...authored, '.orkestrai/workspace.json', '.orkestrai/bin/orkestrai', '.orkestrai/floors/old/build.bin']) {
+      mkdirSync(join(dir, path, '..'), { recursive: true });
+      writeFileSync(join(dir, path), path.endsWith('workspace.json') ? '{"token":"test-only-secret"}' : `Owner source: ${path}`);
+    }
+    git(dir, ['add', '--force', '.']); git(dir, ['commit', '-m', 'portable definitions and legacy runtime']);
+    const index = git(dir, ['ls-files', '--stage']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Portable definitions', workingDir: dir });
+
+    const floor = await floorService.create(workspace.id, { name: 'portable' });
+
+    for (const path of authored) expect(readFileSync(join(floor.path, path), 'utf8')).toBe(`Owner source: ${path}`);
+    for (const path of ['.orkestrai/workspace.json', '.orkestrai/bin/orkestrai', '.orkestrai/floors']) expect(existsSync(join(floor.path, path))).toBe(false);
+    expect(git(dir, ['ls-files', '--stage'])).toBe(index);
+    expect(readFileSync(join(dir, '.orkestrai/workspace.json'), 'utf8')).toContain('test-only-secret');
+  });
+
+  it('includes new portable definitions after migrating the exact old generated exclude block', async () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, '.git/info/exclude'), ['.orkestrai/', '.claude/skills/orkestrai/',
+      '.cline/skills/orkestrai/', '.devin/skills/orkestrai/', '.agents/skills/orkestrai/', ''].join('\n'));
+    for (const path of ['.orkestrai/roles/qa/role.json', '.orkestrai/skills/testing/SKILL.md', '.orkestrai/designs/source.json']) {
+      mkdirSync(join(dir, path, '..'), { recursive: true }); writeFileSync(join(dir, path), 'Portable source');
+    }
+    mkdirSync(join(dir, '.orkestrai/floors/old'), { recursive: true });
+    writeFileSync(join(dir, '.orkestrai/floors/old/art.bin'), 'runtime copy');
+    const workspace = await workspaceRepository.createWorkspace({ name: 'New definitions', workingDir: dir });
+
+    const floor = await floorService.create(workspace.id, { name: 'new-definitions' });
+
+    for (const path of ['.orkestrai/roles/qa/role.json', '.orkestrai/skills/testing/SKILL.md', '.orkestrai/designs/source.json']) {
+      expect(readFileSync(join(floor.path, path), 'utf8')).toBe('Portable source');
+    }
+    expect(existsSync(join(floor.path, '.orkestrai/floors'))).toBe(false);
+    expect(git(dir, ['ls-files'])).toBe('app.ts\n');
+  });
+
+  it('accepts an existing branch with portable definitions and no runtime state', async () => {
+    const dir = makeRepo();
+    mkdirSync(join(dir, '.orkestrai/roles/qa'), { recursive: true });
+    writeFileSync(join(dir, '.orkestrai/roles/qa/role.json'), '{"name":"QA"}');
+    git(dir, ['add', '--force', '.orkestrai']); git(dir, ['commit', '-m', 'portable role']);
+    git(dir, ['branch', 'portable-role']);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Existing portable role', workingDir: dir });
+
+    const floor = await floorService.create(workspace.id, { name: 'existing-role', branch: 'portable-role', existingBranch: true });
+
+    expect(readFileSync(join(floor.path, '.orkestrai/roles/qa/role.json'), 'utf8')).toBe('{"name":"QA"}');
   });
 
   it('excludes internal state across the whole repository when the workspace points at a subdirectory', async () => {

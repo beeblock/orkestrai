@@ -15,6 +15,8 @@ import { buildWorkspaceRuntimeLaunch, guestWorkingDirectoryAsync, workspaceExecu
 import { assertFreeDisk, DISK_LIMITS, freeDiskBytes } from '../../infrastructure/disk-guard.js';
 import { updateOrkestraiGitExclude } from '../../infrastructure/bridge-git-exclude.js';
 import { codeGraphGeneratedRoots, isCodeGraphGeneratedPath } from '../../infrastructure/code-graph/CodeGraphSourcePolicy.js';
+import { floorRuntimePathspecs, isFloorRuntimePath } from '../../infrastructure/FloorSnapshotPolicy.js';
+import { readWorkspaceTextFile } from '../../infrastructure/WorkspaceTextFile.js';
 
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 60_000;
@@ -93,9 +95,15 @@ type DeltaPlan = {
 const UNSHARED_DEPENDENCY_ENTRIES = new Set(['.vite', '.vite-temp', '.cache', '.svelte-kit', '.turbo', '.next']);
 const SHARED_DEPENDENCIES_MARKER = '.orkestrai-shared';
 const SNAPSHOT_MAX_UNTRACKED_BYTES = 50 * 1024 * 1024;
-const INTERNAL_STATE_PATHSPEC = ':(top,glob,icase)**/.orkestrai/**';
-const EXCLUDE_INTERNAL_STATE_PATHSPEC = ':(top,glob,icase,exclude)**/.orkestrai/**';
-const isInternalStatePath = (path: string) => path.split(/[\\/]/).some(part => part.toLowerCase() === '.orkestrai');
+const INTERNAL_STATE_PATHSPECS = floorRuntimePathspecs();
+const EXCLUDE_INTERNAL_STATE_PATHSPECS = floorRuntimePathspecs(true);
+function treeEntries(output: string): Array<{ path: string; bytes: number }> {
+  return output.split('\0').filter(Boolean).map(record => {
+    const separator = record.indexOf('\t');
+    const header = record.slice(0, separator).trim().split(/\s+/);
+    return { path: record.slice(separator + 1), bytes: header[1] === 'blob' ? Number(header[3]) || 0 : 0 };
+  });
+}
 /**
  * Ignored folders that only ever hold test reports and tool caches. Ambiguous
  * names (build, dist, out, target...) are deliberately absent: being ignored
@@ -277,11 +285,13 @@ export class FloorService {
    */
   private async workingTreeBase(workspace: Workspace): Promise<{ commit: string; kind: 'head' | 'snapshot' }> {
     const head = (await this.git(workspace, workspace.workingDir, ['rev-parse', '--verify', 'HEAD'])).trim();
-    const prefix = (await this.git(workspace, workspace.workingDir, ['rev-parse', '--show-prefix'])).trim();
+    const prefix = (await this.git(workspace, workspace.workingDir, ['rev-parse', '--show-prefix'])).replace(/\r?\n$/, '');
     const generatedRoots = await codeGraphGeneratedRoots(workspace.workingDir);
-    const omitted = (path: string) => isInternalStatePath(path) || (path.startsWith(prefix) && isCodeGraphGeneratedPath(path.slice(prefix.length), generatedRoots));
-    const internal = (await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', '--full-tree', head])).split('\0').some(omitted);
-    const exclusions = [EXCLUDE_INTERNAL_STATE_PATHSPEC, ...generatedRoots.map(root => `:(top,literal,icase,exclude)${prefix}${root}`)];
+    const omitted = (path: string) => isFloorRuntimePath(path) || (path.startsWith(prefix) && isCodeGraphGeneratedPath(path.slice(prefix.length), generatedRoots));
+    const headEntries = treeEntries(await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-l', '-z', '--full-tree', head]));
+    const internal = headEntries.some(entry => omitted(entry.path));
+    const headSourceBytes = headEntries.reduce((total, entry) => total + (omitted(entry.path) ? 0 : entry.bytes), 0);
+    const exclusions = [...EXCLUDE_INTERNAL_STATE_PATHSPECS, ...generatedRoots.map(root => `:(top,literal,icase,exclude)${prefix}${root}`)];
     const status = (await this.git(workspace, workspace.workingDir, ['status', '--porcelain', '--untracked-files=normal'])).trim();
     if (!status && !internal) return { commit: head, kind: 'head' };
     const gitDir = (await this.git(workspace, workspace.workingDir, ['rev-parse', '--git-dir'])).trim();
@@ -295,12 +305,20 @@ export class FloorService {
       await this.git(workspace, workspace.workingDir, ['read-tree', 'HEAD'], env);
       // Ignore rules cannot remove state already tracked by an old snapshot.
       // Remove it only from our private index; never from the owner's index/files.
-      if (internal) await this.git(workspace, workspace.workingDir, ['rm', '-r', '--cached', '--ignore-unmatch', '--', INTERNAL_STATE_PATHSPEC,
+      if (internal) await this.git(workspace, workspace.workingDir, ['rm', '-r', '--cached', '--ignore-unmatch', '--', ...INTERNAL_STATE_PATHSPECS,
         ...generatedRoots.map(root => `:(top,literal,icase)${prefix}${root}`)], env);
-      await this.git(workspace, workspace.workingDir, ['add', '-u', '--', '.', ...exclusions], env);
+      const modified = (await this.git(workspace, workspace.workingDir, ['diff', '--name-only', '-z', '--', '.', ...exclusions], env)).split('\0').filter(Boolean);
+      const pathApi = workspace.runtimeKind === 'wsl' ? win32 : { resolve };
+      let modifiedBytes = 0;
+      for (const path of modified) {
+        const info = await lstat(pathApi.resolve(workspace.workingDir, path)).catch(error => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        });
+        if (info?.isFile()) modifiedBytes += info.size;
+      }
       // Untracked work is included, except very large files (videos, dumps)
       // that would bloat the object store for every floor.
-      const pathApi = workspace.runtimeKind === 'wsl' ? win32 : { resolve };
       const untracked = (await this.git(workspace, workspace.workingDir, ['ls-files', '--others', '--exclude-standard', '-z', '--', '.', ...exclusions], env)).split('\0').filter(Boolean);
       const included: string[] = [];
       let untrackedBytes = 0;
@@ -311,7 +329,10 @@ export class FloorService {
       }
       // A per-file limit alone still allows thousands of medium assets to fill
       // the object store before checkout even starts. Reserve their total first.
-      await assertFreeDisk(workspace.workingDir, DISK_LIMITS.floorCreate + untrackedBytes, 'preparar o snapshot do andar');
+      const snapshotBytes = modifiedBytes + untrackedBytes;
+      await assertFreeDisk(workspace.workingDir, Math.max(DISK_LIMITS.floorCreate + snapshotBytes,
+        headSourceBytes + 2 * snapshotBytes + DISK_LIMITS.heavyRun), 'preparar o snapshot do andar');
+      await this.git(workspace, workspace.workingDir, ['add', '-u', '--', '.', ...exclusions], env);
       for (let index = 0; index < included.length; index += 200) {
         await this.git(workspace, workspace.workingDir, ['add', '--', ...included.slice(index, index + 200)], { ...env, GIT_LITERAL_PATHSPECS: '1' });
       }
@@ -584,10 +605,7 @@ export class FloorService {
       const excludePath = workspace.runtimeKind === 'wsl' && location.startsWith('/')
         ? wslHostPath(workspace.wslDistribution!, location)
         : resolve(workspace.workingDir, location);
-      const current = await readFile(excludePath, 'utf8').catch(error => {
-        if (error.code === 'ENOENT') return '';
-        throw error;
-      });
+      const current = await readWorkspaceTextFile(excludePath);
       const next = updateOrkestraiGitExclude(current);
       if (next !== current) {
         await mkdir(dirname(excludePath), { recursive: true });
@@ -839,12 +857,12 @@ export class FloorService {
     }
     await assertFreeDisk(workspace.workingDir, DISK_LIMITS.floorCreate, 'criar um andar');
 
-    if (input.existingBranch && (await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', '--full-tree', branch])).split('\0').some(isInternalStatePath)) {
+    if (input.existingBranch && (await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-z', '--name-only', '--full-tree', branch])).split('\0').some(isFloorRuntimePath)) {
       throw new Error('FLOOR_INTERNAL_DATA: This branch contains internal Orkestrai data. Create a new Floor from the main checkout to exclude it safely. The existing branch and files were preserved.');
     }
     const base = input.existingBranch ? null : await this.workingTreeBase(workspace);
     const tree = await this.git(workspace, workspace.workingDir, ['ls-tree', '-r', '-l', '-z', '--full-tree', base?.commit ?? branch]);
-    const checkoutBytes = tree.split('\0').reduce((total, record) => total + Number(record.match(/^\d+ blob [a-f0-9]+\s+(\d+)\t/)?.[1] ?? 0), 0);
+    const checkoutBytes = treeEntries(tree).reduce((total, entry) => total + entry.bytes, 0);
     await assertFreeDisk(workspace.workingDir, Math.max(DISK_LIMITS.floorCreate, checkoutBytes + DISK_LIMITS.heavyRun), 'materializar os arquivos do andar');
     const args = input.existingBranch
       ? ['worktree', 'add', floorPath, branch]

@@ -23,6 +23,8 @@ describe('bridge git excludes', () => {
     const next = updateOrkestraiGitExclude(current);
 
     expect(next).toContain('.orkestrai/');
+    expect(next.split(/\r?\n/)).not.toContain('.orkestrai/');
+    expect(next).toContain('!**/.orkestrai/roles/');
     expect(next).not.toContain('.mcp.json');
     expect(next).not.toContain('AGENTS.md');
     expect(next).toContain('\r\n');
@@ -32,5 +34,22 @@ describe('bridge git excludes', () => {
     const current = '# mine\nAGENTS.md\n';
     const next = updateOrkestraiGitExclude(current);
     expect(next).toContain('# mine\nAGENTS.md\n');
+  });
+
+  it('keeps independent owner-wide exclusions and is idempotent', () => {
+    const owner = '# Explicit owner exclusions\n.orkestrai/\nAGENTS.md\n';
+    const next = updateOrkestraiGitExclude(owner);
+    expect(next).toContain(owner);
+    expect(updateOrkestraiGitExclude(next)).toBe(next);
+  });
+
+  it('migrates the old generated-only block without removing adjacent owner rules', () => {
+    const owner = '# Owner\nprivate-art/\n';
+    const old = '.orkestrai/\n.claude/skills/orkestrai/\n.cline/skills/orkestrai/\n.devin/skills/orkestrai/\n.agents/skills/orkestrai/\n';
+    const next = updateOrkestraiGitExclude(owner + old + 'secrets.local\n');
+    expect(next).toContain(owner);
+    expect(next).toContain('secrets.local\n');
+    expect(next.split('\n')).not.toContain('.orkestrai/');
+    expect(next).toContain('!**/.orkestrai/designs/');
   });
 });
