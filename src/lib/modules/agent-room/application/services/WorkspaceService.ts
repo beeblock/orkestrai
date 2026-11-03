@@ -1,6 +1,6 @@
 import { uuidv7 } from '@beeblock/svelar/support';
-import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
-import { access, readFile, stat } from 'node:fs/promises';
+import { constants as fsConstants, existsSync } from 'node:fs';
+import { access, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, posix, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
@@ -31,6 +31,7 @@ import { workspaceGroupService } from './WorkspaceGroupService.js';
 import { agentLearningService } from './AgentLearningService.js';
 import { attentionService } from './AttentionService.js';
 import { CreateWorkspaceDto } from '../dto/WorkspaceDtos.js';
+import { readWorkspaceTextFile } from '../../infrastructure/WorkspaceTextFile.js';
 import type {
   CreateCanvasEdgeDto,
   ChangeTerminalProviderDto,
@@ -181,9 +182,9 @@ export class WorkspaceService {
     const bridgeRuntime = await this.preferredBridgeRuntime(workspace);
     const cliEntry = process.env.ORKESTRAI_CLI_JS ?? resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
     const [skillCurrent, hasConfig, agentsMdCurrent, hasWslLauncher] = await Promise.all([
-      readFile(skillPath, 'utf8').then((content) => content === bridgeService.bridgeDiscoveryContent()).catch(() => false),
+      readWorkspaceTextFile(skillPath).then((content) => content === bridgeService.bridgeDiscoveryContent()).catch(() => false),
       access(resolve(workspace.workingDir, '.orkestrai', 'workspace.json')).then(() => true).catch(() => false),
-      readFile(resolve(workspace.workingDir, 'AGENTS.md'), 'utf8').catch(() => ''),
+      readWorkspaceTextFile(resolve(workspace.workingDir, 'AGENTS.md')).catch(() => ''),
       bridgeRuntime?.kind === 'wsl'
         ? readFile(resolve(workspace.workingDir, '.orkestrai', 'bin', 'orkestrai'), 'utf8')
             .then((content) => content.includes('orkestrai:wsl-console-launcher-v2') && content.includes(cliEntry))
@@ -211,7 +212,7 @@ export class WorkspaceService {
       wslDistribution: dto.wslDistribution,
       wslWorkingDir: dto.wslWorkingDir,
     });
-    const workingDir = this.assertWorkingDir(resolvedRuntime.workingDir);
+    const workingDir = await this.assertWorkingDir(resolvedRuntime.workingDir);
     const workspace = await workspaceRepository.createWorkspace({
       name: dto.name,
       workingDir,
@@ -222,11 +223,11 @@ export class WorkspaceService {
       wslWorkingDir: resolvedRuntime.runtime.kind === 'wsl' ? resolvedRuntime.runtime.linuxWorkingDir : null,
       syncAgentInstructionFiles: dto.syncAgentInstructionFiles,
       hooks: dto.hooks,
-      repositoryRoots: this.assertRepositoryRoots(dto.repositoryRoots),
+      repositoryRoots: await this.assertRepositoryRoots(dto.repositoryRoots),
       codeIntelligenceMode: dto.codeIntelligenceMode,
       groupId: dto.groupId,
     });
-    this.writeInstructionFiles(workspace);
+    await this.writeInstructionFiles(workspace);
     // Provisiona a ponte (token + skill) ja no nascimento do workspace:
     // qualquer agente criado depois nasce sabendo usar a CLI orkestrai,
     // sem o usuario precisar conectar nada antes (fluxo zero-config).
@@ -246,10 +247,10 @@ export class WorkspaceService {
       wslDistribution: dto.changes.wslDistribution === undefined ? existing.wslDistribution : dto.changes.wslDistribution,
       wslWorkingDir: dto.changes.wslWorkingDir === undefined ? existing.wslWorkingDir : dto.changes.wslWorkingDir,
     });
-    const workingDir = this.assertWorkingDir(resolvedRuntime.workingDir);
+    const workingDir = await this.assertWorkingDir(resolvedRuntime.workingDir);
     const repositoryRoots = dto.changes.repositoryRoots === undefined
       ? existing.repositoryRoots
-      : this.assertRepositoryRoots(dto.changes.repositoryRoots);
+      : await this.assertRepositoryRoots(dto.changes.repositoryRoots);
     const runtimeChanged =
       existing.runtimeKind !== resolvedRuntime.runtime.kind ||
       existing.workingDir !== workingDir ||
@@ -272,7 +273,7 @@ export class WorkspaceService {
     if (!workspace) throw new Error('Workspace nao encontrado.');
     if (codeIntelligenceModeChanged) await codeGraphIndexService.applyWorkspaceMode(workspace);
     if (runtimeChanged || repositoryRootsChanged) this.provisionChecked.delete(id);
-    this.writeInstructionFiles(workspace, existing.instructions);
+    await this.writeInstructionFiles(workspace, existing.instructions);
     if (runtimeChanged || repositoryRootsChanged) await this.reprovisionBridge(workspace);
     else await this.ensureProvisioned(workspace);
     return workspace;
@@ -1083,49 +1084,51 @@ export class WorkspaceService {
     return true;
   }
 
-  private assertWorkingDir(dir: string): string {
+  private async assertWorkingDir(dir: string): Promise<string> {
     const resolved = resolve(dir.trim());
-    if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+    if (!(await stat(resolved).catch(() => null))?.isDirectory()) {
       throw new Error(`Diretorio de trabalho nao existe: ${resolved}`);
     }
     return resolved;
   }
 
-  private assertRepositoryRoots(roots: WorkspaceRepositoryRoot[] | undefined): WorkspaceRepositoryRoot[] {
+  private async assertRepositoryRoots(roots: WorkspaceRepositoryRoot[] | undefined): Promise<WorkspaceRepositoryRoot[]> {
     const paths = new Set<string>();
     const aliases = new Set<string>();
-    return (roots ?? []).map((root) => {
+    return Promise.all((roots ?? []).map(async (root) => {
       const alias = root.alias.trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,47}$/.test(alias)) throw new Error(`Invalid repository alias: ${root.alias}`);
       if (aliases.has(alias)) throw new Error(`Repository alias is registered more than once: @${alias}`);
       aliases.add(alias);
-      const path = realpathSync(resolve(root.path.trim()));
-      if (!statSync(path).isDirectory()) throw new Error(`Additional repository is not a directory: ${path}`);
+      const path = await realpath(resolve(root.path.trim()));
+      if (!(await stat(path)).isDirectory()) throw new Error(`Additional repository is not a directory: ${path}`);
       if (paths.has(path)) throw new Error(`Additional repository is registered more than once: ${path}`);
       paths.add(path);
       return { alias, path };
-    });
+    }));
   }
 
   /** Keeps workspace instructions in a bounded block without replacing user files. */
-  private writeInstructionFiles(workspace: Workspace, legacyInstructions?: string | null) {
+  private async writeInstructionFiles(workspace: Workspace, legacyInstructions?: string | null) {
     const instructions = workspace.instructions?.trim() || null;
     try {
       const agentsPath = resolve(workspace.workingDir, 'AGENTS.md');
-      const currentAgents = existsSync(agentsPath) ? readFileSync(agentsPath, 'utf8') : '';
-      const nextAgents = mergeInstructionFile(currentAgents, instructions, legacyInstructions?.trim() || null);
-      if (nextAgents !== currentAgents) writeFileSync(agentsPath, nextAgents);
-
       const claudePath = resolve(workspace.workingDir, 'CLAUDE.md');
-      const currentClaude = existsSync(claudePath) ? readFileSync(claudePath, 'utf8') : '';
+      const [currentAgents, currentClaude] = await Promise.all([
+        readWorkspaceTextFile(agentsPath), readWorkspaceTextFile(claudePath),
+      ]);
+      const nextAgents = mergeInstructionFile(currentAgents, instructions, legacyInstructions?.trim() || null);
       const nextClaude = mergeInstructionFile(
         currentClaude,
         workspace.syncAgentInstructionFiles ? instructions : null,
         legacyInstructions?.trim() || null,
       );
-      if (nextClaude !== currentClaude) writeFileSync(claudePath, nextClaude);
+      if (nextAgents !== currentAgents) await writeFile(agentsPath, nextAgents);
+      if (nextClaude !== currentClaude) await writeFile(claudePath, nextClaude);
     } catch {
-      // Diretorio sem permissao de escrita nao bloqueia o workspace.
+      // Keep owner content on unsupported/slow/unreadable files. Never retry
+      // an unsafe read as an empty file and overwrite their instructions.
+      console.warn(`[workspace] Instruction-file synchronization did not complete for ${workspace.id}.`);
     }
   }
 }

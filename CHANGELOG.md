@@ -8,6 +8,7 @@ pt-BR, English, and Spanish translations.
 ## Unreleased
 
 ### Fixed
+- Validate workspace folders/repository roots and synchronize instruction files asynchronously. Bound instruction reads to regular UTF-8 text files up to 1 MiB, preserve unsupported existing content and keep other workspaces responsive during slow filesystem reads, independently of Code Intelligence.
 - Prevent internal Orkestrai state and nested Floors from entering new Floor snapshots, including contaminated tracked trees. Resolve Git exclusions through the actual metadata directory, preserve the owner index/files, reject unsafe explicitly selected branches before checkout and reserve total snapshot/checkout space before materialization. Omit known Unity root caches from new snapshots without discarding authored game source or generated artwork.
 - Keep incremental graph relationship lookups bounded to affected files instead of walking every relationship in the stored revision. Preserve revision/workspace isolation, fileless relationships and caller rebinding across batches.
 - Exclude Unity-generated root caches (Library, Temp, obj, Logs and UserSettings) from both Code Intelligence scanning and file watching, while preserving authored Assets/Packages and similarly named folders in other projects.

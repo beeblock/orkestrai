@@ -21,6 +21,7 @@ import { getAgentAdapter, hasAgentAdapter, listAgentAdapters, materializeInterac
 import { nativeNotificationService, type NativeNotificationKind } from './NativeNotificationService.js';
 import { channelService } from './ChannelService.js';
 import { filesystemService } from './FilesystemService.js';
+import { readWorkspaceTextFile } from '../../infrastructure/WorkspaceTextFile.js';
 import { postedImagePaths } from '../../domain/channels.js';
 import { defaultShell } from '../../infrastructure/workspace.js';
 import { FIGMA_MCP_URL, repairLegacyCodexMcpConfig } from '../../infrastructure/codex-mcp-config.js';
@@ -2255,11 +2256,7 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
   }
 
   private async readText(path: string): Promise<string> {
-    try {
-      return await readFile(path, 'utf8');
-    } catch {
-      return '';
-    }
+    return readWorkspaceTextFile(path);
   }
 
   private async writeBridgeConfig(workspace: Workspace, token: string, apiUrl?: string): Promise<void> {
