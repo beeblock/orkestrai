@@ -313,8 +313,9 @@ describe('FloorService', () => {
     expect(git(dir, ['log', '--oneline'])).not.toContain('snapshot');
   });
 
-  it('never copies tracked internal state or nested Floors from a clean HEAD into a new snapshot', async () => {
+  it.each(['true', 'false'])('never copies tracked internal state or nested Floors from a clean HEAD into a new snapshot (autocrlf=%s)', async (autocrlf) => {
     const dir = makeRepo();
+    git(dir, ['config', 'core.autocrlf', autocrlf]);
     for (const path of ['.orkestrai/floors/old/game/generated/art.png', 'game/.orkestrai/floors/nested/build/game.bin']) {
       mkdirSync(join(dir, path, '..'), { recursive: true });
       writeFileSync(join(dir, path), 'Existing owner artifact; do not delete.');
@@ -330,7 +331,9 @@ describe('FloorService', () => {
 
     expect(existsSync(join(floor.path, '.orkestrai'))).toBe(false);
     expect(existsSync(join(floor.path, 'game/.orkestrai'))).toBe(false);
-    expect(readFileSync(join(floor.path, 'app.ts'), 'utf8')).toBe('const v = 1;\n');
+    // Checkout follows Git's LF/CRLF policy; the canonical source must match.
+    expect(git(floor.path, ['hash-object', '--path=app.ts', 'app.ts']).trim())
+      .toBe(git(dir, ['rev-parse', `${head.trim()}:app.ts`]).trim());
     expect(git(dir, ['rev-parse', 'HEAD'])).toBe(head);
     expect(git(dir, ['ls-files', '--stage'])).toBe(index);
     expect(readFileSync(join(dir, '.orkestrai/floors/old/game/generated/art.png'), 'utf8')).toContain('Existing owner artifact');

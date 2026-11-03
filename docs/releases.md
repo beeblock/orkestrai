@@ -255,6 +255,8 @@ Desde a 0.51.2, o job Windows também executa as políticas de snapshot, exclus�
 Git, leitura limitada de instruções e abertura assíncrona de pastas. Casos com
 Git nativo verificam estado interno já rastreado, checkouts vinculados, conteúdo
 portátil preservado, workspaces em subpastas e orçamento de disco. Esses gates
+comparam o conteúdo canônico do Git com `core.autocrlf` ligado e desligado,
+preservando a política de LF/CRLF de cada repositório. Eles
 complementam os testes Linux; não substituem reproduzir o projeto afetado no
 Windows nem autorizam apagar andares antigos com trabalho pendente.
 
