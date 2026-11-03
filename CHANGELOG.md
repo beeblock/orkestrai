@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.51.2 - 2026-11-03
 
 ### Fixed
 - Count modified tracked files relative to the selected workspace subdirectory when estimating snapshot space, so nested projects cannot bypass the pre-staging disk check. Preserve the owner files and index when space is insufficient.

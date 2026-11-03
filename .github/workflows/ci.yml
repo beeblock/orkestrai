@@ -75,6 +75,12 @@ jobs:
       - name: Verify Windows workspace startup under slow filesystem probes
         run: npm test -- --run tests/feature/role-service.test.ts tests/unit/pty-ws.test.ts tests/unit/codex-mcp-config.test.ts --testNamePattern "loads and materializes|shares a slow catalog|keeps both viewers connected|canonicalizes only native trust" --maxWorkers=2 --testTimeout=20000
 
+      - name: Verify bounded workspace files and snapshot policies on Windows
+        run: npm test -- --run tests/unit/floor-snapshot-policy.test.ts tests/unit/bridge-git-exclude.test.ts tests/unit/workspace-text-file.test.ts tests/unit/code-graph-source-policy.test.ts tests/feature/workspace-folder-availability.test.ts --maxWorkers=2 --testTimeout=20000
+
+      - name: Verify native Git Floor snapshot containment on Windows
+        run: npm test -- --run tests/feature/floor-service.test.ts --testNamePattern "tracked internal state|untracked internal data|selected checkout has a .git file|preserves tracked roles|new portable definitions|branch with portable definitions|workspace points at a subdirectory|modified tracked bytes relative|tracked checkout size" --maxWorkers=2 --testTimeout=20000
+
       - name: Verify repeated and concurrent native Portal screenshots
         id: portal_capture
         run: node scripts/run-electron-lifecycle.mjs scripts/test-portal-capture-lifecycle.cjs

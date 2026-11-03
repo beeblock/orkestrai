@@ -251,6 +251,13 @@ versão de codec. O cache persistente não deve reaproveitar análise incompatí
 A CI obrigatória do mesmo SHA da release executa os testes abaixo; não remova
 esses casos nem flexibilize limites para contornar uma falha de publicação.
 
+Desde a 0.51.2, o job Windows também executa as políticas de snapshot, exclusões
+Git, leitura limitada de instruções e abertura assíncrona de pastas. Casos com
+Git nativo verificam estado interno já rastreado, checkouts vinculados, conteúdo
+portátil preservado, workspaces em subpastas e orçamento de disco. Esses gates
+complementam os testes Linux; não substituem reproduzir o projeto afetado no
+Windows nem autorizam apagar andares antigos com trabalho pendente.
+
 - `tests/feature/workspace-leadership.test.ts` e
   `tests/unit/orkestrai-cli-leadership.test.ts`: transição persistente sem trocar
   conta/conversa/modelo, identidade real dos revisores, aceite independente dos

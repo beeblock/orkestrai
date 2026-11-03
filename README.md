@@ -275,6 +275,11 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   and changes nothing on conflict. Landing records a commit containing only
   that Floor's paths. Failed hooks preserve the Floor for retry; automatic
   retirement preserves local data and active work.
+  New snapshots omit nested Floor/review checkouts and generated bridge runtime
+  files, including state already tracked by older snapshots. Versioned roles,
+  skills, native designs and authored artwork stay available. Disk checks account
+  for snapshot and checkout size; existing branches with nested runtime state
+  are preserved and rejected before copying.
 - **Automatic leader supervision:** the Core checks every 15 seconds for
   unarchived `todo`/`doing` cards and a live, idle workspace leader with an
   empty inbox. After two quiet minutes and a completed provider turn, it
@@ -1015,6 +1020,13 @@ components and downloaded models remain subject to the licenses listed in
 Code indexing uses a private worker and a separate embedded SQLite database; conversations and task delivery retain their own connection and transaction gate. Interactive reads use a committed graph snapshot while refreshes run. Source excerpts require a bounded file read matching the indexed hash; changed files are omitted until the matching revision is available. No additional server, Python installation, model download or graph-engine binary is required. Explicit indexing still waits for completion. An agent query made before the first committed graph receives `graph_preparing` promptly and can continue with bounded file search. Unchanged files reuse a parser cache capped at 128 MiB across workspaces. Semantic searches reuse a derived accelerator capped at 128 MiB decoded (64 MiB compressed across workspaces), with identical vector scoring and a paged fallback; the analysis worker exits after 30 seconds idle.
 
 Open **Usage and performance** in the Code Graph header, or run `orkestrai graph metrics` / MCP `code_graph_metrics`. Counters distinguish agent and owner queries, report latency buckets and estimated context returned, and retain up to 30 days from this update. Estimated context is not measured token savings. Query text, prompts, credentials and source bodies are not telemetry.
+
+Incremental relationship lookups use affected file IDs rather than scanning the
+whole stored revision. Unity projects omit generated root caches (`Library`,
+`Temp`, `obj`, `Logs`, `UserSettings`) from code scanning, file watching and new
+Floor snapshots. Authored `Assets`, `Packages` and approved generated artwork
+are preserved. Folder validation and instruction synchronization use asynchronous,
+bounded file reads independently of whether Code Intelligence is enabled.
 
 The first boot moves verified graph data to `<database>.code-graph.sqlite` before compacting the retired primary rows. Migration failure preserves the original data and does not prevent conversations from opening. Future migration backups are a pair: restore the main `.bak-<timestamp>` together with the matching `.code-graph.sqlite.bak-<timestamp>`. New history shares unchanged chunks instead of copying the entire graph every revision; retained legacy history is preserved.
 
