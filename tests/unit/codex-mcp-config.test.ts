@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { tmpdir } from 'node:os';
 import { parse } from 'smol-toml';
 import {
   codexMcpLaunchForRuntime,
@@ -9,6 +13,19 @@ import {
 } from '$lib/modules/agent-room/infrastructure/codex-mcp-config.js';
 
 describe('configuracao MCP do Codex', () => {
+  it('canonicalizes only native trust paths asynchronously and leaves guest paths in the WSL namespace', async () => {
+    const physical = await fsp.realpath(tmpdir());
+    const sync = vi.spyOn(fs, 'realpathSync');
+    const async = vi.spyOn(fsp, 'realpath');
+    syncBuiltinESMExports();
+    try {
+      expect(await codexWorkspaceTrustOverrideArgs(tmpdir(), true)).toEqual(['-c', `projects={${JSON.stringify(physical)}={trust_level="trusted"}}`]);
+      expect(sync).not.toHaveBeenCalled();
+      async.mockClear();
+      expect(await codexWorkspaceTrustOverrideArgs('/home/worker/game', true, true)).toEqual(['-c', 'projects={"/home/worker/game"={trust_level="trusted"}}']);
+      expect(async).not.toHaveBeenCalled();
+    } finally { sync.mockRestore(); async.mockRestore(); syncBuiltinESMExports(); }
+  });
   const windowsLaunch = {
     command: 'C:\\Program Files\\Orkestrai\\Orkestrai.exe',
     args: ['C:\\Program Files\\Orkestrai\\resources\\app\\packages\\orkestrai-cli\\bin\\orkestrai.js', 'mcp'],
@@ -87,16 +104,16 @@ describe('configuracao MCP do Codex', () => {
     });
   });
 
-  it('confia somente o workspace exato em launches Codex de acesso total', () => {
-    expect(codexWorkspaceTrustOverrideArgs('C:\\Users\\Raoni\\project', true)).toEqual([
+  it('confia somente o workspace exato em launches Codex de acesso total', async () => {
+    expect(await codexWorkspaceTrustOverrideArgs('C:\\Users\\Raoni\\project', true)).toEqual([
       '-c',
       'projects={"C:\\\\Users\\\\Raoni\\\\project"={trust_level="trusted"}}',
     ]);
-    expect(codexWorkspaceTrustOverrideArgs('/home/raoni/project', true)).toEqual([
+    expect(await codexWorkspaceTrustOverrideArgs('/home/raoni/project', true)).toEqual([
       '-c',
       'projects={"/home/raoni/project"={trust_level="trusted"}}',
     ]);
-    expect(codexWorkspaceTrustOverrideArgs('/home/raoni/project', false)).toEqual([]);
+    expect(await codexWorkspaceTrustOverrideArgs('/home/raoni/project', false)).toEqual([]);
   });
 
 });

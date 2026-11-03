@@ -16,6 +16,7 @@ import { workspaceRepository } from '../../infrastructure/repositories/Workspace
 import { agentInboxService } from './AgentInboxService.js';
 import { attentionService } from './AttentionService.js';
 import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
+import { modelFromArgs } from '../../domain/agent-model.js';
 
 export type ChannelAgent = { id: string; title: string; maestro: boolean };
 export type ChannelSummary = {
@@ -114,8 +115,21 @@ function envelopeMessage(envelope: AgentMessageEnvelope): ChannelMessage {
  * boundary); agents post and ask the owner through the bridge.
  */
 export class ChannelService {
+  private bridgeRepairWarnings = new Map<string, number>();
+
+  private prepareBridge(workspaceId: string): void {
+    // Preserve lazy repair for older workspaces without coupling stored Chat
+    // history to a slow/protected working directory. WorkspaceService coalesces I/O.
+    void import('./WorkspaceService.js').then(({ workspaceService }) => workspaceService.get(workspaceId)).catch(() => {
+      const now = Date.now();
+      if (now - (this.bridgeRepairWarnings.get(workspaceId) ?? 0) < 60_000) return;
+      this.bridgeRepairWarnings.set(workspaceId, now);
+      while (this.bridgeRepairWarnings.size > 128) this.bridgeRepairWarnings.delete(this.bridgeRepairWarnings.keys().next().value!);
+      console.warn('[agent-chat] Workspace bridge preparation failed; conversation reads remain available.');
+    });
+  }
   async agents(workspaceId: string): Promise<ChannelAgent[]> {
-    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const nodes = await workspaceRepository.listTerminalNodes(workspaceId);
     return nodes
       .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
       .map((node) => ({ id: node.id, title: node.title ?? 'agente', maestro: Boolean((node.payload as TerminalNodePayload).maestro) }));
@@ -129,12 +143,25 @@ export class ChannelService {
     return { agents, directNodeId: nodeId };
   }
 
-  async listChannels(workspaceId: string): Promise<{ channels: ChannelSummary[] }> {
-    const [agents, latest, open] = await Promise.all([
-      this.agents(workspaceId),
+  async listChannels(workspaceId: string): Promise<{ channels: ChannelSummary[]; agents: Array<{ id: string; title: string; payload: TerminalNodePayload }> }> {
+    this.prepareBridge(workspaceId);
+    const [nodes, latest, open] = await Promise.all([
+      workspaceRepository.listTerminalNodes(workspaceId),
       channelRepository.latestByChannel(workspaceId),
       channelRepository.openQuestions(workspaceId),
     ]);
+    // Chat reads display metadata, never Canvas provisioning, role files or
+    // provider transcripts. Explicitly omit env, launch prompts and full args.
+    const agents = nodes.filter(node => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
+      .map(node => {
+        const p = node.payload as TerminalNodePayload;
+        const model = modelFromArgs(p.args);
+        return { id: node.id, title: node.title ?? 'agente', payload: {
+          provider: p.provider, role: p.role, maestro: p.maestro, deputy: p.deputy,
+          profileId: p.profileId, agentRuntimeMode: p.agentRuntimeMode,
+          args: model ? ['--model', model] : [],
+        } };
+      });
     const openByChannel = new Map<string, number>();
     // The badge counts what waits for the owner, not what the leader decides.
     for (const question of open) {
@@ -142,6 +169,7 @@ export class ChannelService {
       openByChannel.set(question.channel, (openByChannel.get(question.channel) ?? 0) + 1);
     }
     return {
+      agents,
       channels: [
         { id: TEAM_CHANNEL, kind: 'team', nodeId: null, title: TEAM_CHANNEL, last: latest.get(TEAM_CHANNEL) ?? null, openQuestions: openByChannel.get(TEAM_CHANNEL) ?? 0 },
         ...agents.map((agent): ChannelSummary => {
@@ -220,7 +248,7 @@ export class ChannelService {
     const message = await channelRepository.save({ workspaceId, channel, authorKind: 'owner', body, meta: { ...(recipients.length ? { deliverTo: recipients } : {}), ...origin } });
     broadcast(message);
     const where = directNodeId ? 'Mensagem direta do dono' : 'Mensagem do dono no canal #equipe';
-    const reply = `Responda com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post) para a resposta aparecer na Conversa.`;
+    const reply = `Responda primeiro a esta mensagem do dono com orkestrai post "<resposta>"${directNodeId ? '' : ' --channel team'} (tool MCP channel_post), antes de retomar outras atividades. Se precisar verificar algo, informe brevemente o estado já comprovado e a próxima verificação; continue o trabalho depois de responder na Conversa.`;
     const delivered = await Promise.all(recipients.map(async (nodeId) => ({
       nodeId,
       ok: await this.deliver(workspaceId, nodeId, `${where}: ${body}${noteFor(nodeId)} -- ${reply}`, `channel:${message.id}:${nodeId}`, { channel, channelMessageId: message.id }),

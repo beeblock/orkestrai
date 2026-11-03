@@ -1,6 +1,6 @@
 import { uuidv7 } from '@beeblock/svelar/support';
 import { constants as fsConstants, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { isAbsolute, posix, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
@@ -355,7 +355,7 @@ export class WorkspaceService {
       const currentWorkingDir = typeof payload.currentWorkingDir === 'string' ? payload.currentWorkingDir : null;
       if (currentWorkingDir && !provider && executionRuntime.kind === 'native') {
         try {
-          if (!statSync(currentWorkingDir).isDirectory()) throw new Error('not_directory');
+          if (!(await stat(currentWorkingDir)).isDirectory()) throw new Error('not_directory');
         } catch {
           delete payload.currentWorkingDir;
           changed = true;
@@ -410,12 +410,16 @@ export class WorkspaceService {
           changed = true;
         }
       }
-      const roleName = typeof payload.role === 'string' ? payload.role : null;
-      const role = roleName ? await roleService.launchContext(workspaceId, roleName).catch(() => null) : null;
-      const materialized = materializeInteractiveAgentCommand(payload, role);
-      if (materialized.changed) {
-        payload = materialized.payload;
-        changed = true;
+      // A poll observes a live launch; it must not repeatedly scan workspace
+      // role files or rewrite the arguments of an already-running conversation.
+      if (!storedPty || storedPty.exited) {
+        const roleName = typeof payload.role === 'string' ? payload.role : null;
+        const role = roleName ? await roleService.launchContext(workspaceId, roleName).catch(() => null) : null;
+        const materialized = materializeInteractiveAgentCommand(payload, role);
+        if (materialized.changed) {
+          payload = materialized.payload;
+          changed = true;
+        }
       }
       if (!changed) return node;
       return (await workspaceRepository.updateNode(node.id, { payload: payload as never })) ?? node;

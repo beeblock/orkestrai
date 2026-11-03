@@ -5240,6 +5240,7 @@
   "chat.load_older": "Load earlier messages",
   "chat.loading": "Loading the conversation…",
   "chat.load_error": "Could not load the conversation.",
+  "chat.load_retry": "Try again",
   "chat.no_workspace": "Create a workspace to talk with a team.",
   "chat.empty_team": "The team channel is quiet",
   "chat.empty_team_hint": "Agents post progress and questions here, and their conversations with each other show up as they happen.",

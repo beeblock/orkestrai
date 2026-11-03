@@ -5240,6 +5240,7 @@
   "chat.load_older": "Carregar mensagens anteriores",
   "chat.loading": "Carregando a conversa…",
   "chat.load_error": "Não foi possível carregar a conversa.",
+  "chat.load_retry": "Tentar novamente",
   "chat.no_workspace": "Crie um workspace para conversar com uma equipe.",
   "chat.empty_team": "O canal da equipe está quieto",
   "chat.empty_team_hint": "Os agentes postam progresso e perguntas aqui, e as conversas entre eles aparecem conforme acontecem.",

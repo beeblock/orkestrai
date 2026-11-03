@@ -381,7 +381,10 @@ export class ControlCenterRepository {
     const legacy = base().whereIn('kind', ['task', 'task_recovery']);
     if (selection.known.length) legacy.whereNotIn('correlation_id', correlations(selection.known));
     const pages = await Promise.all([
-      base().whereNotIn('kind', ['task', 'task_recovery']).get(),
+      // Fetch owner input separately: sorting only after the non-task LIMIT
+      // hid a newer owner message behind fifty older colleague updates.
+      base().where('kind', 'owner').get(),
+      base().whereNotIn('kind', ['task', 'task_recovery', 'owner']).get(),
       selection.ready.length ? base().where('kind', 'task').whereIn('correlation_id', correlations(selection.ready)).get() : [],
       selection.recovery.length ? base().where('kind', 'task_recovery').whereIn('correlation_id', correlations(selection.recovery)).get() : [],
       legacy.get(),

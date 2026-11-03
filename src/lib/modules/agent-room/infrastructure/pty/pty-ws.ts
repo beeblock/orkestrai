@@ -19,11 +19,12 @@
  *   S->C {type:'list', sessions}
  *   S->C {type:'error', code?, message}
  */
-import { existsSync, statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import { homedir } from 'node:os';
 import { profileTransitions } from './ProfileTransitions.ts';
+import { agentEnvAsync, normalizeWindowsPath, resolveCommandAsync } from '../agent-path.ts';
 import { agentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import type { WebSocket } from 'ws';
 import { ptySessionManager } from './PtySessionManager.ts';
@@ -114,12 +115,12 @@ export function isAllowedPtyWsOrigin(origin: string | undefined, host: string | 
   }
 }
 
-function resolveCwd(cwd: unknown): string {
+async function resolveCwd(cwd: unknown): Promise<string> {
   if (typeof cwd !== 'string' || !cwd.trim()) {
     throw new Error('Informe um diretório de trabalho (cwd) para a sessão PTY.');
   }
   const resolved = cwd.trim();
-  if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+  if (!(await stat(resolved).catch(() => null))?.isDirectory()) {
     throw new Error(`Diretório de trabalho não existe: ${resolved}`);
   }
   return resolved;
@@ -251,7 +252,7 @@ export function handlePtyConnection(socket: WebSocket): void {
           // owned by this node instead of starting the same conversation twice.
           if (reuseLiveNodeSession()) break;
 
-          const resolvedCwd = resolveCwd(message.cwd);
+          const resolvedCwd = await resolveCwd(message.cwd);
           const wslContext: WslTrackingContext | null = message.runtime?.kind === 'wsl'
             ? await preflightWslLaunch({
                 runtime: message.runtime,
@@ -266,9 +267,10 @@ export function handlePtyConnection(socket: WebSocket): void {
             ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
             : [];
           const codexTrustArgs = message.provider === 'codex'
-            ? codexWorkspaceTrustOverrideArgs(
+            ? await codexWorkspaceTrustOverrideArgs(
                 wslContext?.linuxWorkingDir ?? resolvedCwd,
                 messageArgs.includes('--dangerously-bypass-approvals-and-sandbox'),
+                runtime.kind === 'wsl',
               )
             : [];
           let profileEnv: Record<string, string> = {};
@@ -288,6 +290,11 @@ export function handlePtyConnection(socket: WebSocket): void {
                 wslContext?.homeHostPath ?? homedir(), runtime.kind === 'wsl' ? posix.normalize : null, roots)
             : agentSessionTracker;
           if (resumedSessionId) tracker.claim(resumedSessionId);
+
+          const preparedAgentEnvironment = await agentEnvAsync();
+          const resolvedNativeCommand = runtime.kind === 'native'
+            ? await resolveCommandAsync(message.command.trim(), [], { ...preparedAgentEnvironment, ...normalizeWindowsPath({ ...message.env, ...profileEnv }) })
+            : undefined;
 
           // Profile lookup/preflight yields. A stale reconnect must never retire
           // the replacement process that another account change just started.
@@ -315,6 +322,8 @@ export function handlePtyConnection(socket: WebSocket): void {
           const trackingStartedAt = Date.now();
           const session = ptySessionManager.create({
             command: message.command.trim(),
+            resolvedNativeCommand: resolvedNativeCommand ? { forCommand: message.command.trim(), ...resolvedNativeCommand } : undefined,
+            preparedAgentEnvironment,
             args: [
               ...messageArgs,
               ...providerArgs,

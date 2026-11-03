@@ -15,6 +15,7 @@ import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager, type PtySessionInfo } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import * as transcript from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
+import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
 
 type FakeSession = PtySessionInfo & { ready: boolean };
 
@@ -76,6 +77,23 @@ describe('Agent inbox', () => {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
     agentInboxService.reset();
     vi.restoreAllMocks();
+  });
+
+  it('finds owner input beyond fifty older non-task messages before applying the claim limit', async () => {
+    const { workspace, nodes } = await team();
+    const created = new Date(Date.now() - 60_000).toISOString();
+    const ownerId = uuidv7();
+    await AgentMessageEnvelope.query().insertMany([
+      ...Array.from({ length: 55 }, (_, i) => ({ id: uuidv7(), workspace_id: workspace.id,
+        from_node_id: nodes.Web, to_node_id: nodes.Lider, kind: 'reply', state: 'queued', content: `Older update ${i}`,
+        content_hash: `reply-${i}`, metadata_json: JSON.stringify({ inbox: true }), created_at: created, updated_at: created })),
+      { id: ownerId, workspace_id: workspace.id, from_node_id: null, to_node_id: nodes.Lider,
+        kind: 'owner', state: 'queued', content: 'Please answer the owner first', content_hash: 'owner-late',
+        metadata_json: JSON.stringify({ inbox: true }), created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    ]);
+    const claimed = await agentInboxService.claim(workspace.id, nodes.Lider, 1);
+    expect(claimed.items.map(item => item.messageId)).toEqual([ownerId]);
+    expect(claimed.remaining).toBe(55);
   });
 
   it('drains the owner queue after a managed tool-only turn ends, without terminal input', async () => {

@@ -5,9 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.51.1 - 2026-11-03
 
 ### Fixed
+- Open Conversation from a read-only agent projection without waiting for Canvas preparation, saved-role files, routines or external channel bindings. Time out failed reads with a retry action while preserving visible history.
+- Keep the Conversation message feed alive with heartbeats, reconnect silent sockets and reload stored messages independently of workspace metadata after reconnect, foreground return or a missed notification.
+- Prepare terminal directories, native PATH/registry lookups, Codex trust paths and saved roles asynchronously before the final session/profile ownership check. Keep logical command identity, arguments and account isolation intact, coalesce concurrent role reads and avoid rewriting live launch settings during polling.
+- Fetch queued owner messages before applying the colleague-message page limit, so fifty older updates cannot hide newer owner input. Prioritize a direct reply to the owner before resuming coordination without introducing automatic reminder turns.
 - Keep live agent activity aligned with the exact provider turn instead of marking a quiet terminal idle after 2.5 seconds. Reconcile silent completions in the background with bounded asynchronous reads, preserve explicit blockers and replacement sessions, and leave composer admission independent of the activity label.
 - Recognize ongoing Codex reasoning and tool work when the original turn-start record has fallen outside the bounded transcript tail, without treating settings or usage records as new work.
 

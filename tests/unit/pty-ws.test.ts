@@ -1,4 +1,9 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handlePtyConnection, isAllowedPtyWsOrigin, MAX_PTY_SOCKET_BUFFER_BYTES, sendPtyFrame } from '$lib/modules/agent-room/infrastructure/pty/pty-ws.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
@@ -17,6 +22,57 @@ class FakeSocket extends EventEmitter {
 }
 
 describe('PTY WebSocket protocol', () => {
+  it('keeps both viewers connected and starts a healthy terminal while another directory probe is stalled', async () => {
+    const dir = fs.mkdtempSync(join(tmpdir(), 'orkestrai-slow-pty-cwd-'));
+    const slow = new FakeSocket(), healthy = new FakeSocket();
+    handlePtyConnection(slow as never); handlePtyConnection(healthy as never);
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const original = fsPromises.stat;
+    let probing = false;
+    const probe = vi.spyOn(fsPromises, 'stat').mockImplementation(async (...args: Parameters<typeof original>) => {
+      if (args[0] === dir) { probing = true; await barrier; }
+      return original(...args);
+    });
+    syncBuiltinESMExports();
+    const command = process.platform === 'win32' ? 'cmd.exe' : '/bin/cat';
+    try {
+      slow.emit('message', JSON.stringify({ type: 'create', command, cwd: dir }));
+      await vi.waitFor(() => expect(probing).toBe(true));
+      for (const socket of [slow, healthy]) {
+        socket.emit('message', JSON.stringify({ type: 'ping' }));
+        expect(socket.frames).toContainEqual({ type: 'pong' });
+      }
+      healthy.emit('message', JSON.stringify({ type: 'create', command, cwd: tmpdir() }));
+      await vi.waitFor(() => expect(healthy.frames.some(frame => frame.type === 'created')).toBe(true), { timeout: 5_000 });
+      expect(slow.frames.some(frame => frame.type === 'created')).toBe(false);
+      release();
+      await vi.waitFor(() => expect(slow.frames.some(frame => frame.type === 'created')).toBe(true), { timeout: 5_000 });
+    } finally {
+      release();
+      for (const socket of [slow, healthy]) {
+        for (const frame of socket.frames) if (frame.type === 'created') ptySessionManager.kill((frame.session as { id: string }).id);
+        socket.emit('close');
+      }
+      probe.mockRestore(); syncBuiltinESMExports(); await fsPromises.rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    }
+  });
+  it('continues serving heartbeats while validating a new terminal directory asynchronously', async () => {
+    const socket = new FakeSocket();
+    handlePtyConnection(socket as never);
+    const spies = [vi.spyOn(fs, 'existsSync'), vi.spyOn(fs, 'statSync'), vi.spyOn(fs, 'readdirSync'), vi.spyOn(fs, 'realpathSync')];
+    syncBuiltinESMExports();
+    try {
+      socket.emit('message', JSON.stringify({ type: 'create', command: '/bin/cat', cwd: '/tmp' }));
+      socket.emit('message', JSON.stringify({ type: 'ping' }));
+      expect(socket.frames).toContainEqual({ type: 'pong' });
+      await vi.waitFor(() => expect(socket.frames.some(frame => frame.type === 'created')).toBe(true));
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const frame of socket.frames) if (frame.type === 'created') ptySessionManager.kill((frame.session as { id: string }).id);
+      socket.emit('close'); spies.forEach(spy => spy.mockRestore()); syncBuiltinESMExports();
+    }
+  });
   it('disconnects a backlogged viewer before adding more output to its socket buffer', () => {
     const socket = new FakeSocket();
     socket.bufferedAmount = MAX_PTY_SOCKET_BUFFER_BYTES;

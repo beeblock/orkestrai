@@ -17,6 +17,21 @@ describe('WorkspaceService.reloadNode', () => {
   useSvelarTest({ refreshDatabase: true });
   afterEach(() => vi.restoreAllMocks());
 
+  it('does not reopen role files or rewrite launch arguments when polling a live terminal', async () => {
+    const workspace = await workspaceRepository.createWorkspace({ name: 'live launch stays fixed', workingDir: '/tmp' });
+    const node = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Live leader',
+      payload: { command: '/bin/cat', provider: 'codex', role: 'Leader', initialRoleArgs: ['original-role'], roleConfiguredAtLaunch: 'Leader' } });
+    const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', workspaceId: workspace.id, nodeId: node.id, provider: 'codex' });
+    await workspaceRepository.updateNode(node.id, { payload: { ...node.payload, sessionId: session.id } });
+    const role = vi.spyOn(roleService, 'launchContext').mockResolvedValue({ name: 'Leader', prompt: 'Updated role', instructionFile: '/tmp/role.md' });
+    try {
+      const listed = await workspaceService.listNodes(workspace.id);
+      expect(role).not.toHaveBeenCalled();
+      expect(listed.find(item => item.id === node.id)?.payload).toMatchObject({ command: '/bin/cat', sessionId: session.id, initialRoleArgs: ['original-role'] });
+      expect(ptySessionManager.get(session.id)?.exited).toBe(false);
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
   it('mata a sessao PTY e limpa o sessionId, mantendo o agentSessionId (resume)', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'reload', workingDir: '/tmp' });
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp' });

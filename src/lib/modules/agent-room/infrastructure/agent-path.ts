@@ -21,6 +21,7 @@
  */
 import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { access, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, extname, join, resolve, sep } from 'node:path';
 import { buildWslLaunch, currentWorkspaceExecutionRuntime, wslHostPath } from './WslRuntime.ts';
@@ -219,6 +220,39 @@ export function agentEnv(): Record<string, string> {
   return env;
 }
 
+let registryPathRead: Promise<string[]> | null = null;
+/** Agent startup must not probe registry, nvm or network PATH entries on the
+ * event loop that serves every viewer's WebSocket heartbeat. */
+export async function agentEnvAsync(): Promise<Record<string, string>> {
+  let registry: string[] = [];
+  if (IS_WIN) {
+    if (cachedRegistryPathDirs) registry = cachedRegistryPathDirs;
+    else {
+      registryPathRead ??= Promise.all(['HKCU\\Environment', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment'].map(root =>
+        new Promise<string>(done => execFile('reg', ['query', root, '/v', 'Path'], {
+          encoding: 'utf8', timeout: 5_000, windowsHide: true, maxBuffer: 256 * 1024,
+        }, (error, out) => done(error ? '' : out.match(/\bPath\b\s+REG(?:_EXPAND)?_SZ\s+([^\r\n]*)/i)?.[1]?.trim() ?? '')))))
+        .then(parts => cachedRegistryPathDirs = parts.filter(Boolean).join(';')
+          .replace(/%([^%]+)%/g, (whole, name) => process.env[name] ?? whole).split(';').map(part => part.trim()).filter(Boolean));
+      registry = await registryPathRead;
+    }
+  }
+  const nodeRoot = `${homedir()}/.nvm/versions/node`;
+  const bins = IS_WIN ? [] : await readdir(nodeRoot, { withFileTypes: true })
+    .then(entries => entries.filter(entry => entry.isDirectory()).map(entry => `${nodeRoot}/${entry.name}/bin`), () => []);
+  const env = normalizeWindowsPath(sanitizeAgentEnvironment(process.env));
+  env.PATH = [...new Set([env.ORKESTRAI_SHIM_DIR ?? '', ...(env.PATH ?? '').split(delimiter), ...registry, ...EXTRA_PATH_DIRS, ...bins].filter(Boolean))].join(delimiter);
+  env.ORKESTRAI_CLI_JS ||= resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
+  if (!env.ORKESTRAI_CLI) {
+    for (const dir of (env.PATH ?? '').split(delimiter).filter(Boolean)) {
+      const file = join(dir, IS_WIN ? 'orkestrai.cmd' : 'orkestrai');
+      if (await access(file).then(() => true, () => false)) { env.ORKESTRAI_CLI = file; break; }
+    }
+    if (!env.ORKESTRAI_CLI && !IS_WIN) env.ORKESTRAI_CLI = env.ORKESTRAI_CLI_JS;
+  }
+  return env;
+}
+
 /**
  * No Windows resolve um nome "nu" (claude/codex) para algo spawnavel: varre
  * PATH + PATHEXT; .exe/.com -> caminho absoluto; script (.cmd/.bat/.ps1) ->
@@ -264,6 +298,30 @@ export function resolveCommand(
   if (rext === '.exe' || rext === '.com') return { command: resolved, args };
   const comspec = env.ComSpec ?? env.COMSPEC ?? 'cmd.exe';
   return { command: comspec, args: ['/d', '/s', '/c', command, ...args] };
+}
+
+/** The Core preflights native commands asynchronously before the final spawn
+ * ownership check. PATH entries may point at a slow disk or WSL share. */
+export async function resolveCommandAsync(
+  command: string, args: string[], env: Record<string, string>, platform: NodeJS.Platform = process.platform,
+): Promise<{ command: string; args: string[] }> {
+  if (platform !== 'win32') return { command, args };
+  const exists = (path: string) => access(path).then(() => true, () => false);
+  const consoleRuntime = env.ORKESTRAI_CLI_CONSOLE_RUNTIME, cliEntry = env.ORKESTRAI_CLI_JS;
+  if (/^orkestrai(?:\.cmd)?$/i.test(command) && consoleRuntime && cliEntry
+    && await exists(consoleRuntime) && await exists(cliEntry)) return { command: consoleRuntime, args: [cliEntry, ...args] };
+  if (!/^[A-Za-z0-9._-]+$/.test(command) || /\.(exe|com)$/i.test(command)) return { command, args };
+  const pathext = (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').map(entry => entry.trim()).filter(Boolean);
+  const candidates = extname(command) ? [command] : [...pathext.map(ext => command + ext), command];
+  for (const dir of (env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    for (const candidate of candidates) {
+      const full = dir.endsWith(sep) ? `${dir}${candidate}` : `${dir}${sep}${candidate}`;
+      if (!await exists(full)) continue;
+      return ['.exe', '.com'].includes(extname(full).toLowerCase()) ? { command: full, args }
+        : { command: env.ComSpec ?? env.COMSPEC ?? 'cmd.exe', args: ['/d', '/s', '/c', command, ...args] };
+    }
+  }
+  return { command, args };
 }
 
 /** Env + comando resolvido prontos para child_process.spawn/execFile. */

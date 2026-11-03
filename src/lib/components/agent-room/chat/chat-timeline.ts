@@ -104,6 +104,14 @@ export function mergeLoaded(loaded: readonly ChannelMessage[], live: readonly Ch
   return [...loaded, ...arrived].sort(chronological);
 }
 
+/** A background repair updates receipts and adds missed messages without
+ * discarding the older pages the owner is currently reading. */
+export function mergeRefreshed(loaded: readonly ChannelMessage[], live: readonly ChannelMessage[]): ChannelMessage[] {
+  const byId = new Map(live.map(message => [message.id, message]));
+  for (const message of loaded) byId.set(message.id, message);
+  return [...byId.values()].sort(chronological);
+}
+
 /** Earlier messages added in front of the ones held, without repeats. Oldest first. */
 export function mergeOlder(older: readonly ChannelMessage[], messages: readonly ChannelMessage[]): ChannelMessage[] {
   const ids = new Set(messages.map((message) => message.id));

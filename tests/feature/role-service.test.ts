@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { roleService } from '$lib/modules/agent-room/application/services/RoleService.js';
@@ -12,6 +16,54 @@ import { LEADER_EXECUTION_CONTRACT } from '$lib/modules/agent-room/domain/leader
 
 describe('RoleService', () => {
   useSvelarTest({ refreshDatabase: true });
+
+  it('shares a slow catalog across thirty agents while another workspace and the event loop remain available', async () => {
+    const dir = await fsp.mkdtemp(join(tmpdir(), 'orkestrai-role-team-'));
+    const slow = await workspaceRepository.createWorkspace({ name: 'Slow network share', workingDir: join(dir, 'slow') });
+    const fast = await workspaceRepository.createWorkspace({ name: 'Healthy local folder', workingDir: join(dir, 'fast') });
+    for (const workspace of [slow, fast]) {
+      const path = join(workspace.workingDir, '.orkestrai', 'roles', 'qa');
+      await fsp.mkdir(path, { recursive: true });
+      await fsp.writeFile(join(path, 'role.json'), JSON.stringify({ name: 'QA', prompt: 'Verify the approved task.' }));
+    }
+    let unblock!: () => void;
+    const barrier = new Promise<void>(resolve => { unblock = resolve; });
+    const original = fsPromises.open;
+    let slowReads = 0;
+    const spy = vi.spyOn(fsPromises, 'open').mockImplementation(async (...args: Parameters<typeof original>) => {
+      if (String(args[0]).startsWith(slow.workingDir)) { slowReads++; await barrier; }
+      return original(...args);
+    });
+    syncBuiltinESMExports();
+    const requests = Array.from({ length: 30 }, () => roleService.get(slow.id, 'qa'));
+    try {
+      await vi.waitFor(() => expect(slowReads).toBe(1));
+      let heartbeat = false;
+      await new Promise<void>(resolve => setImmediate(() => { heartbeat = true; resolve(); }));
+      expect(heartbeat).toBe(true);
+      expect(await roleService.get(fast.id, 'qa')).toMatchObject({ name: 'QA' });
+      expect(slowReads).toBe(1);
+      unblock();
+      expect((await Promise.all(requests)).every(role => role?.name === 'QA')).toBe(true);
+    } finally { unblock(); await Promise.allSettled(requests); spy.mockRestore(); syncBuiltinESMExports(); await fsp.rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('loads and materializes workspace roles without synchronous filesystem I/O', async () => {
+    const dir = await fsp.mkdtemp(join(tmpdir(), 'orkestrai-role-async-'));
+    const workspace = await workspaceRepository.createWorkspace({ name: 'UNC role catalog', workingDir: dir });
+    const roleDir = join(dir, '.orkestrai', 'roles', 'qa');
+    await fsp.mkdir(roleDir, { recursive: true });
+    await fsp.writeFile(join(roleDir, 'role.json'), JSON.stringify({ name: 'QA', color: '#123456', prompt: 'Validate the complete user journey.' }));
+    const reads = ['existsSync', 'lstatSync', 'readdirSync', 'readFileSync', 'mkdirSync', 'writeFileSync'] as const;
+    const spies = reads.map(name => vi.spyOn(fs, name));
+    syncBuiltinESMExports();
+    try {
+      const context = await roleService.launchContext(workspace.id, 'qa');
+      expect(context).toMatchObject({ name: 'QA', prompt: 'Validate the complete user journey.' });
+      expect(await fsp.readFile(context!.instructionFile, 'utf8')).toContain('Validate the complete user journey.');
+      for (const spy of spies) expect(spy.mock.calls.filter(call => String(call[0]).startsWith(dir))).toEqual([]);
+    } finally { spies.forEach(spy => spy.mockRestore()); syncBuiltinESMExports(); await fsp.rm(dir, { recursive: true, force: true }); }
+  });
 
   it.each(['fresh', 'resume'] as const)('delivers open work with a free-form recruit role on %s startup', async mode => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'Free-form recruit role', workingDir: '/tmp' });

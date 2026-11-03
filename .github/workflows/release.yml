@@ -343,6 +343,9 @@ jobs:
       - name: Verify native desktop command transport
         run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/orkestrai-cli-inbox.test.ts
 
+      - name: Verify Windows workspace startup under slow filesystem probes
+        run: npm test -- --run tests/feature/role-service.test.ts tests/unit/pty-ws.test.ts tests/unit/codex-mcp-config.test.ts --testNamePattern "loads and materializes|shares a slow catalog|keeps both viewers connected|canonicalizes only native trust" --maxWorkers=2 --testTimeout=20000
+
       - name: Download tested production bundle
         if: needs.validate.outputs.production_artifact_id != ''
         uses: actions/download-artifact@v8

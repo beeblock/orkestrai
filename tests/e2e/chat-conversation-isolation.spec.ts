@@ -194,9 +194,9 @@ test('an older workspace snapshot cannot restore the former leader or discard pe
   const arrived = deferred(), release = deferred();
   let promoted = false;
   let nodeReads = 0;
-  await page.route(`**${t.base}/nodes`, async route => {
+  page.on('request', request => { if (request.url().endsWith(`${t.base}/nodes`)) nodeReads++; });
+  await page.route(`**${t.base}/channels`, async route => {
     if (route.request().method() !== 'GET') return route.continue();
-    nodeReads += 1;
     const old = !promoted;
     const response = await route.fetch();
     if (old) { arrived.resolve(); await release.promise; }

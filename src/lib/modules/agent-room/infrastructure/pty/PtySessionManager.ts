@@ -234,6 +234,10 @@ export type CreatePtySessionInput = {
   agentSessionId?: string;
   /** Ephemeral credential injected only into this PTY's environment. */
   bridgeAgentToken?: string;
+  /** Internal native preflight, with prefix args only; logical identity stays unchanged. */
+  resolvedNativeCommand?: { forCommand: string; command: string; args: string[] };
+  /** Sanitized parent environment prepared by the server, never a client field. */
+  preparedAgentEnvironment?: Record<string, string>;
 };
 
 const SCROLLBACK_LIMIT = 256 * 1024; // 256 KB por sessão
@@ -383,7 +387,7 @@ export class PtySessionManager {
     const cols = input.cols ?? 120;
     const rows = input.rows ?? 30;
 
-    const env = { ...agentEnv(), ...normalizeWindowsPath(input.env ?? {}) } as Record<string, string>;
+    const env = { ...(input.preparedAgentEnvironment ?? agentEnv()), ...normalizeWindowsPath(input.env ?? {}) } as Record<string, string>;
     for (const key of input.unsetEnvKeys ?? []) delete env[key];
     // node-pty defines TERM from `name` on Unix, but ConPTY only uses `name`
     // internally and does not expose it to the Windows child process. Full-
@@ -405,7 +409,9 @@ export class PtySessionManager {
           forwardEnvToWsl: input.forwardEnvToWsl,
           unsetEnvKeys: input.unsetEnvKeys,
         })
-      : { ...resolveCommand(input.command, input.args ?? [], env), cwd: input.cwd, env };
+      : { ...(input.resolvedNativeCommand?.forCommand === input.command
+          ? { command: input.resolvedNativeCommand.command, args: [...input.resolvedNativeCommand.args, ...(input.args ?? [])] }
+          : resolveCommand(input.command, input.args ?? [], env)), cwd: input.cwd, env };
     const ptyProcess = this.spawnPty(target.command, target.args, {
       name: 'xterm-256color',
       cols,

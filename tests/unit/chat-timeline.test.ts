@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answersByQuestion, buildTimeline, oldestCursor, pinnedQuestions, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
+import { answersByQuestion, buildTimeline, mergeRefreshed, oldestCursor, pinnedQuestions, upsertMessage } from '../../src/lib/components/agent-room/chat/chat-timeline.js';
 import type { ChannelMessage } from '../../src/lib/modules/agent-room/domain/channels.js';
 
 function message(id: string, minute: number, extra: Partial<ChannelMessage> = {}): ChannelMessage {
@@ -20,6 +20,13 @@ function message(id: string, minute: number, extra: Partial<ChannelMessage> = {}
 }
 
 describe('chat timeline', () => {
+  it('repairs missed messages and receipts without discarding older loaded history', () => {
+    const held = [message('old-page', 0), message('recent', 10)];
+    const delivered = message('recent', 10, { meta: { deliveredAt: '2026-10-17T12:11:00Z' } });
+    const merged = mergeRefreshed([message('missed-reply', 12), delivered], held);
+    expect(merged.map(item => item.id)).toEqual(['old-page', 'recent', 'missed-reply']);
+    expect(merged[1].meta).toEqual(delivered.meta);
+  });
   it('loads earlier messages from the exact oldest one held, even among messages of one instant', () => {
     expect(oldestCursor([])).toBeNull();
     const held = [message('b', 3), message('envelope:a', 1), message('c', 1), message('a', 1), message('d', 2)];

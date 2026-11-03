@@ -1,5 +1,5 @@
 import { parse } from 'smol-toml';
-import { realpathSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { posix, resolve } from 'node:path';
 import type { WorkspaceExecutionRuntime } from '../domain/types.js';
 
@@ -102,14 +102,15 @@ export function codexMcpOverrideArgs(launch: CodexMcpLaunch): string[] {
  * the same launch already opted into Codex's full-access mode, and the trust
  * applies to this process and exact working directory only.
  */
-export function codexWorkspaceTrustOverrideArgs(workingDirectory: string, fullAccess: boolean): string[] {
+export async function codexWorkspaceTrustOverrideArgs(workingDirectory: string, fullAccess: boolean, posixCwd = false): Promise<string[]> {
   if (!fullAccess || !workingDirectory.trim()) return [];
   const requestedPath = workingDirectory.trim();
   let canonicalPath = requestedPath;
   try {
     // Codex evaluates trust against the physical cwd. On macOS, for example,
     // /tmp resolves to /private/tmp; trusting the logical alias does not match.
-    canonicalPath = realpathSync(requestedPath);
+    // WSL paths belong to the guest namespace, not the Windows filesystem.
+    if (!posixCwd) canonicalPath = await realpath(requestedPath);
   } catch {
     // WSL paths are not necessarily addressable from the Windows host. The
     // Linux path produced by preflight remains the correct process-local key.

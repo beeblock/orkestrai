@@ -364,13 +364,19 @@ export class WorkspaceRepository {
     return (await query.get()).map(row => ({ id: row.getAttribute('id'), type: row.getAttribute('type'), title: row.getAttribute('title') }));
   }
 
+  async listTerminalNodes(workspaceId: string): Promise<CanvasNode[]> {
+    return this.listNodes(workspaceId, undefined, false, false, true);
+  }
+
   async listNodes(
     workspaceId: string,
     floorId?: string | null,
     includeArchived = false,
     includeInactiveFloors = false,
+    terminalsOnly = false,
   ): Promise<CanvasNode[]> {
     const query = AgentCanvasNode.query().where('workspace_id', workspaceId).orderBy('created_at', 'asc');
+    if (terminalsOnly) query.where('type', 'terminal');
     if (floorId === null) query.whereNull('floor_id');
     else if (floorId) query.where('floor_id', floorId);
     else if (!includeInactiveFloors) {

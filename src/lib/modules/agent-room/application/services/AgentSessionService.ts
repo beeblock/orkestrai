@@ -21,6 +21,7 @@ import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { normalizeSavedTerminalCommands, resumeTerminalCommandInput } from '../../domain/terminal-commands.js';
 import { settingsService } from './SettingsService.js';
 import { restoreAgentLaunchSelection } from '../../infrastructure/transcript/AgentLaunchSelection.js';
+import { agentEnvAsync, normalizeWindowsPath, resolveCommandAsync } from '../../infrastructure/agent-path.js';
 
 type AgentNodePayload = {
   sessionId?: string;
@@ -187,11 +188,16 @@ export class AgentSessionService {
       ? codexMcpOverrideArgs(codexMcpLaunchForRuntime(runtime))
       : [];
     const codexTrustArgs = payload.provider === 'codex'
-      ? codexWorkspaceTrustOverrideArgs(
+      ? await codexWorkspaceTrustOverrideArgs(
           wslContext?.linuxWorkingDir ?? cwd,
           (payload.args ?? []).includes('--dangerously-bypass-approvals-and-sandbox'),
+          runtime.kind === 'wsl',
         )
       : [];
+    const preparedAgentEnvironment = await agentEnvAsync();
+    const resolvedNativeCommand = runtime.kind === 'native'
+      ? await resolveCommandAsync(command, [], { ...preparedAgentEnvironment, ...normalizeWindowsPath({ ...payload.env, ...profileEnv }) })
+      : undefined;
     const activeAgentSessionId = resumableAgentSessionId;
     const workspaceConfig = runtime.kind === 'wsl'
       ? posix.join(runtime.linuxWorkingDir, '.orkestrai', 'workspace.json')
@@ -226,6 +232,8 @@ export class AgentSessionService {
     const trackingStartedAt = Date.now();
     const session = ptySessionManager.create({
       command,
+      resolvedNativeCommand: resolvedNativeCommand ? { forCommand: command, ...resolvedNativeCommand } : undefined,
+      preparedAgentEnvironment,
       args: [
         ...(payload.args ?? []),
         ...mcpArgs,

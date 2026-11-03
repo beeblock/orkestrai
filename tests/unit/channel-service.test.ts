@@ -36,6 +36,20 @@ function mockWorkspace() {
 describe('ChannelService', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('returns only conversation display metadata without Canvas provisioning or launch secrets', async () => {
+    mockWorkspace();
+    vi.spyOn(workspaceRepository, 'listNodes').mockResolvedValue([
+      { id: LEAD, type: 'terminal', title: 'Lead', payload: { provider: 'codex', maestro: true, role: 'Coordinator',
+        args: ['--model', 'test-model', '--instructions', 'PRIVATE_ROLE_PROMPT'], env: { API_KEY: 'PRIVATE_ACCOUNT_TOKEN' }, agentSessionId: 'PRIVATE_SESSION', initialRoleArgs: ['PRIVATE_ROLE_PROMPT'] } },
+      { id: NOTE, type: 'note', title: 'Notes', payload: { content: 'PRIVATE_NOTE_CONTENT' } },
+    ] as never);
+    vi.spyOn(channelRepository, 'latestByChannel').mockResolvedValue(new Map());
+    vi.spyOn(channelRepository, 'openQuestions').mockResolvedValue([]);
+    const result = await new ChannelService().listChannels('w');
+    expect(result.agents).toMatchObject([{ id: LEAD, title: 'Lead', payload: { provider: 'codex', maestro: true, args: ['--model', 'test-model'], role: 'Coordinator' } }]);
+    for (const value of ['PRIVATE_ROLE_PROMPT', 'PRIVATE_ACCOUNT_TOKEN', 'PRIVATE_SESSION', 'PRIVATE_NOTE_CONTENT']) expect(JSON.stringify(result)).not.toContain(value);
+  });
+
   it('sends an unaddressed team message to the leader and a mention only to that agent', async () => {
     const enqueue = mockWorkspace();
     const service = new ChannelService();

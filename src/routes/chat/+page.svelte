@@ -4,6 +4,7 @@
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { ArrowUp, AtSign, CheckCheck, Clock3, CornerDownRight, Hash, LoaderCircle, Mic, PanelRightOpen, Plus, Smartphone, UserRound } from '@lucide/svelte';
   import AgentAvatar from '$lib/components/agent-room/AgentAvatar.svelte';
+  import { Button } from '$lib/components/ui/button';
   import AgentGlyph from '$lib/components/agent-room/AgentGlyph.svelte';
   import MarkdownView from '$lib/components/agent-room/MarkdownView.svelte';
   import { routineCadence, routineNextRun } from '$lib/components/agent-room/chat/routine-labels.js';
@@ -20,20 +21,23 @@
   import type { WorkspaceAttachment } from '$lib/modules/agent-room/domain/types.js';
   import type { AgentAttentionItem } from '$lib/modules/agent-room/domain/types.js';
   import AgentProfilePanel from '$lib/components/agent-room/chat/AgentProfilePanel.svelte';
-  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, oldestCursor, pinnedQuestions, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
+  import { answersByQuestion, buildTimeline, mergeLoaded, mergeOlder, mergeRefreshed, oldestCursor, pinnedQuestions, upsertMessage } from '$lib/components/agent-room/chat/chat-timeline.js';
   import { agentStatus, retainAgentStatus, scheduleAgentStatusRefresh, statusClock } from '$lib/components/agent-room/agent-status.svelte.js';
   import { attentionDecisionKind, attentionFeed, retainAttentionFeed, scheduleAttentionRefresh } from '$lib/components/agent-room/attention-feed.svelte.js';
   import { agentTone, elapsedParts } from '$lib/components/agent-room/agent-identity.js';
+  import { TerminalConnectionHealth } from '$lib/components/agent-room/terminal-connection-health.js';
   import { agentDoingLabel, agentStateLabel, elapsedLabel } from '$lib/components/agent-room/agent-status-labels.js';
   import { clearWorkspaceContext, publishWorkspaceContext, registerWorkspaceSelector } from '$lib/components/agent-room/workspace-context.svelte.js';
   import { directChannel, directChannelNode, TEAM_CHANNEL, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
-  import type { CanvasNode, Routine, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
+  import type { Routine, TerminalNodePayload, Workspace } from '$lib/modules/agent-room/domain/types.js';
   import type { ChannelBinding } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
   type ChannelSummary = { id: string; kind: 'team' | 'dm'; nodeId: string | null; title: string; last: ChannelMessage | null; openQuestions: number };
   type Agent = { id: string; title: string; payload: TerminalNodePayload };
+  let loadFailed = $state(false);
+  let messageRefreshScope: string | null = null;
 
   const PAGE_SIZE = 80;
 
@@ -89,6 +93,7 @@
     const csrf = getCsrfToken();
     const response = await fetch(url, {
       ...init,
+      ...(!init?.signal && (!init?.method || init.method === 'GET') ? { signal: AbortSignal.timeout(10_000) } : {}),
       headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...(init?.headers ?? {}) },
     });
     const body = await response.json().catch(() => ({}));
@@ -131,15 +136,10 @@
   async function loadWorkspace(id: string, includeDetails = true) {
     const generation = ++workspaceGeneration;
     const detailsGeneration = includeDetails ? ++workspaceDetailsGeneration : 0;
-    const [nodes, summaries] = await Promise.all([
-      api<CanvasNode[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/nodes`),
-      api<{ channels: ChannelSummary[] }>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels`),
-    ]);
+    const summaries = await api<{ channels: ChannelSummary[]; agents: Agent[] }>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channels`);
     if (id !== workspaceId) return;
     if (generation === workspaceGeneration) {
-      agents = nodes
-        .filter((node) => node.type === 'terminal' && Boolean((node.payload as TerminalNodePayload).provider))
-        .map((node) => ({ id: node.id, title: node.title ?? m['canvas.fallback_terminal'](), payload: node.payload as TerminalNodePayload }));
+      agents = summaries.agents;
       channels = summaries.channels;
       if (profileNodeId && !agents.some((agent) => agent.id === profileNodeId)) profileNodeId = null;
       // A conversation asked for in the link but with no such agent here opens the team channel.
@@ -153,13 +153,14 @@
     // A lightweight structural refresh must not discard the initial routines
     // and bindings that a full workspace load is still fetching.
     if (!includeDetails || detailsGeneration !== workspaceDetailsGeneration) return;
-    const [routineList, bindingList] = await Promise.all([
+    void Promise.all([
       api<Routine[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/routines`).catch(() => []),
       api<ChannelBinding[]>(`/api/agent-room/workspaces/${encodeURIComponent(id)}/channel-bindings`).catch(() => []),
-    ]);
-    if (id !== workspaceId || detailsGeneration !== workspaceDetailsGeneration) return;
-    routines = Array.isArray(routineList) ? routineList : [];
-    bindings = Array.isArray(bindingList) ? bindingList : [];
+    ]).then(([routineList, bindingList]) => {
+      if (id !== workspaceId || detailsGeneration !== workspaceDetailsGeneration) return;
+      routines = Array.isArray(routineList) ? routineList : [];
+      bindings = Array.isArray(bindingList) ? bindingList : [];
+    });
   }
 
   function routineLabel(routine: Routine): string {
@@ -180,9 +181,13 @@
     if (summaries && id === workspaceId) channels = summaries.channels;
   }
 
-  async function loadMessages(older = false) {
+  async function loadMessages(older = false, preserveScroll = false) {
     const scope = conversationRequest();
     if (!scope.id) return;
+    const followEnd = !preserveScroll || nearEnd();
+    const refreshKey = JSON.stringify([scope.id, scope.channel, conversationGeneration]);
+    if (!older && messageRefreshScope === refreshKey) return;
+    if (!older) { messageRefreshScope = refreshKey; loadFailed = false; loading = messages.length === 0; }
     const cursor = older ? oldestCursor(messages) : null;
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), ...(cursor ?? {}) });
     if (older) loadingOlder = true;
@@ -196,14 +201,15 @@
         await tick();
         if (scope.isCurrent() && scroller) scroller.scrollTop += scroller.scrollHeight - height;
       } else {
-        messages = mergeLoaded(page, messages.filter((message) => message.channel === scope.channel));
+        messages = (preserveScroll ? mergeRefreshed : mergeLoaded)(page, messages.filter((message) => message.channel === scope.channel));
         void loadOpenQuestions();
         await tick();
-        if (scope.isCurrent()) scrollToEnd();
+        if (scope.isCurrent() && followEnd) scrollToEnd();
       }
     } catch {
-      if (scope.isCurrent() && !older) messages = [];
+      if (scope.isCurrent() && !older) loadFailed = true;
     } finally {
+      if (!older && messageRefreshScope === refreshKey) messageRefreshScope = null;
       if (scope.isCurrent()) {
         loadingOlder = false;
         loading = false;
@@ -235,6 +241,7 @@
     conversationGeneration += 1;
     channel = next;
     messages = [];
+    loadFailed = false;
     openQuestions = [];
     loading = true;
     loadingOlder = false;
@@ -403,7 +410,8 @@
     untrack(() => {
       loading = true;
       syncUrl();
-      void loadWorkspace(id).then(() => loadMessages()).catch(() => (loading = false));
+      void loadWorkspace(id).catch(() => undefined);
+      void loadMessages();
     });
   });
 
@@ -451,20 +459,41 @@
     let channelsTimer: ReturnType<typeof setTimeout> | null = null;
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
     let workspaceTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let heartbeatTicks = 0;
+    const health = new TerminalConnectionHealth();
     const refreshSoon = () => {
       if (channelsTimer) return;
       channelsTimer = setTimeout(() => { channelsTimer = null; void refreshChannels(); }, 400);
     };
     const connect = () => {
       if (disposed) return;
-      socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent-room/pty`);
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+      if (reconnect) { clearTimeout(reconnect); reconnect = null; }
+      const live = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent-room/pty`);
+      socket = live;
       socket.onopen = () => {
-        socket?.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged', 'workspaceChanged'] }));
+        if (disposed || socket !== live) return;
+        health.opened(Date.now());
+        live.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'messageDelivery', 'controlCenterChanged', 'attentionChanged', 'workspaceChanged'] }));
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = setInterval(() => {
+          if (socket !== live || live.readyState !== WebSocket.OPEN) return;
+          if (health.heartbeat(Date.now()) === 'reconnect') { live.close(); return; }
+          live.send(JSON.stringify({ type: 'ping' }));
+          // Repair a missed subscription/frame without refetching Canvas data.
+          if (++heartbeatTicks % 3 === 0) recoverVisibleConversation();
+        }, 10_000);
         // Messages sent before this subscription (first load or a reconnect) come from a reload.
         const id = workspaceId;
-        if (id) void loadWorkspace(id).then(() => { if (id === workspaceId) return loadMessages(); }).catch(() => undefined);
+        if (id) {
+          void loadWorkspace(id, false).catch(() => undefined);
+          void loadMessages(false, true);
+        }
       };
       socket.onmessage = async (event) => {
+        if (disposed || socket !== live) return;
+        health.received(Date.now());
         let frame: { type?: string; workspaceId?: string; channel?: string; message?: ChannelMessage };
         try { frame = JSON.parse(String(event.data)); } catch { return; }
         if (frame.workspaceId && frame.workspaceId !== workspaceId) return;
@@ -478,7 +507,7 @@
           if (stick) scrollToEnd();
         }
         if (frame.type === 'messageDelivery' && channel === TEAM_CHANNEL && !reloadTimer) {
-          reloadTimer = setTimeout(() => { reloadTimer = null; void loadMessages(); }, 600);
+          reloadTimer = setTimeout(() => { reloadTimer = null; void loadMessages(false, true); }, 600);
         }
         if (frame.type === 'controlCenterChanged') scheduleAgentStatusRefresh();
         if (frame.type === 'workspaceChanged' && !workspaceTimer) {
@@ -500,9 +529,19 @@
         }
       };
       socket.onclose = () => {
+        if (socket !== live) return;
+        socket = null;
+        if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
         if (!disposed) reconnect = setTimeout(connect, 3_000);
       };
     };
+    function recoverVisibleConversation() {
+      if (document.visibilityState !== 'visible') return;
+      const id = workspaceId;
+      if (id) { void loadWorkspace(id, false).catch(() => undefined); void loadMessages(false, true); }
+    }
+    const visible = () => { recoverVisibleConversation(); connect(); };
+    document.addEventListener('visibilitychange', visible);
     connect();
     return () => {
       disposed = true;
@@ -510,6 +549,8 @@
       if (channelsTimer) clearTimeout(channelsTimer);
       if (reloadTimer) clearTimeout(reloadTimer);
       if (workspaceTimer) clearTimeout(workspaceTimer);
+      if (heartbeat) clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', visible);
       socket?.close();
     };
   });
@@ -595,6 +636,8 @@
       {/if}
       {#if loading}
         <p class="status-line"><LoaderCircle size={14} class="animate-spin" /> {m['chat.loading']()}</p>
+      {:else if loadFailed}
+        <div class="status-line" role="alert">{m['chat.load_error']()} <Button variant="outline" size="sm" onclick={() => void loadMessages()}>{m['chat.load_retry']()}</Button></div>
       {:else if !workspace}
         <NodeEmptyState icon={Hash} title={m['chat.no_workspace']()} />
       {:else if !messages.length}

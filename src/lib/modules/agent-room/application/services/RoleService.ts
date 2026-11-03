@@ -1,4 +1,6 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { constants } from 'node:fs';
+import { access, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { z } from 'zod/v3';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -48,11 +50,30 @@ function instructionFileContents(role: AgentRole): string {
   ].join('\n');
 }
 
-function readRoleFile(file: string, fallbackName: string, slug: string): AgentRole | null {
+async function exists(file: string): Promise<boolean> {
+  return access(file).then(() => true, () => false);
+}
+
+async function writeAtomic(file: string, content: string): Promise<void> {
+  const temporary = `${file}.${randomUUID()}.tmp`;
   try {
-    const stat = lstatSync(file);
+    await writeFile(temporary, content, { flag: 'wx', mode: 0o600 });
+    await rename(temporary, file);
+  } finally { await rm(temporary, { force: true }); }
+}
+
+async function readRoleFile(file: string, fallbackName: string, slug: string): Promise<AgentRole | null> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    const stat = await lstat(file);
     if (!stat.isFile() || stat.size > MAX_ROLE_FILE_BYTES) return null;
-    const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const opened = await handle.stat();
+    if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino) return null;
+    const buffer = Buffer.alloc(MAX_ROLE_FILE_BYTES + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > MAX_ROLE_FILE_BYTES) return null;
+    const raw = JSON.parse(buffer.toString('utf8', 0, bytesRead)) as Record<string, unknown>;
     const parsed = roleInputSchema.safeParse({
       name: raw.name ?? fallbackName,
       color: raw.color ?? '#7C4DFF',
@@ -61,7 +82,7 @@ function readRoleFile(file: string, fallbackName: string, slug: string): AgentRo
     return parsed.success ? { slug, ...parsed.data } : null;
   } catch {
     return null;
-  }
+  } finally { await handle?.close(); }
 }
 
 /**
@@ -74,6 +95,11 @@ function readRoleFile(file: string, fallbackName: string, slug: string): AgentRo
  * e recebe somente trabalho ainda aberto.
  */
 export class RoleService {
+  private catalogReads = new Map<string, Promise<AgentRole[]>>();
+  private async invalidateCatalog(workspaceId: string): Promise<void> {
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (workspace) this.catalogReads.delete(workspace.workingDir);
+  }
   catalog(locale: unknown) {
     return builtinRoleCatalog(locale);
   }
@@ -87,26 +113,49 @@ export class RoleService {
   private async rolesDir(workspaceId: string): Promise<string> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace não encontrado.');
-    const current = resolve(workspace.workingDir, '.orkestrai', 'roles');
+    return this.resolveRolesDir(workspace.workingDir);
+  }
+
+  private async resolveRolesDir(workingDir: string): Promise<string> {
+    const current = resolve(workingDir, '.orkestrai', 'roles');
     // Legado: workspaces criados na era .pantheon/ continuam legiveis.
-    if (!existsSync(current)) {
-      const legacy = resolve(workspace.workingDir, '.pantheon', 'roles');
-      if (existsSync(legacy)) return legacy;
+    if (!await exists(current)) {
+      const legacy = resolve(workingDir, '.pantheon', 'roles');
+      if (await exists(legacy)) return legacy;
     }
     return current;
   }
 
   async list(workspaceId: string): Promise<AgentRole[]> {
-    const dir = await this.rolesDir(workspaceId);
-    if (!existsSync(dir)) return [];
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) throw new Error('Workspace não encontrado.');
+    const key = workspace.workingDir;
+    const pending = this.catalogReads.get(key);
+    if (pending) return pending;
+    // Coalesce even the first directory probes: a 30-agent poll must not
+    // enqueue 30 identical slow UNC lookups before sharing the catalog scan.
+    const scan = this.resolveRolesDir(key).then(dir => this.readCatalog(dir)).finally(() => {
+      if (this.catalogReads.get(key) === scan) this.catalogReads.delete(key);
+    });
+    this.catalogReads.set(key, scan);
+    while (this.catalogReads.size > 128) this.catalogReads.delete(this.catalogReads.keys().next().value!);
+    return scan;
+  }
+
+  private async readCatalog(dir: string): Promise<AgentRole[]> {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(error => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
     const roles: AgentRole[] = [];
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const file = resolve(dir, entry.name, 'role.json');
-      if (!existsSync(file)) continue;
-      const role = readRoleFile(file, entry.name, entry.name);
-      if (role) roles.push(role);
-    }
+    const iterator = entries.values();
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (const entry of iterator) {
+        if (!entry.isDirectory()) continue;
+        const role = await readRoleFile(resolve(dir, entry.name, 'role.json'), entry.name, entry.name);
+        if (role) roles.push(role);
+      }
+    }));
     return roles.sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -131,9 +180,9 @@ export class RoleService {
     const dir = resolve(await this.rolesDir(workspaceId), role.slug);
     const file = resolve(dir, 'AGENTS.md');
     const expected = instructionFileContents(role);
-    mkdirSync(dir, { recursive: true });
-    if (!existsSync(file) || readFileSync(file, 'utf8') !== expected) {
-      writeFileSync(file, expected);
+    await mkdir(dir, { recursive: true });
+    if (await readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; }) !== expected) {
+      await writeAtomic(file, expected);
     }
     return file;
   }
@@ -146,13 +195,14 @@ export class RoleService {
       ...parsed,
     };
     const dir = resolve(await this.rolesDir(workspaceId), slug);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(resolve(dir, 'role.json'), JSON.stringify(role, null, 2));
+    await mkdir(dir, { recursive: true });
+    await writeAtomic(resolve(dir, 'role.json'), JSON.stringify(role, null, 2));
     if (role.prompt.trim()) {
       await this.ensureInstructionFile(workspaceId, role);
     } else {
-      rmSync(resolve(dir, 'AGENTS.md'), { force: true });
+      await rm(resolve(dir, 'AGENTS.md'), { force: true });
     }
+    await this.invalidateCatalog(workspaceId);
     return role;
   }
 
@@ -171,7 +221,8 @@ export class RoleService {
   async remove(workspaceId: string, nameOrSlug: string): Promise<boolean> {
     const role = await this.get(workspaceId, nameOrSlug);
     if (!role) return false;
-    rmSync(resolve(await this.rolesDir(workspaceId), role.slug), { recursive: true, force: true });
+    await rm(resolve(await this.rolesDir(workspaceId), role.slug), { recursive: true, force: true });
+    await this.invalidateCatalog(workspaceId);
     return true;
   }
 
@@ -185,16 +236,16 @@ export class RoleService {
     const base = fromDir ?? workspace.workingDir;
     if (fromDir && !isAbsolute(fromDir)) throw new Error('O diretório de origem deve ser absoluto.');
     const source = resolve(base, '.orkestrai', 'roles');
-    if (!existsSync(source)) return { imported: 0, roles: [] };
+    if (!await exists(source)) return { imported: 0, roles: [] };
 
-    const realBase = realpathSync(base);
-    const realSource = realpathSync(source);
+    const realBase = await realpath(base);
+    const realSource = await realpath(source);
     const relativeSource = relative(realBase, realSource);
     if (relativeSource.startsWith('..') || isAbsolute(relativeSource)) {
       throw new Error('O diretório de roles deve permanecer dentro da pasta selecionada.');
     }
 
-    const entries = readdirSync(realSource, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    const entries = (await readdir(realSource, { withFileTypes: true })).filter((entry) => entry.isDirectory());
     if (entries.length > MAX_DISCOVERED_ROLES) {
       throw new Error(`A pasta possui mais de ${MAX_DISCOVERED_ROLES} roles.`);
     }
@@ -202,8 +253,7 @@ export class RoleService {
     const found: AgentRole[] = [];
     for (const entry of entries) {
       const file = resolve(realSource, entry.name, 'role.json');
-      if (!existsSync(file)) continue;
-      const parsed = readRoleFile(file, entry.name, entry.name);
+      const parsed = await readRoleFile(file, entry.name, entry.name);
       if (parsed) found.push({ ...parsed, slug: slugify(parsed.name) });
     }
 

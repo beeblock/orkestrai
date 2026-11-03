@@ -1154,7 +1154,10 @@ export class AgentInboxService {
     }
     if (batch.length === 1) return `${this.itemPrompt(batch[0], titles)}${footer}`;
     const items = batch.map((envelope, index) => `[${index + 1}/${batch.length}] ${this.itemPrompt(envelope, titles)}`);
-    return `[orkestrai:inbox] ${batch.length} mensagens chegaram enquanto você trabalhava; trate todas, mais antigas primeiro. ${items.join(' ')}${footer}`;
+    const order = batch.some(envelope => envelope.kind === 'owner' && !['telegram', 'slack'].includes(String(envelope.metadata.via)))
+      ? 'responda primeiro ao dono na Conversa e depois trate as demais, mais antigas primeiro'
+      : 'trate todas, mais antigas primeiro';
+    return `[orkestrai:inbox] ${batch.length} mensagens chegaram enquanto você trabalhava; ${order}. ${items.join(' ')}${footer}`;
   }
 }
 
