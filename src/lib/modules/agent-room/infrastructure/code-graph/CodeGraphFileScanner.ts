@@ -5,6 +5,7 @@ import { basename, extname, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { CodeGraphDiagnostic, CodeGraphLanguage } from '../../domain/code-graph.js';
 import type { ScannedCodeFile } from './types.js';
+import { codeGraphGeneratedRoots } from './CodeGraphSourcePolicy.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 1_500_000;
@@ -60,6 +61,7 @@ export class CodeGraphFileScanner {
     if (!rootInfo.isDirectory()) throw new Error(`Code graph root is not a directory: ${rootPath}`);
 
     const diagnostics: CodeGraphDiagnostic[] = [];
+    const generatedRoots = await codeGraphGeneratedRoots(rootPath);
     const { rgPath } = await import('@vscode/ripgrep');
     const args = [
       '--files', '--hidden', '--no-follow', '--max-filesize', String(MAX_FILE_BYTES),
@@ -67,6 +69,8 @@ export class CodeGraphFileScanner {
       ...CONTRACT_GLOBS.flatMap((glob) => ['--glob', glob]),
       // ripgrep applies the LAST matching glob. Exclusions must win over *.ts etc.
       ...IGNORED_GLOBS.flatMap((glob) => ['--glob', `!${glob}`]),
+      // Anchor Unity caches at this root and match their Windows casing too.
+      ...generatedRoots.flatMap(directory => ['--iglob', `!/${directory}/**`]),
       '--', '.',
     ];
     let stdout = '';

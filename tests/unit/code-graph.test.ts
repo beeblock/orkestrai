@@ -22,6 +22,28 @@ function source(path: string, content: string): ScannedCodeFile {
 }
 
 describe('CodeGraphFileScanner', () => {
+  it('skips Unity generated roots without hiding authored Assets, Packages or nested Library folders', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orkestrai-unity-graph-'));
+    const included = ['Assets/Scripts/helper.ts', 'Assets/Library/authored.ts', 'Packages/com.example/editor.js'];
+    const excluded = ['Library/PackageCache/pkg/generated.js', 'Temp/generated.ts', 'obj/compiled.js',
+      'Logs/generated.ts', 'UserSettings/editor.js'];
+    try {
+      await mkdir(join(root, 'ProjectSettings'));
+      await writeFile(join(root, 'ProjectSettings/ProjectVersion.txt'), 'm_EditorVersion: 6000.0.0f1');
+      for (const path of [...included, ...excluded]) {
+        await mkdir(join(root, path, '..'), { recursive: true });
+        await writeFile(join(root, path), 'export const example = 1;');
+      }
+      expect((await new CodeGraphFileScanner().scan(root)).files.map(file => file.relativePath)).toEqual(included.sort());
+      // The same folder name can contain source in a non-Unity repository.
+      await rm(join(root, 'ProjectSettings/ProjectVersion.txt'));
+      expect((await new CodeGraphFileScanner().scan(root)).files.map(file => file.relativePath))
+        .toEqual([...included, ...excluded].sort((a, b) => a.localeCompare(b)));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('excludes dependencies and build output at every depth despite positive source globs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-ignore-'));
     const included = ['src/app.ts', 'packages/web/src/page.svelte', 'api/openapi.yaml'];

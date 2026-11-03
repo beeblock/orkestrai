@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+- Keep incremental graph relationship lookups bounded to affected files instead of walking every relationship in the stored revision. Preserve revision/workspace isolation, fileless relationships and caller rebinding across batches.
+- Exclude Unity-generated root caches (Library, Temp, obj, Logs and UserSettings) from both Code Intelligence scanning and file watching, while preserving authored Assets/Packages and similarly named folders in other projects.
+
 ## 0.51.1 - 2026-11-03
 
 ### Fixed

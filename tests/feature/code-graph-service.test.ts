@@ -144,6 +144,35 @@ describe('CodeGraphIndexService', () => {
     }
   });
 
+  it('does not watch Unity caches while retaining authored source and explicit Floor isolation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orkestrai-unity-watch-'));
+    directories.push(directory);
+    for (const path of ['ProjectSettings', 'Assets/Library', 'Library/PackageCache/pkg', 'Temp/generated', 'obj/generated']) {
+      await mkdir(join(directory, path), { recursive: true });
+    }
+    await writeFile(join(directory, 'ProjectSettings/ProjectVersion.txt'), 'm_EditorVersion: 6000.0.0f1');
+    await writeFile(join(directory, 'Assets/Library/source.ts'), 'export const authored = 1;');
+    for (const path of ['Library/PackageCache/pkg/cache.ts', 'Temp/generated/cache.ts', 'obj/generated/cache.ts']) {
+      await writeFile(join(directory, path), 'export const generated = 1;');
+    }
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Unity', workingDir: directory, codeIntelligenceMode: 'manual' });
+    try {
+      const indexed = await codeGraphIndexService.index(workspace.id);
+      expect(indexed.stats.files).toBe(1);
+      const state = (globalThis as unknown as { __orkestraiCodeGraphIndexState: { watchers: Map<string, { watcher: FSWatcher }> } }).__orkestraiCodeGraphIndexState;
+      const watched = state.watchers.get(indexed.projects[0].id)!.watcher;
+      const paths = Object.keys(watched.getWatched()).map(path => path.slice(indexed.projects[0].rootPath.length).replaceAll('\\', '/'));
+      expect(paths).toContain('/Assets/Library');
+      expect(paths.some(path => /^\/(Library|Temp|obj)(\/|$)/.test(path))).toBe(false);
+      await writeFile(join(directory, 'Assets/Library/source.ts'), 'export const authored = 2;');
+      await vi.waitFor(async () => {
+        expect((await codeGraphIndexService.status(workspace.id)).projects[0].status).toBe('stale');
+      }, { timeout: 5_000 });
+    } finally {
+      await codeGraphIndexService.removeWorkspace(workspace.id);
+    }
+  });
+
   it('closes an exhausted watcher once and keeps agent reads fresh during its backoff', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-graph-exhausted-'));
     directories.push(directory);

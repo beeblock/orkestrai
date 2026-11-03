@@ -502,9 +502,17 @@ export class CodeGraphRepository implements CodeGraphStore {
     const edgeRows: RawRow[] = [];
     for (let offset = 0; offset < Math.max(1, affectedFiles.length); offset += 400) {
       const ids = affectedFiles.slice(offset, offset + 400);
-      const nullClause = offset === 0 ? 'e.site_file_id IS NULL' : '0';
+      const sites = [
+        ...(offset === 0 ? ['e.site_file_id IS NULL'] : []),
+        ...(ids.length ? [`e.site_file_id IN (${placeholders(ids.length)})`] : []),
+      ];
+      // SQLite otherwise chooses a revision-leading index and visits every
+      // relationship in a large graph, even for one changed file. Unary +
+      // excludes that term from index selection while preserving the required
+      // UUID-text revision filter (especially for fileless relationships).
+      // Do not add a constant OR branch: it disables the file-index lookup.
       edgeRows.push(...await Connection.raw(`SELECT e.id, e.fingerprint FROM agent_code_graph_edges e
-        WHERE e.revision_id = ? AND (${nullClause}${ids.length ? ` OR e.site_file_id IN (${placeholders(ids.length)})` : ''})`, [storageRevisionId, ...ids]));
+        WHERE +e.revision_id = ? AND (${sites.join(' OR ')})`, [storageRevisionId, ...ids]));
     }
     const affectedEdges = input.edges.filter(edge => !edge.siteFileKey || resolvedPaths.has(filePathByKey.get(edge.siteFileKey) ?? ''));
     const existingEdgeByFingerprint = new Map(edgeRows.map((row) => [String(row.fingerprint), row]));

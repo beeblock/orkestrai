@@ -21,6 +21,7 @@ import type { Workspace } from '../../domain/types.js';
 import { codeGraphRepository } from '../../infrastructure/repositories/CodeGraphRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { codeGraphSemanticService } from './CodeGraphSemanticService.js';
+import { codeGraphGeneratedRoots, isCodeGraphGeneratedPath } from '../../infrastructure/code-graph/CodeGraphSourcePolicy.js';
 
 const INDEXER_VERSION = 5;
 const REPOSITORY_MARKERS = ['.git', 'package.json', 'composer.json', 'src', 'app'];
@@ -306,10 +307,14 @@ export class CodeGraphIndexService {
         continue;
       }
       if (current) await this.closeWatcher(project.id);
+      const generatedRoots = await codeGraphGeneratedRoots(project.rootPath);
       const watcher = watch(project.rootPath, {
         // Match descendants, not ancestors: an explicitly approved Floor root
         // inside .orkestrai must still be indexable in its own right.
-        ignored: (path, info) => ignoreWatchPath(relative(project.rootPath, path), info),
+        ignored: (path, info) => {
+          const local = relative(project.rootPath, path);
+          return isCodeGraphGeneratedPath(local, generatedRoots) || ignoreWatchPath(local, info);
+        },
         ignoreInitial: true,
         followSymlinks: false,
         // macOS fs.watch uses native FSEvents; descriptor pressure can abort the
