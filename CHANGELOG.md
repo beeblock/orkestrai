@@ -8,6 +8,7 @@ pt-BR, English, and Spanish translations.
 ## Unreleased
 
 ### Fixed
+- Count modified tracked files relative to the selected workspace subdirectory when estimating snapshot space, so nested projects cannot bypass the pre-staging disk check. Preserve the owner files and index when space is insufficient.
 - Preserve versioned workspace roles, skills, native designs and authored files inside .orkestrai when creating Floors. Restrict mandatory exclusions to nested worktrees, review checkouts, launchers and bridge runtime/token files. Migrate only identifiable generated Git-exclude blocks, keeping portable definitions visible and independent owner ignore rules intact.
 - Validate workspace folders/repository roots and synchronize instruction files asynchronously. Bound instruction reads to regular UTF-8 text files up to 1 MiB, preserve unsupported existing content and keep other workspaces responsive during slow filesystem reads, independently of Code Intelligence.
 - Prevent internal Orkestrai state and nested Floors from entering new Floor snapshots, including contaminated tracked trees. Resolve Git exclusions through the actual metadata directory, preserve the owner index/files, reject unsafe explicitly selected branches before checkout and reserve total snapshot/checkout space before materialization. Omit known Unity root caches from new snapshots without discarding authored game source or generated artwork.

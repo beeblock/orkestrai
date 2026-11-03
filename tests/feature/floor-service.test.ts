@@ -483,6 +483,32 @@ describe('FloorService', () => {
     expect(git(dir, ['ls-files', '--stage'])).toBe(index);
   });
 
+  it('counts modified tracked bytes relative to a nested workspace before staging a snapshot', async () => {
+    const dir = makeRepo();
+    const project = join(dir, 'game[1]');
+    mkdirSync(project);
+    writeFileSync(join(project, 'scene.txt'), 'old scene');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-m', 'nested source']);
+    const replacement = 'new scene data'.repeat(128);
+    writeFileSync(join(project, 'scene.txt'), replacement);
+    const workspace = await workspaceRepository.createWorkspace({ name: 'Nested snapshot budget', workingDir: project });
+    const ownerIndex = git(dir, ['ls-files', '--stage']);
+    vi.mocked(diskGuard.assertFreeDisk).mockImplementation(async (_path, minimum) => {
+      if (minimum >= diskGuard.DISK_LIMITS.floorCreate + Buffer.byteLength(replacement)) {
+        throw new Error('Modified nested source exceeds snapshot space');
+      }
+    });
+
+    await expect(floorService.create(workspace.id, { name: 'nested-budget' }))
+      .rejects.toThrow('Modified nested source exceeds snapshot space');
+
+    expect(existsSync(join(project, '.orkestrai/floors/nested-budget'))).toBe(false);
+    expect(readFileSync(join(project, 'scene.txt'), 'utf8')).toBe(replacement);
+    expect(git(dir, ['ls-files', '--stage'])).toBe(ownerIndex);
+    expect(await floorService.list(workspace.id)).toEqual([]);
+  });
+
   it('omits Unity caches from a new snapshot while preserving game source and approved generated art', async () => {
     const dir = makeRepo();
     for (const path of ['ProjectSettings', 'Assets', 'Library/PackageCache', 'Temp', 'generated']) mkdirSync(join(dir, path), { recursive: true });

@@ -307,7 +307,7 @@ export class FloorService {
       // Remove it only from our private index; never from the owner's index/files.
       if (internal) await this.git(workspace, workspace.workingDir, ['rm', '-r', '--cached', '--ignore-unmatch', '--', ...INTERNAL_STATE_PATHSPECS,
         ...generatedRoots.map(root => `:(top,literal,icase)${prefix}${root}`)], env);
-      const modified = (await this.git(workspace, workspace.workingDir, ['diff', '--name-only', '-z', '--', '.', ...exclusions], env)).split('\0').filter(Boolean);
+      const modified = (await this.git(workspace, workspace.workingDir, ['diff', '--relative', '--name-only', '-z', '--', '.', ...exclusions], env)).split('\0').filter(Boolean);
       const pathApi = workspace.runtimeKind === 'wsl' ? win32 : { resolve };
       let modifiedBytes = 0;
       for (const path of modified) {
