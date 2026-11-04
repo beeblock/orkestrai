@@ -8,7 +8,7 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { workingDirectoryFromWindowsOsc } from '$lib/modules/agent-room/domain/terminal-working-directory.js';
 
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }))); });
 
 describe('session-only shell directory integration', () => {
   it('wraps only a default interactive PowerShell prompt and preserves explicit commands and POSIX shells', () => {
@@ -41,7 +41,9 @@ describe('session-only shell directory integration', () => {
     const session = ptySessionManager.create({ command: 'powershell.exe', cwd: root });
     expect(session.windowsPty).toMatchObject({ backend: 'conpty' });
     let output = '';
-    const detach = ptySessionManager.attach(session.id, data => { output = (output + data).slice(-32768); });
+    let exited = false;
+    const { detach, scrollback } = ptySessionManager.attach(session.id, data => { output = (output + data).slice(-32768); }, () => { exited = true; });
+    output = scrollback + output;
     try {
       await vi.waitFor(() => expect(output).toContain('\x1b]9;9;'), { timeout: 15_000 });
       ptySessionManager.writeHumanInput(session.id, "Set-Location -LiteralPath '" + child.replaceAll("'", "''") + "'\r");
@@ -49,6 +51,10 @@ describe('session-only shell directory integration', () => {
         const paths = [...output.matchAll(/\x1b\]9;9;([^\x07\x1b]+)(?:\x07|\x1b\\)/g)].map(match => workingDirectoryFromWindowsOsc('9;' + match[1]));
         expect(paths.some(path => path?.toLowerCase() === child.toLowerCase())).toBe(true);
       }, { timeout: 15_000 });
-    } finally { detach(); ptySessionManager.kill(session.id); }
+    } finally {
+      ptySessionManager.kill(session.id);
+      try { await vi.waitFor(() => expect(exited).toBe(true), { timeout: 5_000 }); }
+      finally { detach(); }
+    }
   }, 35_000);
 });
