@@ -1,12 +1,14 @@
-import { existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { open, stat } from 'node:fs/promises';
+import { mkdir, open, opendir, readdir, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { promisify } from 'node:util';
-import { join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { openDesktopFolder } from '../../infrastructure/DesktopFolderClient.js';
+import { codeGraphGeneratedRoots, isCodeGraphGeneratedPath } from '../../infrastructure/code-graph/CodeGraphSourcePolicy.js';
+import { isFloorRuntimePath } from '../../infrastructure/FloorSnapshotPolicy.js';
 import type { OpenWorkspaceFolderDto } from '../dto/OpenWorkspaceFolderDto.js';
 
 export type FsEntry = {
@@ -27,8 +29,33 @@ export type FsInspection = {
 };
 
 const MAX_READ_BYTES = 512 * 1024; // 512 KB
+const MAX_BUFFERED_BINARY_BYTES = 64 * 1024 * 1024;
 const IGNORED = new Set(['.git', 'node_modules', '.svelte-kit', 'build', 'dist']);
 const execFileAsync = promisify(execFile);
+const mutationKey = Symbol.for('orkestrai.workspaceFileMutations');
+const mutationGlobals = globalThis as typeof globalThis & { [mutationKey]?: Map<string, Promise<unknown>> };
+const mutations = mutationGlobals[mutationKey] ??= new Map<string, Promise<unknown>>();
+
+/** Retain serialized writes/deletes after removing synchronous filesystem I/O.
+ * A slow write holds only this path; unrelated files and Core remain usable. */
+async function mutateFile<T>(file: string, run: () => Promise<T>): Promise<T> {
+  let ancestor = file;
+  const missing: string[] = [];
+  let canonical: string;
+  for (;;) {
+    try { canonical = join(await realpath(ancestor), ...missing); break; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || dirname(ancestor) === ancestor) throw error;
+      missing.unshift(basename(ancestor)); ancestor = dirname(ancestor);
+    }
+  }
+  const key = process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+  const previous = mutations.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => undefined).then(run);
+  mutations.set(key, pending);
+  try { return await pending; }
+  finally { if (mutations.get(key) === pending) mutations.delete(key); }
+}
 
 /**
  * Acesso ao filesystem confinado ao working_dir do workspace.
@@ -70,34 +97,32 @@ export class FilesystemService {
 
   async list(workspaceId: string, path?: string | null): Promise<FsEntry[]> {
     const dir = await this.resolveSafe(workspaceId, path);
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    if (!(await stat(dir).catch(() => null))?.isDirectory()) {
       throw new Error(`Diretorio nao encontrado: ${path ?? '/'}`);
     }
-    const entries = readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => !IGNORED.has(entry.name))
-      .map((entry) => {
+    const files = (await readdir(dir, { withFileTypes: true })).filter(entry => !IGNORED.has(entry.name));
+    const entries: FsEntry[] = [];
+    // A large asset directory must not synchronously stat thousands of files
+    // or enqueue all of them on libuv's filesystem thread pool at once.
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(2, files.length) }, async () => {
+      for (let index = next++; index < files.length; index = next++) {
+        const entry = files[index];
         const fullPath = join(dir, entry.name);
-        let size = 0;
-        try {
-          size = entry.isFile() ? statSync(fullPath).size : 0;
-        } catch {
-          // arquivo sumiu entre readdir e stat
-        }
-        return {
+        const size = entry.isFile() ? await stat(fullPath).then(info => info.size, () => 0) : 0;
+        entries[index] = {
           name: entry.name,
           path: fullPath,
           type: entry.isDirectory() ? ('directory' as const) : ('file' as const),
           size,
         };
-      });
+      }
+    }));
     return entries.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
   }
 
   async read(workspaceId: string, path: string): Promise<{ path: string; content: string; truncated: boolean }> {
     const file = await this.resolveSafe(workspaceId, path);
-    if (!existsSync(file)) {
-      throw new Error(`Arquivo nao encontrado: ${path}`);
-    }
     const info = await stat(file);
     if (!info.isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
     const handle = await open(file, 'r');
@@ -185,39 +210,56 @@ export class FilesystemService {
     const root = await this.root(workspaceId);
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
-    const limit = options.limit ?? 50;
+    const limit = Math.max(1, Math.min(200, Math.floor(options.limit ?? 50) || 50));
     const ripgrepResults = await this.searchWithRipgrep(root, query, {
       byContent: options.byContent ?? false,
       limit,
-    }).catch(() => null);
+    }).catch(error => {
+      // A timeout/output limit is not permission to start another full scan
+      // on the Core thread. Only a missing search executable uses the fallback.
+      if (['ENOENT', 'ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND'].includes(error?.code)) return null;
+      throw error;
+    });
     if (ripgrepResults) return ripgrepResults;
 
     const results: Array<{ path: string; line?: number; preview?: string }> = [];
+    const generatedRoots = await codeGraphGeneratedRoots(root);
 
-    const walk = (dir: string) => {
-      if (results.length >= limit) return;
-      let entries;
-      try {
-        entries = readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        if (results.length >= limit) return;
-        if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
-        const fullPath = join(dir, entry.name);
+    const deadline = Date.now() + 2_500;
+    let visited = 0;
+    const pending = [root];
+    while (pending.length && results.length < limit) {
+      const directory = pending.pop()!;
+      const dir = await opendir(directory).catch(() => null);
+      if (!dir) continue;
+      for await (const entry of dir) {
+        if (results.length >= limit) break;
+        if (++visited > 20_000 || Date.now() > deadline) {
+          throw new Error('workspace_search_budget');
+        }
+        if (IGNORED.has(entry.name) || entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+        const fullPath = join(directory, entry.name);
+        if (isCodeGraphGeneratedPath(fullPath.slice(root.length + 1), generatedRoots)) continue;
         if (entry.isDirectory()) {
-          walk(fullPath);
+          pending.push(fullPath);
           continue;
         }
+        if (!entry.isFile()) continue;
         if (!options.byContent && entry.name.toLowerCase().includes(needle)) {
           results.push({ path: fullPath });
           continue;
         }
         if (options.byContent) {
           try {
-            if (statSync(fullPath).size > 256 * 1024) continue;
-            const content = readFileSync(fullPath, 'utf8');
+            const info = await stat(fullPath);
+            if (!info.isFile() || info.size > 256 * 1024) continue;
+            const handle = await open(fullPath, 'r');
+            let content: string;
+            try {
+              const bytes = Buffer.alloc(256 * 1024);
+              const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+              content = bytes.toString('utf8', 0, bytesRead);
+            } finally { await handle.close(); }
             if (content.includes('\0')) continue; // binario
             const lines = content.split('\n');
             for (let i = 0; i < lines.length && results.length < limit; i += 1) {
@@ -230,9 +272,7 @@ export class FilesystemService {
           }
         }
       }
-    };
-
-    walk(root);
+    }
     return results;
   }
 
@@ -243,20 +283,25 @@ export class FilesystemService {
   ): Promise<Array<{ path: string; line?: number; preview?: string }> | null> {
     const { rgPath } = await import('@vscode/ripgrep');
     const ignoredGlobs = [...IGNORED].flatMap((name) => ['--glob', `!${name}/**`]);
+    const generatedRoots = await codeGraphGeneratedRoots(root);
+    ignoredGlobs.push(...generatedRoots.flatMap(name => ['--iglob', `!/${name}/**`]));
+    // Search one checkout, preserving portable .orkestrai skills/roles/designs.
+    ignoredGlobs.push('--iglob', '!**/.orkestrai/floors/**', '--iglob', '!**/.orkestrai/reviews/**');
     if (!options.byContent) {
       const { stdout } = await execFileAsync(rgPath, [
         '--files',
         '--hidden',
         ...ignoredGlobs,
-        root,
-      ], { timeout: 2_500, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
+        '.',
+      ], { cwd: root, timeout: 2_500, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
       const needle = query.trim().toLocaleLowerCase();
       return stdout
         .split(/\r?\n/)
         .filter(Boolean)
         .filter((path) => path.toLocaleLowerCase().includes(needle))
         .slice(0, options.limit)
-        .map((path) => ({ path: resolve(path) }));
+        .map((path) => ({ path: resolve(root, path) }))
+        .filter(({ path }) => (path === root || path.startsWith(root + sep)) && !isFloorRuntimePath(path.slice(root.length + 1)));
     }
 
     let stdout = '';
@@ -271,8 +316,8 @@ export class FilesystemService {
         ...ignoredGlobs,
         '--',
         query.trim(),
-        root,
-      ], { timeout: 2_500, maxBuffer: 4 * 1024 * 1024, windowsHide: true }));
+        '.',
+      ], { cwd: root, timeout: 2_500, maxBuffer: 4 * 1024 * 1024, windowsHide: true }));
     } catch (error) {
       const candidate = error as { code?: number; stdout?: string };
       if (candidate.code === 1) return [];
@@ -293,8 +338,9 @@ export class FilesystemService {
           };
         };
         if (event.type !== 'match' || !event.data?.path?.text) continue;
-        const path = resolve(event.data.path.text);
+        const path = resolve(root, event.data.path.text);
         if (path !== root && !path.startsWith(root + sep)) continue;
+        if (isFloorRuntimePath(path.slice(root.length + 1))) continue;
         results.push({
           path,
           line: event.data.line_number,
@@ -309,19 +355,51 @@ export class FilesystemService {
 
   async writeBinary(workspaceId: string, path: string, data: Uint8Array): Promise<{ path: string; written: number }> {
     const file = await this.resolveSafe(workspaceId, path);
-    const { writeFileSync: writeBytes, mkdirSync } = await import('node:fs');
-    const { dirname } = await import('node:path');
-    mkdirSync(dirname(file), { recursive: true });
-    writeBytes(file, data);
+    await mutateFile(file, async () => {
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, data);
+    });
     return { path: file, written: data.length };
   }
 
   async readBinary(workspaceId: string, path: string): Promise<{ data: Uint8Array; contentType: string; name: string }> {
     const file = await this.resolveSafe(workspaceId, path);
-    if (!existsSync(file) || !statSync(file).isFile()) {
-      throw new Error(`Arquivo nao encontrado: ${path}`);
-    }
-    const { readFileSync: readBytes } = await import('node:fs');
+    const info = await stat(file);
+    if (!info.isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
+    if (info.size > MAX_BUFFERED_BINARY_BYTES) throw new Error('File is too large for a buffered image operation. Use the streaming file endpoint.');
+    const handle = await open(file, 'r');
+    try {
+      const data = Buffer.alloc(info.size);
+      let length = 0;
+      while (length < data.length) {
+        const { bytesRead } = await handle.read(data, length, Math.min(64 * 1024, data.length - length), length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      return { data: data.subarray(0, length), ...this.binaryMetadata(file) };
+    } finally { await handle.close(); }
+  }
+
+  /** HTTP previews/downloads do not buffer the entire asset on the Core heap. */
+  async streamBinary(workspaceId: string, path: string, signal?: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; size: number; contentType: string; name: string }> {
+    const file = await this.resolveSafe(workspaceId, path);
+    if (!(await stat(file)).isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
+    const handle = await open(file, 'r');
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
+      if (!info.size) {
+        await handle.close();
+        return { body: new ReadableStream({ start: controller => controller.close() }), size: 0, ...this.binaryMetadata(file) };
+      }
+      // Backpressure is measured in bytes, rather than 64K chunks of 64K bytes.
+      const stream = handle.createReadStream({ highWaterMark: 64 * 1024, end: info.size - 1, signal });
+      const body = Readable.toWeb(stream, { strategy: { highWaterMark: 64 * 1024, size: chunk => chunk.byteLength } }) as ReadableStream<Uint8Array>;
+      return { body, size: info.size, ...this.binaryMetadata(file) };
+    } catch (error) { await handle.close(); throw error; }
+  }
+
+  private binaryMetadata(file: string): { contentType: string; name: string } {
     const ext = file.split('.').at(-1)?.toLowerCase() ?? '';
     const contentType =
       {
@@ -338,20 +416,22 @@ export class FilesystemService {
         json: 'application/json; charset=utf-8',
       }[ext] ??
       'application/octet-stream';
-    return { data: readBytes(file), contentType, name: file.split(/[\\/]/).at(-1) ?? 'attachment' };
+    return { contentType, name: file.split(/[\\/]/).at(-1) ?? 'attachment' };
   }
 
   async deleteFile(workspaceId: string, path: string): Promise<boolean> {
     const file = await this.resolveSafe(workspaceId, path);
-    if (!existsSync(file)) return false;
-    if (!statSync(file).isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
-    unlinkSync(file);
-    return true;
+    return mutateFile(file, async () => {
+      const info = await stat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+      if (!info) return false;
+      if (!info.isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
+      return unlink(file).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
+    });
   }
 
   async write(workspaceId: string, path: string, content: string): Promise<{ path: string; written: number }> {
     const file = await this.resolveSafe(workspaceId, path);
-    writeFileSync(file, content, 'utf8');
+    await mutateFile(file, () => writeFile(file, content, 'utf8'));
     return { path: file, written: content.length };
   }
 }

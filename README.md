@@ -36,6 +36,8 @@ coders, designers, marketers, and creators can direct an AI team in real time.
 
 Task assignments use durable execution attempts and prerequisite tasks: one implementation runs per terminal, questions remain independent, and results or proven unresolved stops wake the coordinator. Leaders orchestrate and validate; specialists implement. Inspect queue, submission and confirmation timing separately with `orkestrai stats`. Discover only the needed version-matched reference with `orkestrai guide` / `workspace_guide`; all agent capabilities and the shared Karpathy delivery principles remain available.
 
+Large asset checkouts do not require Code Intelligence: Canvas Git polling reads change metadata instead of hashing each asset, and workspace file operations are asynchronous. HTTP previews/downloads stream with bounded buffering; searches have explicit runtime budgets. Reviews and Git mutation guards still check exact file content.
+
 ## Autonomous workspace delivery
 
 A direct task authorizes its normal implementation, validation and integration

@@ -5,6 +5,14 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+- Poll Canvas Git badges, file trees and diff lists without hashing every changed or untracked asset. Share concurrent display reads, keep exact content revisions for reviews and mutation guards, bound fingerprinting to two workers and limit Git read subprocesses across workspaces.
+- List, read, write and delete workspace files asynchronously, independently of Code Intelligence. Serialize same-file writes/deletes without blocking unrelated files. Stream HTTP asset previews/downloads with byte-based backpressure instead of buffering whole files; cap internal buffered image operations at 64 MiB.
+- Keep missing-ripgrep fallback searches asynchronous and bounded by time and entries. Never launch another full scan after a search timeout. Exclude Unity-generated root caches and nested Floors from normal search while retaining authored Assets, Packages and portable definitions.
+- Record rate-limited Core HTTP operation classes for slow requests and HTTP 500s, including failed UI module downloads before SvelteKit hooks. Exclude URLs, file paths, request bodies, headers and credentials from these diagnostics.
+
 ## 0.51.2 - 2026-11-03
 
 ### Fixed

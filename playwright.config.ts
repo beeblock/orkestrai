@@ -38,6 +38,7 @@ export default defineConfig({
       DB_PATH: resolve(e2eDataDir, 'database.db'),
       NODE_OPTIONS: e2eNodeOptions,
       ORKESTRAI_DATA_DIR: e2eDataDir,
+      ORKESTRAI_CORE_TOKEN: 'orkestrai-e2e-core-token',
       // Bridge provisioning and provider discovery also write/read user-level files.
       HOME: e2eHome,
       USERPROFILE: e2eHome,

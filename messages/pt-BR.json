@@ -1204,6 +1204,7 @@
   "files.error_list": "Falha ao listar.",
   "files.error_failed": "falhou",
   "files.search_empty": "Nada encontrado.",
+  "files.search_budget": "Esta busca atingiu o limite de varredura. Tente uma consulta mais específica.",
   "files.empty_dir": "Diretório vazio.",
   "files.commit_desc": "Mensagem do commit em {branch}.",
   "files.new_branch": "Nova branch",

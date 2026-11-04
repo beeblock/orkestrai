@@ -3,7 +3,8 @@ import { promisify } from 'node:util';
 import type { CanvasNode, Floor, TerminalNodePayload, Workspace } from '../../domain/types.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.ts';
-import { agentEnv } from '../../infrastructure/agent-path.js';
+import { agentEnvAsync } from '../../infrastructure/agent-path.js';
+import { withGitProcessSlot } from '../../infrastructure/GitProcessQueue.js';
 import { buildWorkspaceRuntimeLaunch } from '../../infrastructure/WslRuntime.js';
 import { floorService, withFloorGitSlot } from './FloorService.js';
 import { taskBoardService, type BoardTask } from './TaskBoardService.js';
@@ -70,13 +71,13 @@ function tasksFor(nodes: CanvasNode[], tasks: BoardTask[], includeUnassigned: bo
 }
 
 async function runGit(workspace: Workspace, path: string, args: string[]): Promise<string> {
-  const launch = buildWorkspaceRuntimeLaunch({ workspace, command: 'git', args, hostCwd: path, hostEnv: agentEnv() });
-  const { stdout } = await withFloorGitSlot(() => execFileAsync(launch.command, launch.args, {
+  const launch = buildWorkspaceRuntimeLaunch({ workspace, command: 'git', args, hostCwd: path, hostEnv: await agentEnvAsync() });
+  const { stdout } = await withFloorGitSlot(() => withGitProcessSlot(() => execFileAsync(launch.command, launch.args, {
     cwd: launch.cwd,
     env: launch.env,
     timeout: 10_000,
     windowsHide: true,
-  }));
+  })));
   return stdout;
 }
 

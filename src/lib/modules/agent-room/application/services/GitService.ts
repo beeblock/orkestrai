@@ -4,7 +4,8 @@ import { open, readFile, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { agentEnv } from '../../infrastructure/agent-path.js';
+import { agentEnvAsync } from '../../infrastructure/agent-path.js';
+import { withGitProcessSlot } from '../../infrastructure/GitProcessQueue.js';
 import { buildWorkspaceRuntimeLaunch } from '../../infrastructure/WslRuntime.js';
 import type { Workspace } from '../../domain/types.js';
 import type { ExecuteGitOperationInput, GitOperationInput } from '../../contracts/schemas/fsSchemas.js';
@@ -31,6 +32,9 @@ export type GitStatusResult = {
   revision: string;
   changes: GitChange[];
 };
+
+/** A display projection, deliberately not an authorization revision for a mutation. */
+export type GitStatusSummary = Omit<GitStatusResult, 'revision'>;
 
 export type GitFileDiff = {
   path: string;
@@ -160,6 +164,7 @@ function parseNameStatus(output: string, source: string): GitChange[] {
 
 /** Git operations scoped to the workspace root and executed without a shell. */
 export class GitService {
+  private summaryReads = new Map<string, Promise<GitStatusSummary>>();
   private notifyChanged(workspaceId: string): void {
     const broadcast = (globalThis as { __orkestraiBroadcast?: (payload: Record<string, unknown>) => void }).__orkestraiBroadcast;
     broadcast?.({ type: 'gitReviewChanged', workspaceId });
@@ -175,56 +180,58 @@ export class GitService {
     return (await this.workspace(workspaceId)).workingDir;
   }
 
-  private launch(workspace: Workspace, args: string[], cwd = workspace.workingDir): GitLaunch {
+  private async launch(workspace: Workspace, args: string[], cwd = workspace.workingDir): Promise<GitLaunch> {
     return buildWorkspaceRuntimeLaunch({
       workspace,
       command: 'git',
       args,
       hostCwd: cwd,
-      hostEnv: agentEnv(),
+      hostEnv: await agentEnvAsync(),
     });
   }
 
   private async workspaceGit(workspaceId: string, args: string[]): Promise<string> {
-    const launch = this.launch(await this.workspace(workspaceId), args);
-    const { stdout } = await execFileAsync(launch.command, launch.args, {
+    const launch = await this.launch(await this.workspace(workspaceId), args);
+    const { stdout } = await withGitProcessSlot(() => execFileAsync(launch.command, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true,
-    });
+    }));
     return stdout;
   }
 
   private async workspaceDirectoryGit(workspaceId: string, cwd: string, args: string[]): Promise<string> {
-    const launch = this.launch(await this.workspace(workspaceId), args, cwd);
-    const { stdout } = await execFileAsync(launch.command, launch.args, {
+    const launch = await this.launch(await this.workspace(workspaceId), args, cwd);
+    const { stdout } = await withGitProcessSlot(() => execFileAsync(launch.command, launch.args, {
       cwd: launch.cwd,
       env: launch.env,
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true,
-    });
+    }));
     return stdout;
   }
 
   private async git(cwd: string, args: string[]): Promise<string> {
-    const { stdout } = await execFileAsync('git', args, {
+    const env = await agentEnvAsync();
+    const { stdout } = await withGitProcessSlot(() => execFileAsync('git', args, {
       cwd,
-      env: agentEnv(),
+      env,
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: 16 * 1024 * 1024,
-    });
+    }));
     return stdout;
   }
 
   private async gitBufferLimited(cwd: string, args: string[]): Promise<{ data: Buffer<ArrayBufferLike>; truncated: boolean }> {
-    return this.spawnBufferLimited({ command: 'git', args, cwd, env: agentEnv() });
+    return withGitProcessSlot(async () => this.spawnBufferLimited({ command: 'git', args, cwd, env: await agentEnvAsync() }));
   }
 
   private async workspaceGitBufferLimited(workspaceId: string, args: string[]): Promise<{ data: Buffer<ArrayBufferLike>; truncated: boolean }> {
-    return this.spawnBufferLimited(this.launch(await this.workspace(workspaceId), args));
+    const launch = await this.launch(await this.workspace(workspaceId), args);
+    return withGitProcessSlot(() => this.spawnBufferLimited(launch));
   }
 
   private async spawnBufferLimited(launch: GitLaunch): Promise<{ data: Buffer<ArrayBufferLike>; truncated: boolean }> {
@@ -288,6 +295,18 @@ export class GitService {
     return this.statusWith((args) => this.workspaceGit(workspaceId, args));
   }
 
+  /** Canvas polling lists changes without reading gigabytes of asset contents.
+   * Exact content revisions remain mandatory in status(), review and execute. */
+  async statusSummary(workspaceId: string): Promise<GitStatusSummary> {
+    const existing = this.summaryReads.get(workspaceId);
+    if (existing) return existing;
+    const pending = this.statusWith(args => this.workspaceGit(workspaceId, args), false)
+      .then(({ revision: _revision, ...summary }) => summary)
+      .finally(() => { if (this.summaryReads.get(workspaceId) === pending) this.summaryReads.delete(workspaceId); });
+    this.summaryReads.set(workspaceId, pending);
+    return pending;
+  }
+
   async isRepository(workspaceId: string): Promise<boolean> {
     return this.workspaceGit(workspaceId, ['rev-parse', '--is-inside-work-tree'])
       .then((output) => output.trim() === 'true')
@@ -304,7 +323,7 @@ export class GitService {
     return this.statusWith((args) => this.workspaceDirectoryGit(workspaceId, cwd, args));
   }
 
-  private async statusWith(run: (args: string[]) => Promise<string>): Promise<GitStatusResult> {
+  private async statusWith(run: (args: string[]) => Promise<string>, fingerprint = true): Promise<GitStatusResult> {
     try {
       await run(['rev-parse', '--is-inside-work-tree']);
     } catch {
@@ -328,14 +347,21 @@ export class GitService {
       ahead = Number(counts[1]) || 0;
     }
     const changes = parsePorcelain(porcelain);
-    const contentHashes = await Promise.all(changes.map(async (change) => {
-      if (change.status === 'D') return `${change.id}:deleted`;
-      const args = change.staged ? ['rev-parse', `:${change.path}`] : ['hash-object', '--', change.path];
-      return `${change.id}:${(await run(args).catch(() => '')).trim()}`;
-    }));
-    const revision = createHash('sha256')
+    const contentHashes: string[] = [];
+    if (fingerprint) {
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(2, changes.length) }, async () => {
+        for (let index = next++; index < changes.length; index = next++) {
+          const change = changes[index];
+          if (change.status === 'D') { contentHashes[index] = `${change.id}:deleted`; continue; }
+          const args = change.staged ? ['rev-parse', `:${change.path}`] : ['hash-object', '--', change.path];
+          contentHashes[index] = `${change.id}:${(await run(args).catch(() => '')).trim()}`;
+        }
+      }));
+    }
+    const revision = fingerprint ? createHash('sha256')
       .update(`${head ?? ''}\0${porcelain}\0${contentHashes.join('\0')}`)
-      .digest('hex');
+      .digest('hex') : '';
     return { isRepo: true, branch, upstream, ahead, behind, head, revision, changes };
   }
 

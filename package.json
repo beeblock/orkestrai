@@ -243,6 +243,7 @@
       "build/**",
       "electron/**",
       "scripts/orkestrai-server.mjs",
+      "scripts/core-http-diagnostics.mjs",
       "scripts/run-startup-migrations.mjs",
       "scripts/prepare-code-graph-storage.mjs",
       "scripts/install-orkestrai-shim.mjs",

@@ -201,7 +201,9 @@ const crossOriginIsolationHeaders = {
 
 // The adapter serves immutable assets before SvelteKit hooks run. Set these
 // headers at the HTTP boundary so Monaco/PDF workers are not blocked by COEP.
+const { observeCoreRequest } = await import('./core-http-diagnostics.mjs');
 const server = http.createServer((request, response) => {
+  observeCoreRequest(request, response);
   for (const [header, value] of Object.entries(crossOriginIsolationHeaders)) {
     response.setHeader(header, value);
   }

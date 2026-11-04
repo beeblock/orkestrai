@@ -43,7 +43,7 @@
   async function refresh() {
     try {
       const status = await api<{ isRepo: boolean; branch: string | null; changes: GitChange[] }>(
-        `/api/agent-room/workspaces/${data.workspaceId}/git/status`
+        `/api/agent-room/workspaces/${data.workspaceId}/git/status?summary=1`
       );
       changes = status.changes;
       branch = status.branch;

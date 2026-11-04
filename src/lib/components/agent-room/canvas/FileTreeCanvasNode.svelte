@@ -69,7 +69,7 @@
       const [list, status] = await Promise.all([
         api<FsEntry[]>(`/api/agent-room/workspaces/${data.workspaceId}/fs/list?path=${encodeURIComponent(currentPath)}`),
         api<{ isRepo: boolean; branch: string | null; changes: GitChange[] }>(
-          `/api/agent-room/workspaces/${data.workspaceId}/git/status`
+          `/api/agent-room/workspaces/${data.workspaceId}/git/status?summary=1`
         ),
       ]);
       entries = list;
@@ -181,9 +181,14 @@
         searchResults = null;
         return;
       }
-      searchResults = await api<Array<{ path: string; line?: number; preview?: string }>>(
-        `/api/agent-room/workspaces/${data.workspaceId}/fs/search?q=${encodeURIComponent(needle)}&content=${byContent}`
-      );
+      try {
+        searchResults = await api<Array<{ path: string; line?: number; preview?: string }>>(
+          `/api/agent-room/workspaces/${data.workspaceId}/fs/search?q=${encodeURIComponent(needle)}&content=${byContent}`
+        );
+      } catch (error) {
+        errorMessage = error instanceof Error && error.message === 'workspace_search_budget'
+          ? m['files.search_budget']() : m['files.error_api']();
+      }
     }, 350);
   }
 

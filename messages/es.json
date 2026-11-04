@@ -1204,6 +1204,7 @@
   "files.error_list": "Error al listar.",
   "files.error_failed": "falló",
   "files.search_empty": "No se encontró nada.",
+  "files.search_budget": "Esta búsqueda alcanzó el límite de recorrido. Prueba una consulta más específica.",
   "files.empty_dir": "Directorio vacío.",
   "files.commit_desc": "Mensaje del commit en {branch}.",
   "files.new_branch": "Nueva rama",

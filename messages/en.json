@@ -1204,6 +1204,7 @@
   "files.error_list": "Failed to list.",
   "files.error_failed": "failed",
   "files.search_empty": "Nothing found.",
+  "files.search_budget": "This search reached its scan limit. Try a more specific query.",
   "files.empty_dir": "Empty directory.",
   "files.commit_desc": "Commit message on {branch}.",
   "files.new_branch": "New branch",

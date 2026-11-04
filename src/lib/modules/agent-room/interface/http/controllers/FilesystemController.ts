@@ -120,11 +120,11 @@ export class FilesystemController extends Controller {
     try {
       const path = event.url.searchParams.get('path');
       if (!path) throw new Error('Informe o caminho.');
-      const file = await filesystemService.readBinary(event.params.id, path);
-      return new Response(Buffer.from(file.data), {
+      const file = await filesystemService.streamBinary(event.params.id, path, event.request?.signal);
+      return new Response(file.body, {
         headers: {
           'content-type': file.contentType,
-          'content-length': String(file.data.byteLength),
+          'content-length': String(file.size),
           'content-disposition': `${file.contentType.startsWith('image/') ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
           'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
           'x-content-type-options': 'nosniff',
@@ -138,7 +138,9 @@ export class FilesystemController extends Controller {
 
   async gitStatus(event: any) {
     try {
-      return this.json({ data: await gitService.status(event.params.id) });
+      return this.json({ data: event.url.searchParams.get('summary') === '1'
+        ? await gitService.statusSummary(event.params.id)
+        : await gitService.status(event.params.id) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao ler status git.');
     }

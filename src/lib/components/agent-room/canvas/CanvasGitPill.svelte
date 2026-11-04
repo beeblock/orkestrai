@@ -10,7 +10,7 @@
   let changes = $state(0);
 
   async function load(id: string) {
-    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(id)}/git/status`, { cache: 'no-store' }).catch(() => null);
+    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(id)}/git/status?summary=1`, { cache: 'no-store' }).catch(() => null);
     const body = response?.ok ? await response.json().catch(() => null) as { data?: { isRepo?: boolean; branch?: string | null; changes?: unknown[] } } | null : null;
     if (id !== workspaceId) return;
     branch = body?.data?.isRepo ? body.data.branch ?? null : null;
