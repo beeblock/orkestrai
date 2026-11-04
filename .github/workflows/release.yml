@@ -128,9 +128,9 @@ jobs:
   build-macos:
     name: Build macOS (${{ matrix.arch }})
     needs: validate
-    # The standard Intel runner has 14 GB RAM; the M1 label only has 7 GB.
+    # Standard Intel macOS 26 has 14 GB RAM; the M1 label only has 7 GB.
     # Independent runners sign/notarize each CPU concurrently, with 14 GB each.
-    runs-on: macos-15-intel
+    runs-on: macos-26-intel
     strategy:
       fail-fast: false
       max-parallel: 2

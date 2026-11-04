@@ -406,7 +406,7 @@ O workflow `Release Desktop` compila:
 - Windows x64: instalador NSIS e blockmap;
 - Linux x64: AppImage, RPM e manifest `latest-linux.yml` (o electron-builder não gera blockmap separado para AppImage).
 
-O build macOS usa o runner padrão `macos-15-intel` de 14 GB de RAM, em vez do
+O build macOS usa o runner padrão `macos-26-intel` de 14 GB de RAM, em vez do
 runner M1 de 7 GB. O heap do build web permite até 12 GB; os binários nativos
 são selecionados pela arquitetura de cada instalador, não pela do runner.
 Os dois pacotes continuam exigindo assinatura Developer ID e notarização.
@@ -566,3 +566,15 @@ Upstream fixes: [Minimatch](https://github.com/isaacs/minimatch/commit/77a0f5c4b
 [Glob](https://github.com/isaacs/node-glob/commit/4682e8c9babee1b385202ede36389634e12076d7),
 [Joi](https://github.com/advisories/GHSA-4528-x5fx-h6hg), and
 [follow-redirects](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p).
+
+## Standard Intel runner recovery
+
+The signed packaging jobs use `macos-26-intel`, the standard x64 runner with
+14 GB of RAM. The `macos-15-intel` allocation repeatedly remained unassigned
+and was cancelled during the 0.51.3 release on November 4, 2026. A read-only
+probe verified the replacement host's architecture, memory and Apple tooling.
+The production bundle is still pinned to its successful CI source hash;
+Developer ID, Hardened Runtime, notarization, Gatekeeper, installer integrity
+and native Apple Silicon voice validation remain mandatory. The standard
+runner is free for this public repository; no larger paid runner is selected.
+See GitHub's [runner specifications](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job).

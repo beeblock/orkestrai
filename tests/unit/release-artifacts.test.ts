@@ -106,7 +106,7 @@ describe('release artifact validation', () => {
 
   it('uses a standard macOS runner with enough memory for the production build', () => {
     const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
-    expect(workflow.jobs['build-macos']['runs-on']).toBe('macos-15-intel');
+    expect(workflow.jobs['build-macos']['runs-on']).toBe('macos-26-intel');
     const packaging = workflow.jobs['build-macos'].steps.find((step: { name?: string }) => step.name === 'Package macOS installers');
     expect(packaging.run).toContain('scripts/package-macos.sh "--$TARGET_ARCH"');
     expect(packaging.env.ORKESTRAI_REQUIRE_MAC_SIGNING).toBe('true');
@@ -124,7 +124,7 @@ describe('release artifact validation', () => {
     const mac = workflow.jobs['build-macos'];
     const network = mac.steps.findIndex((step: { name?: string }) => step.name === 'Use TCP for Apple notarization ticket delivery');
     const packaging = mac.steps.findIndex((step: { name?: string }) => step.name === 'Package macOS installers');
-    expect(mac['runs-on']).toBe('macos-15-intel');
+    expect(mac['runs-on']).toBe('macos-26-intel');
     expect(network).toBeGreaterThanOrEqual(0);
     expect(network).toBeLessThan(packaging);
     expect(mac.steps[network].if).toBe("runner.os == 'macOS' && runner.arch == 'X64'");
