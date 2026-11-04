@@ -180,7 +180,7 @@ Uso:
   orkestrai computer watch '<watch-json>' --task <id> --idempotency <key>
   Computer effects require --task and --idempotency; declare --risk external_publication before sending or publishing.
   orkestrai port [--check <porta>]  — devolve uma porta livre (ou testa uma)
-  orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content] | fs open-folder <path>
+  orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content] | fs open-folder <path> | fs reveal <path>
   orkestrai say <texto>  — fala no desktop com a voz configurada
   orkestrai run <taskId>  — re-despacha a tarefa para o responsavel
   orkestrai notes | portals  — listagens rapidas
@@ -2390,10 +2390,10 @@ async function runCommand(argv, options, sink) {
     }
     case 'fs': {
       const [action, ...values] = rest;
-      if (action === 'open-folder') {
+      if (action === 'open-folder' || action === 'reveal') {
         const path = values.join(' ');
         if (!path) throw new Error('Usage: orkestrai fs open-folder <workspace-relative-path|@alias/path>');
-        const data = await bridge(config, 'POST', '/api/agent-room/bridge/fs/open-folder', { path });
+        const data = await bridge(config, 'POST', '/api/agent-room/bridge/fs/open-folder', { path, ...(action === 'reveal' ? { select: true } : {}) });
         out(JSON.stringify(data, null, 2));
         return 0;
       }
@@ -2422,7 +2422,7 @@ async function runCommand(argv, options, sink) {
         if (!hits.length) out('(nada encontrado)');
         return 0;
       }
-      throw new Error('Usage: orkestrai fs <read|write|search|open-folder> ...');
+      throw new Error('Usage: orkestrai fs <read|write|search|open-folder|reveal> ...');
     }
     case 'say': {
       const text = rest.join(' ');

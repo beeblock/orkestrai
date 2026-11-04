@@ -5,6 +5,7 @@
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import RevealSourceButton from './RevealSourceButton.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Dialog from '$lib/components/ui/dialog';
   import KnowledgePdfPreview from '../KnowledgePdfPreview.svelte';
@@ -42,7 +43,8 @@
 <NodeShell {id} {selected} minWidth={340} minHeight={280} deferOffscreen onResize={data.onResize} connections={data.connections} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection} titleText={data.title} onRename={data.onRename}>
   {#snippet icon()}<FileText size={14} />{/snippet}
   {#snippet title()}{data.title}{/snippet}
-  {#snippet actions()}<HeaderIconButton label={m['knowledge.close']()} class="node-action-btn danger" onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
+  {#snippet actions()}
+    <RevealSourceButton workspaceId={data.workspaceId} path={data.payload.path} /><HeaderIconButton label={m['knowledge.close']()} class="node-action-btn danger" onclick={() => data.onDelete(id)}><X size={14} /></HeaderIconButton>{/snippet}
   <div class="doc nodrag nowheel" data-testid="document-node">
     {#if !(doc?.status === 'missing' && !data.payload.path)}
     <div class="doc-toolbar">

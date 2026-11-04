@@ -1,5 +1,7 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'canvas-file-source': 'canvas-file-source',
+  'terminal-quick-prompt': 'terminal-quick-prompt',
   'leadership-handoff-review': 'leadership-handoff-review',
   'subscription-lending': 'subscription-lending',
   'profile-session-continuity': 'profile-session-continuity',

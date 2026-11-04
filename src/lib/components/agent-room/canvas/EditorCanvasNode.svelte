@@ -8,6 +8,7 @@
   import { CircleAlert, CircleCheck, FileCode2, Info, MessageSquareQuote, RefreshCw, Save, X } from '@lucide/svelte';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import RevealSourceButton from './RevealSourceButton.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import * as m from '$lib/paraglide/messages.js';
@@ -187,6 +188,7 @@
     {/if}
   {/snippet}
   {#snippet actions()}
+    <RevealSourceButton workspaceId={data.workspaceId} path={data.payload.path} />
     {#if filePath}
       <HeaderIconButton class="node-action-btn" label={m['editor.cite_tooltip']()} onclick={citeSelection}>
         <MessageSquareQuote size={13} />

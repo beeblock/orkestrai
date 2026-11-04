@@ -198,11 +198,19 @@
   });
 
   async function save() {
-    await fetch('/api/agent-room/settings', {
+    let response: Response;
+    try { response = await fetch('/api/agent-room/settings', {
       method: 'PUT',
       headers: csrfHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify(settings),
-    });
+    }); } catch {
+      toast.error(m['settings.save_failed']());
+      return;
+    }
+    if (!response.ok) {
+      toast.error(m['settings.save_failed']());
+      return;
+    }
     // Invalida a store reativa: terminais aplicam o novo atalho na hora.
     invalidateAppSettings();
     await getAppSettings(true);
@@ -610,6 +618,17 @@
           checked={settings.showMinimap !== 'false'}
           aria-label={m['settings.minimap']()}
           onCheckedChange={(checked: boolean) => (settings = { ...settings, showMinimap: String(checked) })}
+        />
+      </div>
+      <div class="setting-row">
+        <div class="setting-copy">
+          <span class="field-label">{m['settings.terminal_quick_prompt']()}</span>
+          <p class="field-hint">{m['settings.terminal_quick_prompt_desc']()}</p>
+        </div>
+        <Switch
+          checked={settings.showTerminalQuickPrompt !== 'false'}
+          aria-label={m['settings.terminal_quick_prompt']()}
+          onCheckedChange={(checked: boolean) => (settings = { ...settings, showTerminalQuickPrompt: String(checked) })}
         />
       </div>
       <div class="setting-row">

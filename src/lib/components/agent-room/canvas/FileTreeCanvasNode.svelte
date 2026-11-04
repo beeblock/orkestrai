@@ -7,6 +7,7 @@
   import { Button } from '$lib/components/ui/button';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import RevealSourceButton from './RevealSourceButton.svelte';
   import NodeEmptyState from './NodeEmptyState.svelte';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -244,6 +245,7 @@
     {/if}
   {/snippet}
   {#snippet actions()}
+    <RevealSourceButton workspaceId={data.workspaceId} path={currentPath || '.'} />
     {#if branch}
       <HeaderIconButton class="node-action-btn" label={graphMode ? m['files.view_files']() : m['files.view_graph']()} active={graphMode} onclick={toggleGraph}>
         <GitCommitHorizontal size={13} />

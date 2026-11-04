@@ -29,7 +29,7 @@ if (!state.__orkestraiFolderListening) {
 }
 
 /** A desktop shell integration, not screen observation or computer input. */
-export async function openDesktopFolder(root: string, path: string): Promise<void> {
+export async function openDesktopFolder(root: string, path: string, select = false): Promise<void> {
   if (typeof process.send !== 'function' || !process.connected) {
     throw new Error('Opening folders requires the installed desktop app, not Computer permissions.');
   }
@@ -40,7 +40,7 @@ export async function openDesktopFolder(root: string, path: string): Promise<voi
     timer.unref?.();
     pending.set(requestId, { resolve, reject, timer });
     try {
-      process.send!({ type: 'orkestrai:folder:open', requestId, root, path }, error => {
+      process.send!({ type: 'orkestrai:folder:open', requestId, root, path, ...(select ? { select: true } : {}) }, error => {
         if (error) settle(requestId, 'Could not reach the desktop folder opener.');
       });
     } catch {

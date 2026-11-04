@@ -7,6 +7,7 @@
   import type { CreativeVideoAsset } from '$lib/modules/creative-media/domain/types.js';
   import NodeShell, { type NodeConnection } from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import RevealSourceButton from './RevealSourceButton.svelte';
   type Data = { title: string; workspaceId: string; payload: Partial<CreativeVideoAsset>; connections?: NodeConnection[]; onDelete: (id: string) => void; onResize?: (id: string, params: { x: number; y: number; width: number; height: number }) => void; onRename?: (id: string, title: string) => void; onJumpToNode?: (id: string) => void; onRemoveConnection?: (id: string) => void; };
   let { id, data, selected } = $props<NodeProps & { data: Data }>();
   let failed = $state(false);
@@ -18,7 +19,8 @@
 <NodeShell {id} {selected} accent="var(--app-secondary)" minWidth={280} minHeight={220} onResize={data.onResize} connections={data.connections ?? []} titleText={data.title} onRename={data.onRename} onJumpToNode={data.onJumpToNode} onRemoveConnection={data.onRemoveConnection}>
   {#snippet icon()}{#if data.payload.mimeType?.startsWith('audio/')}<AudioLines size={14} />{:else}<Film size={14} />{/if}{/snippet}
   {#snippet title()}{data.title || (data.payload.mimeType?.startsWith('audio/') ? m['creative_audio.asset']() : m['creative.video']())}{/snippet}
-  {#snippet actions()}<HeaderIconButton class="node-action-btn" label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton><HeaderIconButton class="node-action-btn" label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>{/snippet}
+  {#snippet actions()}
+    <RevealSourceButton workspaceId={data.workspaceId} path={data.payload.path} /><HeaderIconButton class="node-action-btn" label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton><HeaderIconButton class="node-action-btn" label={m['creative.delete']()} danger onclick={() => data.onDelete(id)}><X size={13} /></HeaderIconButton>{/snippet}
   <div class="nodrag nowheel flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--app-canvas)]">
     {#if data.payload.mimeType === 'image/gif'}
       <img src={url} alt={data.title || m['creative.video']()} class="min-h-0 w-full flex-1 object-contain" onerror={() => failed = true} />

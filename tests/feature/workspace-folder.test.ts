@@ -52,6 +52,16 @@ describe('Authenticated workspace folder opening', () => {
     await expect(filesystemService.openFolder(new OpenWorkspaceFolderDto(ws.id, 'agent', '.'))).rejects.toThrow();
     expect(openDesktopFolder).not.toHaveBeenCalled();
   });
+  it('reveals files in the workspace and approved repository aliases through the same desktop boundary', async () => {
+    const ws = await workspace();
+    await writeFile(join(root, 'project', 'image.png'), 'fixture');
+    await writeFile(join(root, 'assets', 'image.png'), 'fixture');
+    await filesystemService.openFolder(new OpenWorkspaceFolderDto(ws.id, 'agent', 'image.png', true));
+    expect(openDesktopFolder).toHaveBeenLastCalledWith(join(root, 'project'), join(root, 'project', 'image.png'), true);
+    await filesystemService.openFolder(new OpenWorkspaceFolderDto(ws.id, 'agent', '@assets/image.png', true));
+    expect(openDesktopFolder).toHaveBeenLastCalledWith(join(root, 'assets'), join(root, 'assets', 'image.png'), true);
+    await expect(filesystemService.openFolder(new OpenWorkspaceFolderDto(ws.id, 'agent', '../outside.png', true))).rejects.toThrow();
+  });
   it('audits desktop failures without falsely completing', async () => {
     const ws = await workspace();
     vi.mocked(openDesktopFolder).mockRejectedValue(new Error('Desktop unavailable'));

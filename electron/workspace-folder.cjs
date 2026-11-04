@@ -14,6 +14,14 @@ async function openWorkspaceFolder(shell, input) {
   const root = await fs.realpath(input.root);
   const candidate = await fs.realpath(input.path);
   if (!isWithin(root, candidate)) throw new Error('Folder is outside the approved repository.');
+  if (input.select !== undefined && typeof input.select !== 'boolean') throw new Error('Invalid file selection.');
+  if (input.select === true) {
+    const details = await fs.stat(candidate);
+    if (!details.isFile() && !details.isDirectory()) throw new Error('Only files or folders can be revealed.');
+    // Reveal the entry without opening or executing its contents.
+    shell.showItemInFolder(candidate);
+    return { opened: true };
+  }
   if (!(await fs.stat(candidate)).isDirectory()) throw new Error('Only folders can be opened with this action.');
   if (/\.(?:app|workflow|bundle|xpc|plugin|prefpane|scptd)$/i.test(candidate)
     || /\.\{[a-f0-9-]{36}\}$/i.test(candidate)) throw new Error('Application bundles and shell shortcuts cannot be opened as folders.');

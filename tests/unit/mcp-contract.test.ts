@@ -68,6 +68,7 @@ type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 const EXPECTED: Record<string, Expectation> = {
   video_workflow_import: { method: 'POST', path: /\/bridge\/creative-media$/, schema: z.object({ command: z.literal('import'), taskId: z.string().uuid(), input: creativeVideoImportSchema }).strict() },
   fs_open_folder: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
+  fs_reveal: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
   git_status: { method: 'GET', path: /\/bridge\/git$/ },
@@ -178,6 +179,7 @@ const EXPECTED: Record<string, Expectation> = {
 const TOOL_ARGS: Record<string, Record<string, unknown>> = {
   video_workflow_import: { taskId: '00000000-0000-7000-8000-000000000099', input: { path: 'renders/final.mp4', title: 'Final edit', expectedSha256: 'a'.repeat(64) } },
   fs_open_folder: { path: 'generated/images/my campaign' },
+  fs_reveal: { path: 'generated/images/my campaign/image.png' },
   git_preview: { operation: 'checkout', ref: 'review' },
   git_execute: { operation: 'checkout', ref: 'review', expectedRevision: 'a'.repeat(64), taskId: '00000000-0000-7000-8000-000000000099' },
   code_graph_index: { projectIds: ['00000000-0000-7000-8000-000000000020'], force: true },

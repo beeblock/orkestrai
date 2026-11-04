@@ -13,7 +13,7 @@
   import TourGuidePanel from '$lib/components/agent-room/tours/TourGuidePanel.svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { initLocaleRuntime, localeState } from '$lib/i18n/locale.svelte.js';
-  import { appSettingsStore } from '$lib/components/agent-room/app-settings.svelte.js';
+  import { appSettingsStore, refreshAppSettingsOnFocus } from '$lib/components/agent-room/app-settings.svelte.js';
   import { applyAppTheme } from '$lib/components/agent-room/app-themes.js';
 
   type DesktopMenuBridge = {
@@ -59,6 +59,8 @@
     void desktopMenu?.setAdventureStrip?.(appSettingsStore.values.adventureStrip === 'true')?.catch(() => undefined);
   });
 
+
+  onMount(() => phoneShell ? undefined : refreshAppSettingsOnFocus());
 
   onMount(() => {
     if (phoneShell) {

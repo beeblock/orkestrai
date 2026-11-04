@@ -541,7 +541,8 @@
   }
 
   // With the chat face shown, its own field takes the files; the hidden quick field must not.
-  const quickFieldShown = $derived(!(face === 'chat' && Boolean(currentProvider)));
+  const quickFieldShown = $derived(appSettingsStore.values.showTerminalQuickPrompt !== 'false'
+    && !(face === 'chat' && Boolean(currentProvider)));
 
   function handleAttachmentDragOver(event: DragEvent) {
     if (quickFieldShown) staged.dragover(event);
@@ -1116,6 +1117,7 @@
   {#if staged.items.length && quickFieldShown}
     <div class="staged-attachments nodrag"><AttachmentList workspaceId={data.workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>
   {/if}
+  {#if quickFieldShown}
   <div
     class="composer nodrag"
     class:hidden-face={face === 'chat' && Boolean(currentProvider)}
@@ -1151,6 +1153,7 @@
     </button>
   </div>
   {#if staged.error}<p class="attachment-error" role="status">{staged.error}</p>{/if}
+  {/if}
 </NodeShell>
 
 <style>

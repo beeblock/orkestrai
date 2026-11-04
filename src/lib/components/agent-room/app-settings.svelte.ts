@@ -25,6 +25,7 @@ export async function getAppSettings(force = false): Promise<Record<string, stri
   pending = (async () => {
     try {
       const response = await fetch('/api/agent-room/settings', { signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error('Settings are temporarily unavailable.');
       const payload = await response.json();
       cache = payload.data ?? {};
       loadedAt = Date.now();
@@ -60,7 +61,7 @@ export async function updateAppSettings(values: Record<string, string>): Promise
 /** Revalida quando a janela volta ao foco (bind trocado em outra aba/app). */
 export function refreshAppSettingsOnFocus() {
   if (typeof window === 'undefined') return;
-  window.addEventListener('focus', () => {
-    void getAppSettings(true);
-  });
+  const refresh = () => { void getAppSettings(true); };
+  window.addEventListener('focus', refresh);
+  return () => window.removeEventListener('focus', refresh);
 }

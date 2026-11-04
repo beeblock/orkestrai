@@ -7,14 +7,30 @@ import { openWorkspaceFolderSchema } from '$lib/modules/agent-room/contracts/sch
 
 const { openWorkspaceFolder, isWithin } = createRequire(import.meta.url)('../../electron/workspace-folder.cjs');
 let root: string;
-const shell = { openPath: vi.fn() };
+const shell = { openPath: vi.fn(), showItemInFolder: vi.fn() };
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), 'ork-folder-')));
   shell.openPath.mockReset().mockResolvedValue('');
+  shell.showItemInFolder.mockReset();
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe('Workspace folder desktop boundary', () => {
+  it('reveals the exact file without opening or executing it', async () => {
+    const file = join(root, 'image ; $draft.png');
+    await writeFile(file, 'fixture');
+    await expect(openWorkspaceFolder(shell, { root, path: file, select: true })).resolves.toEqual({ opened: true });
+    expect(shell.showItemInFolder).toHaveBeenCalledExactlyOnceWith(file);
+    expect(shell.openPath).not.toHaveBeenCalled();
+    await expect(openWorkspaceFolder(shell, { root, path: file, select: 'true' })).rejects.toThrow();
+  });
+  it('can select an executable bundle without launching it', async () => {
+    const bundle = join(root, 'Example.app');
+    await mkdir(bundle);
+    await expect(openWorkspaceFolder(shell, { root, path: bundle, select: true })).resolves.toEqual({ opened: true });
+    expect(shell.showItemInFolder).toHaveBeenCalledExactlyOnceWith(bundle);
+    expect(shell.openPath).not.toHaveBeenCalled();
+  });
   it('opens the exact directory with literal spaces and shell metacharacters', async () => {
     const folder = join(root, 'campaign ; $draft');
     await mkdir(folder);

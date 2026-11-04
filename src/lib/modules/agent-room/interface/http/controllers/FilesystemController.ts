@@ -1,4 +1,6 @@
 import { Controller } from '@beeblock/svelar/routing';
+import { OpenWorkspaceFolderRequest } from '../requests/OpenWorkspaceFolderRequest.js';
+import { OpenWorkspaceFolderDto } from '../../../application/dto/OpenWorkspaceFolderDto.js';
 import { FormRequest } from '@beeblock/svelar/forms';
 import {
   executeGitOperationSchema,
@@ -68,6 +70,11 @@ class GitOperationExecuteRequest extends FormRequest {
 }
 
 export class FilesystemController extends Controller {
+  async openFolder(event: any) {
+    const input = await OpenWorkspaceFolderRequest.validate(event);
+    return this.json({ data: await filesystemService.openFolder(OpenWorkspaceFolderDto.from(event.params.id, null, input)) });
+  }
+
   async list(event: any) {
     try {
       const path = event.url.searchParams.get('path');

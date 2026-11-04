@@ -256,6 +256,13 @@ describe('orkestrai CLI', () => {
     const lines = [];
     return { lines, out: (line) => lines.push(String(line)) };
   }
+  it('requests file selection through the authenticated desktop bridge', async () => {
+    const { out } = capture();
+    const env = { ORKESTRAI_NODE_ID: 'leader', ORKESTRAI_AGENT_TOKEN: 'live-agent-token' };
+    expect(await run(['fs', 'reveal', 'assets/my image.png'], { cwd, out, env })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/fs/open-folder',
+      agentToken: 'live-agent-token', body: { path: 'assets/my image.png', select: true } });
+  });
 
   it('exposes native Canvas operations to any assigned agent without Computer', async () => {
     const { out } = capture();
@@ -296,6 +303,7 @@ describe('orkestrai CLI', () => {
     expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/fs/open-folder', body: { path: 'generated/images/my campaign' }, agentToken: 'terminal-token' });
     await expect(run(['fs', 'open-folder'], { cwd, out, env: {} })).rejects.toThrow('Usage:');
   });
+
 
   it('list mostra agentes do workspace', async () => {
     const { lines, out } = capture();

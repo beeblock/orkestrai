@@ -2,6 +2,7 @@ import { AgentSetting } from '../../domain/models/AgentSetting.js';
 import { DEFAULT_EMBEDDED_TTS_SPEED, DEFAULT_EMBEDDED_TTS_VOICE } from '../../domain/voice.js';
 
 const DEFAULTS: Record<string, string> = {
+  showTerminalQuickPrompt: 'true',
   uiLanguage: 'en',
   appTheme: 'orkestrai-dark',
   customAppThemes: '[]',

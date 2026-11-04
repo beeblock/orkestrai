@@ -6158,5 +6158,10 @@
   "tasks.execution_dispatching": "Entregando tarefa",
   "tasks.execution_running": "Executando tarefa",
   "tasks.execution_reported": "Aguardando revisão",
-  "tasks.execution_waiting": "Aguardando ou precisa de coordenação"
+  "tasks.execution_waiting": "Aguardando ou precisa de coordenação",
+  "settings.terminal_quick_prompt": "Barra de mensagem rápida nos nós",
+  "settings.terminal_quick_prompt_desc": "Mostrar o campo abaixo dos terminais do Canvas em todos os workspaces. Ao ocultar, os agentes continuam executando; a Conversa e a digitação no terminal seguem disponíveis.",
+  "node.reveal_source": "Mostrar arquivo na pasta",
+  "node.reveal_source_error": "Não foi possível mostrar o arquivo na pasta. Confira se ele ainda existe e se o aplicativo desktop está conectado.",
+  "settings.save_failed": "Não foi possível salvar as configurações. Tente novamente."
 }

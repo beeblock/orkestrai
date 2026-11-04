@@ -6158,5 +6158,10 @@
   "tasks.execution_dispatching": "Entregando tarea",
   "tasks.execution_running": "Ejecutando tarea",
   "tasks.execution_reported": "Pendiente de revisión",
-  "tasks.execution_waiting": "Esperando o requiere coordinación"
+  "tasks.execution_waiting": "Esperando o requiere coordinación",
+  "settings.terminal_quick_prompt": "Barra de mensaje rápido en los nodos",
+  "settings.terminal_quick_prompt_desc": "Mostrar el campo debajo de los terminales del Canvas en todos los workspaces. Ocultarlo mantiene los agentes en ejecución; Conversación y la entrada del terminal siguen disponibles.",
+  "node.reveal_source": "Mostrar archivo en la carpeta",
+  "node.reveal_source_error": "No se pudo mostrar el archivo en su carpeta. Comprueba que aún existe y que la aplicación de escritorio está conectada.",
+  "settings.save_failed": "No se pudo guardar la configuración. Inténtalo de nuevo."
 }

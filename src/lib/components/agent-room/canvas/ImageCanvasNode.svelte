@@ -7,6 +7,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
+  import RevealSourceButton from './RevealSourceButton.svelte';
   import { canvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
   import { isCanvasOverview } from './viewport-settle.js';
   import { canCacheImageOverview, paintImageOverview } from './image-overview-preview.js';
@@ -149,6 +150,7 @@
   {#snippet icon()}<ImageIcon size={13} />{/snippet}
   {#snippet title()}{data.title || m['node.image']()}{/snippet}
   {#snippet actions()}
+    <RevealSourceButton workspaceId={data.workspaceId} path={data.payload.path} />
     {#if imageUrl}<HeaderIconButton class="node-action-btn" label={m['creative_edit.title']()} onclick={() => editing = true}><WandSparkles size={13} /></HeaderIconButton>{/if}
     {#if imageUrl}<HeaderIconButton class="node-action-btn" label={m['creative_review.title']()} onclick={() => reviewing = true}><Columns2 size={13} /></HeaderIconButton>{/if}
     {#if !data.payload.characterId || !data.payload.characterDigest}<HeaderIconButton class="node-action-btn" label={m['node.image_replace']()} onclick={() => fileInput.click()}>

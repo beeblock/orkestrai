@@ -65,15 +65,19 @@ export class FilesystemService {
     const workspace = await workspaceRepository.getWorkspace(dto.workspaceId);
     if (!workspace) throw new Error('Workspace not found.');
     const candidate = await workspacePathService.resolveExisting(workspace, dto.path);
-    if (!(await stat(candidate)).isDirectory()) throw new Error('The requested path is not a folder.');
+    const details = await stat(candidate);
+    if (dto.select ? !details.isFile() && !details.isDirectory() : !details.isDirectory()) {
+      throw new Error('The requested path is not a supported file or folder.');
+    }
     const alias = dto.path.match(/^@([a-z0-9][a-z0-9_-]*)/i)?.[1];
     const root = await workspacePathService.resolveExisting(workspace, alias ? `@${alias}` : '.');
     return autonomyPolicyService.execute({
-      workspaceId: workspace.id, capability: 'filesystem', operation: 'filesystem.open_folder',
-      actorType: 'agent', actorId: dto.actorId, mutation: false,
+      workspaceId: workspace.id, capability: 'filesystem', operation: dto.select ? 'filesystem.reveal_file' : 'filesystem.open_folder',
+      actorType: dto.actorId ? 'agent' : 'user', actorId: dto.actorId, mutation: false,
       filesystem: { path: candidate, permission: 'read' }, input: { path: dto.path },
     }, async () => {
-      await openDesktopFolder(root, candidate);
+      if (dto.select) await openDesktopFolder(root, candidate, true);
+      else await openDesktopFolder(root, candidate);
       return { opened: true as const, path: dto.path };
     });
   }

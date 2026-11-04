@@ -6158,5 +6158,10 @@
   "tasks.execution_dispatching": "Delivering task",
   "tasks.execution_running": "Executing task",
   "tasks.execution_reported": "Awaiting review",
-  "tasks.execution_waiting": "Waiting or needs coordination"
+  "tasks.execution_waiting": "Waiting or needs coordination",
+  "settings.terminal_quick_prompt": "Quick message bar on agent nodes",
+  "settings.terminal_quick_prompt_desc": "Show the input below Canvas terminals in every workspace. Hiding it keeps agents running; Conversation and terminal input remain available.",
+  "node.reveal_source": "Show file in folder",
+  "node.reveal_source_error": "Could not show this file in its folder. Check that it still exists and that the desktop app is connected.",
+  "settings.save_failed": "Could not save settings. Try again."
 }

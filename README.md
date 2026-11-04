@@ -916,6 +916,15 @@ problem with Console visible. **Help → Open logs folder** opens the rotating
 `orkestrai.log`, which captures renderer and internal-server failures with
 common credentials redacted; normal agent output is not persisted.
 
+## Canvas source files and quick messages
+
+Use **Show file in folder** in an image, document, media or editor node header to
+reveal its actual workspace file in Finder, Explorer or the Linux file manager.
+Imported nodes use their workspace copy. Agents have the same confined operation
+through `orkestrai fs reveal <path>` / `fs_reveal`, including approved repository aliases.
+In **Settings → Terminal**, turn **Quick message bar on agent nodes** off to hide
+that lower input globally. Agents keep running; terminal and Conversation input remain available.
+
 ## Development
 
 Requirements:
