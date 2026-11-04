@@ -225,7 +225,8 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     // A leader-like hub is not the same workload as a low-degree chain.
     // Drag it in the fixture, never move nodes in the owner's workspace.
     const hub = page.locator('.svelte-flow__node').first();
-    const hubHeader = (await hub.locator('.node-header').boundingBox())!;
+    // Header actions are intentionally nodrag. Use the icon as the stable drag surface.
+    const hubHeader = (await hub.locator('.node-icon').boundingBox())!;
     const hubBefore = await hub.getAttribute('style');
     await page.mouse.move(hubHeader.x + hubHeader.width / 2, hubHeader.y + hubHeader.height / 2);
     await page.mouse.down();

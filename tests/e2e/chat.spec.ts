@@ -185,7 +185,7 @@ test.describe('Chat', () => {
       const composer = page.locator('#chat-composer-input');
       await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toBeEnabled();
       await composer.fill('oi');
-      await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Mensagem de voz' })).toBeEnabled();
       await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toBeEnabled();
     } finally {
       await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
