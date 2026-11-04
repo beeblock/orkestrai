@@ -196,7 +196,20 @@ export class ChannelService {
    * exactly that message.
    */
   async listMessages(workspaceId: string, channel: string, input: { before?: string | null; beforeId?: string | null; limit?: number } = {}): Promise<ChannelMessage[]> {
-    await this.requireChannel(workspaceId, channel);
+    const { directNodeId, agents } = await this.requireChannel(workspaceId, channel);
+    if (directNodeId && !input.before) {
+      // Transcript recovery must never hold up stored history on a slow profile disk.
+      void import('./ChannelTranscriptService.js').then(({ channelTranscriptService }) =>
+        channelTranscriptService.follow(workspaceId, directNodeId)).catch(() => undefined);
+    }
+    if (channel === TEAM_CHANNEL && !input.before) {
+      void import('./ChannelTranscriptService.js').then(async ({ channelTranscriptService }) => {
+        const latest = await channelRepository.latestDeliveredOwner(workspaceId, channel);
+        const recipients = Array.isArray(latest?.meta.deliveredNodes) ? latest.meta.deliveredNodes : [];
+        await Promise.all(agents.filter(agent => recipients.includes(agent.id))
+          .map(agent => channelTranscriptService.follow(workspaceId, agent.id, channel)));
+      }).catch(() => undefined);
+    }
     const limit = Math.min(200, Math.max(1, input.limit ?? 80));
     const cursor = { before: input.before ?? null, beforeId: input.before ? input.beforeId ?? null : null };
     const stored = await channelRepository.list(workspaceId, channel, { ...cursor, limit });
@@ -593,6 +606,10 @@ agentInboxService.registerRelevance('owner_question', async (envelope) => {
 agentInboxService.onDelivered('owner', async (envelope) => {
   const id = envelope.metadata.channelMessageId;
   if (typeof id !== 'string') return;
-  const message = await channelRepository.markDelivered(envelope.workspaceId, id, envelope.deliveredAt ?? new Date().toISOString());
+  const message = await channelRepository.markDelivered(envelope.workspaceId, id, envelope.deliveredAt ?? new Date().toISOString(), envelope.toNodeId);
   if (message) broadcast(message);
+  if (message && (message.channel === directChannel(envelope.toNodeId) || message.channel === TEAM_CHANNEL)) {
+    void import('./ChannelTranscriptService.js').then(({ channelTranscriptService }) =>
+      channelTranscriptService.follow(envelope.workspaceId, envelope.toNodeId, message.channel)).catch(() => undefined);
+  }
 });

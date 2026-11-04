@@ -1,4 +1,5 @@
 import { uuidv7 } from '@beeblock/svelar/support';
+import { Connection } from '@beeblock/svelar/database';
 import { AgentChannelMessage } from '../../domain/models/AgentChannelMessage.js';
 import type { ChannelAuthorKind, ChannelMessage, ChannelMessageKind } from '../../domain/channels.js';
 
@@ -42,6 +43,7 @@ export type SaveChannelMessageInput = {
   body: string;
   meta?: Record<string, unknown>;
   replyToId?: string | null;
+  createdAt?: string;
 };
 
 export class ChannelRepository {
@@ -58,7 +60,7 @@ export class ChannelRepository {
       meta_json: input.meta && Object.keys(input.meta).length ? JSON.stringify(input.meta) : null,
       reply_to_id: input.replyToId ?? null,
       answered_at: null,
-      created_at: now,
+      created_at: input.createdAt ?? now,
       updated_at: now,
     });
     return mapChannelMessage(model);
@@ -68,6 +70,30 @@ export class ChannelRepository {
     const model = await AgentChannelMessage.find(id);
     if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
     return mapChannelMessage(model);
+  }
+
+  /** Transactional deduplication survives concurrent readers and app restarts. */
+  async saveTranscriptUpdate(input: SaveChannelMessageInput & { transcriptKey: string }): Promise<ChannelMessage | null> {
+    return Connection.transaction(async () => {
+      const existing = await AgentChannelMessage.query().where('workspace_id', input.workspaceId)
+        .where('channel', input.channel).where('author_node_id', input.authorNodeId!)
+        .where('meta_json', 'like', `%"transcriptKey":"${input.transcriptKey}"%`).first();
+      if (existing) return null;
+      // An explicit bridge post may have already published this exact text.
+      const posted = await AgentChannelMessage.query().where('workspace_id', input.workspaceId)
+        .where('channel', input.channel).where('author_kind', 'agent').where('author_node_id', input.authorNodeId!)
+        .where('body', input.body).where('created_at', '>=', new Date(Date.parse(input.createdAt!) - 10_000).toISOString())
+        .where('created_at', '<=', new Date(Date.parse(input.createdAt!) + 10_000).toISOString()).first();
+      if (posted) return null;
+      return this.save({ ...input, meta: { ...input.meta, transcriptKey: input.transcriptKey } });
+    });
+  }
+
+  async latestDeliveredOwner(workspaceId: string, channel: string, nodeId?: string): Promise<ChannelMessage | null> {
+    const rows = await AgentChannelMessage.query().where('workspace_id', workspaceId).where('channel', channel)
+      .where('author_kind', 'owner').where('meta_json', 'like', '%"deliveredAt":%')
+      .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(nodeId ? 50 : 1).get();
+    return rows.map(mapChannelMessage).find(message => !nodeId || Array.isArray(message.meta.deliveredNodes) && message.meta.deliveredNodes.includes(nodeId)) ?? null;
   }
 
   /**
@@ -167,14 +193,23 @@ export class ChannelRepository {
   }
 
   /** Records once when an owner message reached its agent; null when it already had. */
-  async markDelivered(workspaceId: string, id: string, at: string): Promise<ChannelMessage | null> {
-    const model = await AgentChannelMessage.find(id);
-    if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
-    const message = mapChannelMessage(model);
-    if (message.authorKind !== 'owner' || message.meta.deliveredAt) return null;
-    await AgentChannelMessage.query().where('id', id).update({ meta_json: JSON.stringify({ ...message.meta, deliveredAt: at }), updated_at: new Date().toISOString() });
-    const updated = await AgentChannelMessage.find(id);
-    return updated ? mapChannelMessage(updated) : null;
+  async markDelivered(workspaceId: string, id: string, at: string, nodeId?: string): Promise<ChannelMessage | null> {
+    return Connection.transaction(async () => {
+      const model = await AgentChannelMessage.find(id);
+      if (!model || model.getAttribute('workspace_id') !== workspaceId) return null;
+      const message = mapChannelMessage(model);
+      const deliveredNodes = Array.isArray(message.meta.deliveredNodes) ? message.meta.deliveredNodes : [];
+      const deliveryReceipts = message.meta.deliveryReceipts && typeof message.meta.deliveryReceipts === 'object'
+        ? message.meta.deliveryReceipts as Record<string, unknown> : {};
+      if (message.authorKind !== 'owner' || message.meta.deliveredAt && (!nodeId || deliveredNodes.includes(nodeId))) return null;
+      await AgentChannelMessage.query().where('id', id).update({ meta_json: JSON.stringify({ ...message.meta,
+        deliveredAt: message.meta.deliveredAt ?? at, ...(nodeId ? {
+          deliveredNodes: [...deliveredNodes, nodeId], deliveryReceipts: { ...deliveryReceipts, [nodeId]: at },
+        } : {}),
+      }), updated_at: new Date().toISOString() });
+      const updated = await AgentChannelMessage.find(id);
+      return updated ? mapChannelMessage(updated) : null;
+    });
   }
 
   async deleteWorkspace(workspaceId: string): Promise<void> {

@@ -139,6 +139,8 @@ routines. Agents can ask you something without stopping (`orkestrai ask-owner`),
 and requests that need your permission show Approve and Refuse right where they
 appear: in Needs you, in the agent's node and in Chat.
 
+After your message is delivered, the app automatically mirrors public terminal progress and final answers into that conversation, including the team channel. It follows only the receiving agent’s exact saved conversation, recovers when you reopen Chat, and deduplicates previously published updates. It does not display private reasoning or tool output and does not send reminder prompts.
+
 Paste, drop or pick images, PDFs and files in Chat, the Canvas message bar,
 the leader panel, Focus or an agent's chat face. Each receiving agent gets an
 absolute file path in its own native or WSL runtime, including on a Floor.

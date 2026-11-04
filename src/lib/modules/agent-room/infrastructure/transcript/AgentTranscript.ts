@@ -1372,6 +1372,65 @@ async function conversationTail(
   return file && text ? { storage: file.storage, text } : null;
 }
 
+export type PublicTranscriptMessage = { key: string; text: string; at: string };
+type PublicTranscriptUpdates = { messages: PublicTranscriptMessage[]; complete: boolean };
+const publicUpdatesCache = new TranscriptResultCache<PublicTranscriptUpdates>(value =>
+  value?.messages.reduce((bytes, message) => bytes + message.text.length * 2 + 200, 0) ?? 0);
+
+/** Only user-visible assistant text. Never export reasoning, tool results or nested agents. */
+export function parsePublicTranscriptMessages(storage: string, jsonl: string, since: number): PublicTranscriptMessage[] {
+  const messages: PublicTranscriptMessage[] = [];
+  const seen = new Set<string>();
+  for (const line of jsonl.split('\n')) {
+    let event: any;
+    try { event = JSON.parse(line); } catch { continue; }
+    if (!event || typeof event !== 'object' || Array.isArray(event)) continue;
+    const at = Date.parse(event.timestamp ?? event.time ?? '');
+    if (!Number.isFinite(at) || at < since || event.isSidechain) continue;
+    let content: unknown;
+    if (storage === 'codex-rollout-jsonl') {
+      const item = event.payload;
+      if (event.type !== 'response_item' || item?.type !== 'message' || item.role !== 'assistant'
+        || (item.channel && !['commentary', 'final'].includes(item.channel))
+        || (item.phase && !['commentary', 'final_answer'].includes(item.phase))) continue;
+      content = item.content;
+    } else if (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') {
+      if (event.type !== 'assistant' || event.message?.role && event.message.role !== 'assistant') continue;
+      content = event.message?.content;
+    } else if (storage === 'kimi-session-dir') {
+      if (event.role !== 'assistant' || event.channel && !['commentary', 'final'].includes(event.channel)) continue;
+      content = event.content;
+    } else continue;
+    const text = (typeof content === 'string' ? content : Array.isArray(content)
+      ? content.filter((block: any) => ['text', 'output_text'].includes(block?.type) && typeof block.text === 'string')
+        .map((block: any) => block.text).join('\n') : '').trim();
+    if (!text) continue;
+    const key = createHash('sha256').update(`${at}\0${text}`).digest('hex');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    messages.push({ key, text: text.slice(0, 8_000), at: new Date(at).toISOString() });
+  }
+  return messages.slice(-80);
+}
+
+/** Exact saved conversation only, with bounded asynchronous reads and revision caching. */
+export async function publicTranscriptUpdates(
+  provider: string, cwd: string, sessionId: string | null, since: number, options: TranscriptLookupOptions = {},
+): Promise<PublicTranscriptUpdates | null> {
+  if (!sessionId || !/^[a-zA-Z0-9_-]{1,160}$/.test(sessionId)) return null;
+  const file = await conversationFile(provider, cwd, sessionId, options);
+  if (!file) return null;
+  const revision = await transcriptRevision(file.path, since);
+  if (!revision) return null;
+  return publicUpdatesCache.read(JSON.stringify([file.path, sessionId, since]), revision, async () => {
+    const text = await transcriptTail(file.path, MATCH_TAIL_BYTES);
+    return { cacheable: text !== null, value: text === null ? null : {
+      messages: parsePublicTranscriptMessages(file.storage, text, since),
+      complete: parseLatestTurnComplete(file.storage, text) === true,
+    } };
+  });
+}
+
 /** Public conversation text for a provider-neutral leadership handoff. Tool
  * results, credentials/configuration and private reasoning are not exported. */
 export async function conversationHandoffTurn(

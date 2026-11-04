@@ -34,6 +34,44 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 });
 `;
 
+test('Conversation receives public terminal progress live during a long owner turn without a bridge post', async ({ page, request }) => {
+  test.setTimeout(60_000);
+  const dir = await mkdtemp(join(tmpdir(), 'orkestrai-public-progress-'));
+  const script = join(dir, 'fake-agent.mjs');
+  const progress = 'Progresso público: validando o deploy sem parar o turno.';
+  await writeFile(script, FAKE_AGENT.replace('if (++ticks < 12) return;', `
+    ++ticks;
+    if (ticks === 3) record({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(progress)} }], stop_reason: null } });
+    if (ticks < 40) return;
+  `));
+  const shims = resolve('test-runtime', 'bin');
+  await mkdir(shims, { recursive: true });
+  const fakeClaude = join(shims, 'claude');
+  await writeFile(fakeClaude, `#!/bin/sh\nexec '${process.execPath}' '${script}' "$@"\n`);
+  await chmod(fakeClaude, 0o755);
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Public progress live', workingDir: dir } })).json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  try {
+    const lead = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Public Lead',
+      payload: { provider: 'claude', maestro: true }, x: 80, y: 80, width: 720, height: 420 } })).json()).data;
+    await page.goto(`/canvas?workspace=${workspace.id}&node=${lead.id}`);
+    await expect(page.locator(`.svelte-flow__node[data-id="${lead.id}"] .xterm-rows`)).toContainText('? for shortcuts', { timeout: 20_000 });
+    await page.goto(`/chat?workspace=${workspace.id}&channel=${encodeURIComponent(`dm:${lead.id}`)}`);
+    await page.locator('#chat-composer-input').fill('Qual o andamento do deploy?');
+    await page.locator('#chat-composer-input').press('Enter');
+    const update = page.getByTestId('chat-message').filter({ hasText: progress });
+    await expect(update).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId('chat-message').filter({ hasText: 'Resposta do agente:' })).toHaveCount(0);
+    await page.reload();
+    await expect(update).toHaveCount(1);
+    await expect(update).toBeVisible();
+  } finally {
+    await request.delete(base);
+    await rm(fakeClaude, { force: true });
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('a line typed in an agent terminal on the Canvas shows in Chat with the answer, and the agent shows as working', async ({ page, request }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1440, height: 900 });

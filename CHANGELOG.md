@@ -8,6 +8,7 @@ pt-BR, English, and Spanish translations.
 ## Unreleased
 
 ### Fixed
+- Show public terminal progress and final answers automatically in the Conversation after owner-message delivery, without requiring a bridge post or another model turn. Recover the exact saved conversation after reopening, deduplicate updates across concurrent readers/restarts, and exclude reasoning, tool output and other profiles.
 - Poll Canvas Git badges, file trees and diff lists without hashing every changed or untracked asset. Share concurrent display reads, keep exact content revisions for reviews and mutation guards, bound fingerprinting to two workers and limit Git read subprocesses across workspaces.
 - List, read, write and delete workspace files asynchronously, independently of Code Intelligence. Serialize same-file writes/deletes without blocking unrelated files. Stream HTTP asset previews/downloads with byte-based backpressure instead of buffering whole files; cap internal buffered image operations at 64 MiB.
 - Keep missing-ripgrep fallback searches asynchronous and bounded by time and entries. Never launch another full scan after a search timeout. Exclude Unity-generated root caches and nested Floors from normal search while retaining authored Assets, Packages and portable definitions.
