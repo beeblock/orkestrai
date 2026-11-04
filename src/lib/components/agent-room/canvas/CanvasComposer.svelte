@@ -389,15 +389,12 @@
     <button type="button" class="icon" class:on={speakReplies} disabled={!target} onclick={toggleSpeakReplies} aria-pressed={speakReplies} aria-label={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()} title={speakReplies ? m['composer.voice_replies_off']() : m['composer.voice_replies_on']()}>
       {#if speakReplies}<Volume2 size={16} />{:else}<VolumeX size={16} />{/if}
     </button>
-    {#if prompt.text.trim() || staged.items.length || prompt.sending}
-      <button type="button" class="send" disabled={(!target && !onCommand) || (!prompt.text.trim() && !staged.items.length) || prompt.sending || staged.busy} onclick={() => void send()} aria-label={m['composer.send']()}>
-        {#if prompt.sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
-      </button>
-    {:else}
-      <button type="button" class="send mic" disabled={!target && !onCommand} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="composer-mic">
-        <Mic size={16} strokeWidth={2.2} />
-      </button>
-    {/if}
+    <button type="button" class="icon mic" disabled={(!target && !onCommand) || prompt.sending} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="composer-mic">
+      <Mic size={16} strokeWidth={2.2} />
+    </button>
+    <button type="button" class="send" disabled={(!target && !onCommand) || (!prompt.text.trim() && !staged.items.length) || prompt.sending || staged.busy} onclick={() => void send()} aria-label={m['composer.send']()}>
+      {#if prompt.sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+    </button>
     {/if}
   </div>
 </div>
@@ -593,7 +590,7 @@
     color: var(--app-accent);
   }
 
-  .send.mic:hover:not(:disabled) {
+  .icon.mic:hover:not(:disabled) {
     transform: scale(1.06);
   }
 

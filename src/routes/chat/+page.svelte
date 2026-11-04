@@ -743,13 +743,10 @@
           ></textarea>
           <ComposerAttachButton attachments={staged} class="icon attach" disabled={!workspace || !agents.length} />
           <button type="button" class="icon" onclick={() => { draft = `${draft}@`; onInput(); input?.focus(); }} aria-label={m['composer.mention']()} disabled={!agents.length}><AtSign size={16} /></button>
-          {#if !draft.trim() && !staged.items.length && !sending}
-            <button type="button" class="send" onclick={() => (listening = true)} disabled={!workspace || !agents.length} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={15} /></button>
-          {:else}
-            <button type="button" class="send" onclick={() => void send()} disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy} aria-label={m['composer.send']()}>
-              {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
-            </button>
-          {/if}
+          <button type="button" class="icon" onclick={() => (listening = true)} disabled={!workspace || !agents.length || sending} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={15} /></button>
+          <button type="button" class="send" onclick={() => void send()} disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy || !workspace || !agents.length} aria-label={m['composer.send']()}>
+            {#if sending}<LoaderCircle size={15} class="animate-spin" />{:else}<ArrowUp size={15} strokeWidth={2.4} />{/if}
+          </button>
         {/if}
       </div>
       <p class="composer-hint">{directNode ? m['chat.composer_hint_direct']() : leader ? m['chat.composer_hint_team']({ name: leader.title }) : m['chat.composer_hint_team_plain']()}</p>

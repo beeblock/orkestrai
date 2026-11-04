@@ -18,7 +18,7 @@
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
    * messages as in Chat, without reading the terminal screen. With `voice`,
-   * an empty field offers the microphone instead of a disabled send button.
+   * the microphone stays available alongside Send to continue a dictated draft.
    */
   let { workspaceId, nodeId, title, voice = false }: { workspaceId: string; nodeId: string; title: string; voice?: boolean } = $props();
 
@@ -145,13 +145,12 @@
     {:else}
       <input bind:this={field} bind:value={draft} placeholder={m['chat.placeholder_direct']({ name: title })} aria-label={m['chat.placeholder_direct']({ name: title })} onpaste={staged.paste} />
       <ComposerAttachButton attachments={staged} class="attach" />
-      {#if voice && !draft.trim() && !staged.items.length && !sending}
-        <button type="button" onclick={() => (listening = true)} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={14} /></button>
-      {:else}
-        <button type="submit" disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy} aria-label={m['composer.send']()}>
-          {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} />{/if}
-        </button>
+      {#if voice}
+        <button type="button" class="mic" disabled={sending} onclick={() => (listening = true)} aria-label={m['composer.voice_label']()} title={m['composer.voice_label']()}><Mic size={14} /></button>
       {/if}
+      <button type="submit" disabled={(!draft.trim() && !staged.items.length) || sending || staged.busy} aria-label={m['composer.send']()}>
+        {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} />{/if}
+      </button>
     {/if}
   </form>
 </div>
@@ -305,4 +304,6 @@
   .staged + .composer {
     border-top: 0;
   }
+  form button.mic { background: transparent; color: var(--app-text-muted); }
+  form button.mic:hover:not(:disabled) { background: var(--app-hover); color: var(--app-text); }
 </style>

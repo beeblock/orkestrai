@@ -13,6 +13,7 @@ pt-BR, English, and Spanish translations.
 - Show or hide the quick message bar beneath Canvas terminals globally through Settings → Terminal, while keeping agents, terminal input and Conversation available.
 
 ### Fixed
+- Keep the microphone beside Send after dictation or typing in Conversation, the Canvas message bar, leader panel and agent conversation. Append further recordings to the same draft without requiring an early send.
 - Restore Shell working directories in Windows PowerShell, Command Prompt and WSL across Canvas and Focus, using session-only prompt integration and runtime-aware paths without modifying owner profiles.
 - Tell xterm the actual Windows ConPTY backend and OS build before replaying terminal output, preserving Windows-specific resize and wrapping compatibility for prompts and selection.
 - Keep one persisted workspace bridge token during concurrent startup. Repair stale, incomplete or mismatched bridge configuration before agent launches and workspace provisioning, preserve existing valid tokens, and reject redirected configuration files.

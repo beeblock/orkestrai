@@ -326,13 +326,10 @@
       {:else}
         <input bind:this={inputEl} bind:value={draft} placeholder={prompt} aria-label={prompt} disabled={total === 0} oninput={onDraftInput} onkeydown={onDraftKeydown} oncompositionend={onDraftInput} onpaste={staged.paste} />
         <ComposerAttachButton attachments={staged} class="attach" disabled={total === 0} />
-        {#if draft.trim() || staged.items.length || sending}
-          <button type="submit" class="send" aria-label={recipient ? m['orchestrator.send_leader']({ name: recipient.title }) : leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={(!draft.trim() && !staged.items.length) || sending || !canSend || staged.busy}>
-            {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
-          </button>
-        {:else}
-          <button type="button" class="send" disabled={total === 0} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="orchestrator-mic"><Mic size={14} strokeWidth={2.2} /></button>
-        {/if}
+        <button type="button" class="round" disabled={total === 0 || sending} onclick={() => (voiceOpen = true)} aria-label={m['composer.voice_start']()} title={m['composer.voice_start']()} data-testid="orchestrator-mic"><Mic size={14} strokeWidth={2.2} /></button>
+        <button type="submit" class="send" aria-label={recipient ? m['orchestrator.send_leader']({ name: recipient.title }) : leader ? m['orchestrator.send_leader']({ name: leader.title }) : m['orchestrator.send']()} disabled={(!draft.trim() && !staged.items.length) || sending || !canSend || staged.busy}>
+          {#if sending}<LoaderCircle size={14} class="animate-spin" />{:else}<ArrowUp size={14} strokeWidth={2.4} />{/if}
+        </button>
       {/if}
     </form>
   </div>
