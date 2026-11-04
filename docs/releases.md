@@ -570,11 +570,24 @@ Upstream fixes: [Minimatch](https://github.com/isaacs/minimatch/commit/77a0f5c4b
 ## Standard Intel runner recovery
 
 The signed packaging jobs use `macos-26-intel`, the standard x64 runner with
-14 GB of RAM. The `macos-15-intel` allocation repeatedly remained unassigned
-and was cancelled during the 0.51.3 release on November 4, 2026. A read-only
-probe verified the replacement host's architecture, memory and Apple tooling.
+14 GB of RAM. During the 0.51.3 recovery on November 4, 2026, the job API
+temporarily reported queued jobs even after they had executed. Read completed
+job logs before attributing a delay to runner allocation. A read-only probe
+verified the replacement host's architecture, memory and Apple tooling.
 The production bundle is still pinned to its successful CI source hash;
 Developer ID, Hardened Runtime, notarization, Gatekeeper, installer integrity
 and native Apple Silicon voice validation remain mandatory. The standard
 runner is free for this public repository; no larger paid runner is selected.
 See GitHub's [runner specifications](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job).
+
+The failed ARM64 packaging log exposed an Apple timestamp failure while
+individually signing a compressed web asset (`build/client/**/*.js.br`). The
+release workflow passes electron-builder's narrowly scoped `mac.signIgnore`
+for `.br`/`.gz` files inside `Contents/Resources/app/build/client/` only.
+These files remain protected by the outer application's resource seal;
+the executable, helpers, native modules and libraries still receive their
+normal signatures and mandatory release timestamps. No notarization or
+Gatekeeper check is bypassed. A macOS regression fixture verifies that changing
+one of these sealed resources invalidates the bundle signature.
+See [electron-builder's signing filter](https://www.electron.build/v26/docs/mac/#signignore)
+and [Apple's resource sealing rules](https://developer.apple.com/library/archive/technotes/tn2206/).

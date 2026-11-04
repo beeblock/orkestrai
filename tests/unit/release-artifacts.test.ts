@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -137,6 +137,60 @@ describe('release artifact validation', () => {
     for (const name of ['build-linux', 'build-windows', 'verify-macos-arm64-voice']) {
       expect(JSON.stringify(workflow.jobs[name])).not.toContain('pfctl');
     }
+  });
+
+  it('skips individual signatures only for compressed client resources, preserving native signing gates', () => {
+    const workflow = parse(readFileSync('.github/workflows/release.yml', 'utf8'));
+    const mac = workflow.jobs['build-macos'];
+    const packaging = mac.steps.find((step: { name?: string }) => step.name === 'Package macOS installers');
+    const match = packaging.run.match(/'-c\.mac\.signIgnore=([^']+)'/);
+    expect(match).not.toBeNull();
+    const ignore = new RegExp(match![1]);
+    for (const name of ['chunks/example.js.br', 'styles/example.css.gz']) {
+      expect(ignore.test(`/tmp/Orkestrai.app/Contents/Resources/app/build/client/_app/${name}`)).toBe(true);
+    }
+    for (const name of [
+      'Contents/MacOS/Orkestrai',
+      'Contents/Frameworks/Electron Framework.framework/Electron Framework',
+      'Contents/Resources/app/node_modules/example/native.node',
+      'Contents/Resources/app/build/client/native.node',
+      'Contents/Resources/app/build/client/native.dylib',
+      'Contents/Resources/app/build/server/example.js.br',
+      'Contents/Resources/app/build/client/example.js.br.node',
+    ]) expect(ignore.test(`/tmp/Orkestrai.app/${name}`)).toBe(false);
+    expect(packaging.run).not.toContain('timestamp=none');
+    expect(packaging.run).not.toContain('hardenedRuntime=false');
+    expect(packaging.run).not.toContain('notarize=false');
+    expect(packaging.env.ORKESTRAI_REQUIRE_MAC_SIGNING).toBe('true');
+    const verify = mac.steps.find((step: { name?: string }) => step.name === 'Verify macOS packages').run;
+    expect(verify).toContain('codesign --verify --deep --strict');
+    expect(verify).toContain('spctl --assess');
+    expect(verify).toContain('stapler validate');
+  });
+
+  it.skipIf(process.platform !== 'darwin')('detects tampering with a compressed resource through the outer bundle seal', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'orkestrai-resource-seal-'));
+    temporaryDirectories.push(directory);
+    const app = path.join(directory, 'ResourceSeal.app');
+    const contents = path.join(app, 'Contents');
+    mkdirSync(path.join(contents, 'MacOS'), { recursive: true });
+    const assets = path.join(contents, 'Resources/app/build/client');
+    mkdirSync(assets, { recursive: true });
+    copyFileSync('/usr/bin/true', path.join(contents, 'MacOS/ResourceSeal'));
+    writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict>
+      <key>CFBundleExecutable</key><string>ResourceSeal</string>
+      <key>CFBundleIdentifier</key><string>app.orkestrai.test.resource-seal</string>
+      <key>CFBundlePackageType</key><string>APPL</string></dict></plist>`);
+    const asset = path.join(assets, 'example.js.br');
+    writeFileSync(asset, Buffer.from([0, 1, 2, 3]));
+    // Test fixture only: ad-hoc signing never accesses a certificate or Keychain.
+    const sign = spawnSync('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', app], { encoding: 'utf8', timeout: 10_000 });
+    expect(sign.status, sign.stderr).toBe(0);
+    const verify = () => spawnSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { encoding: 'utf8', timeout: 10_000 });
+    const intact = verify();
+    expect(intact.status, intact.stderr).toBe(0);
+    writeFileSync(asset, Buffer.from([0, 1, 2, 4]));
+    expect(verify().status).not.toBe(0);
   });
 
   it('builds QA from an immutable tested SHA without enabling release publication', () => {

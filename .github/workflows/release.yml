@@ -203,7 +203,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ORKESTRAI_REQUIRE_MAC_SIGNING: 'true'
         run: |
-          scripts/package-macos.sh "--$TARGET_ARCH"
+          # Precompressed web responses are resources sealed by the outer app,
+          # not standalone executables that need individual Apple timestamps.
+          scripts/package-macos.sh "--$TARGET_ARCH" \
+            '-c.mac.signIgnore=/Contents/Resources/app/build/client/.*\.(br|gz)$'
 
       - name: Verify macOS packages
         env:
