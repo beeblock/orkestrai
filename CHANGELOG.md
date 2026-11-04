@@ -12,6 +12,8 @@ pt-BR, English, and Spanish translations.
 - Show or hide the quick message bar beneath Canvas terminals globally through Settings → Terminal, while keeping agents, terminal input and Conversation available.
 
 ### Fixed
+- Restore Shell working directories in Windows PowerShell, Command Prompt and WSL across Canvas and Focus, using session-only prompt integration and runtime-aware paths without modifying owner profiles.
+- Tell xterm the actual Windows ConPTY backend and OS build before replaying terminal output, preserving Windows-specific resize and wrapping compatibility for prompts and selection.
 - Keep one persisted workspace bridge token during concurrent startup. Repair stale, incomplete or mismatched bridge configuration before agent launches and workspace provisioning, preserve existing valid tokens, and reject redirected configuration files.
 - Preserve cached interface preferences when Settings reads fail, and report unsuccessful saves without showing a success state.
 - Check packaged entry points, lazy page modules, shared chunks and workers over HTTP during native startup validation; missing, stale or corrupt UI resources block publication.

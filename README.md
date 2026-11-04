@@ -1071,3 +1071,5 @@ Use `orkestrai leadership status`, `leadership handoff read|brief|acknowledge`,
 Coordinators can transfer leadership with an active assigned task, but cannot
 remove an existing independent reviewer gate. The owner can explicitly change it. A coordinator promoted on a Floor retains
 that checkout and its conversation; transfer the role before retiring that Floor.
+
+Pure Shell nodes restore their last reported directory in Canvas and Focus, including Windows PowerShell, Command Prompt and WSL, without editing shell profile files.

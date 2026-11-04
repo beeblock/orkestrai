@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
 import { join, posix } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { restoreShellDirectory } from '../../domain/terminal-working-directory.js';
 import { agentSessionTracker, agentSessionTrackerForRuntime } from '../../infrastructure/pty/AgentSessionTracker.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
@@ -139,12 +140,15 @@ export class AgentSessionService {
     const command = payload.command;
     if (!command) throw new Error('AGENT_COMMAND_UNAVAILABLE');
 
-    let cwd = !payload.provider && payload.shellStartupManaged && payload.currentWorkingDir
-      ? payload.currentWorkingDir : workspace.workingDir;
+    let cwd = workspace.workingDir;
     if (target.floorId) {
       const floor = await floorService.get(target.floorId);
       if (floor?.path) cwd = floor.path;
     }
+    const shellLaunch = !payload.provider
+      ? restoreShellDirectory(command, payload.args ?? [], cwd, payload.currentWorkingDir, runtime, process.platform === 'win32')
+      : null;
+    if (shellLaunch) cwd = shellLaunch.cwd;
 
     const adapter = payload.provider && hasAgentAdapter(payload.provider) ? getAgentAdapter(payload.provider) : null;
     const wslContext = runtime.kind === 'wsl'
@@ -238,7 +242,7 @@ export class AgentSessionService {
       resolvedNativeCommand: resolvedNativeCommand ? { forCommand: command, ...resolvedNativeCommand } : undefined,
       preparedAgentEnvironment,
       args: [
-        ...(payload.args ?? []),
+        ...(shellLaunch?.args ?? payload.args ?? []),
         ...mcpArgs,
         ...codexTrustArgs,
         ...(!resumableAgentSessionId ? (payload.initialRoleArgs ?? []) : []),

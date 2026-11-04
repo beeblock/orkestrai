@@ -24,8 +24,9 @@
   import { voiceModelsReadyForUse } from './voice-model-status.js';
   import { terminalDictationInput } from './terminal-dictation.js';
   import { DictationOperation, DICTATION_START_TIMEOUT_MS, DICTATION_TRANSCRIBE_TIMEOUT_MS, DICTATION_MAX_RECORDING_MS } from './dictation-operation.js';
+  import { terminalWindowsPty } from './terminal-windows-pty.js';
   import { installScaledTerminalMouse, isTerminalCopyShortcut, isWindowsTerminalPasteShortcut } from './terminal-selection.js';
-  import { workingDirectoryFromOsc } from './terminal-working-directory.js';
+  import { workingDirectoryFromOsc, workingDirectoryFromWindowsOsc } from './terminal-working-directory.js';
   import { audioSignalIsEmpty } from '$lib/modules/agent-room/domain/voice-audio.js';
   import {
     LEADER_DICTATION_COMMAND,
@@ -498,7 +499,13 @@
     // OSC 7 e o contrato padrao de shells integrados para publicar o cwd.
     // A deteccao no servidor cobre zsh/bash sem integracao no macOS/Linux.
     terminal.parser.registerOscHandler(7, (payload) => {
-      const cwd = workingDirectoryFromOsc(payload, navigator.platform.startsWith('Win'));
+      const wsl = createRequest?.runtime?.kind === 'wsl' || /(?:^|[\\/])wsl(?:\.exe)?$/i.test(createRequest?.command ?? '');
+      const cwd = workingDirectoryFromOsc(payload, navigator.platform.startsWith('Win') && !wsl);
+      if (cwd) onWorkingDirectoryChange?.(cwd);
+      return true;
+    });
+    terminal.parser.registerOscHandler(9, payload => {
+      const cwd = workingDirectoryFromWindowsOsc(payload);
       if (cwd) onWorkingDirectoryChange?.(cwd);
       return true;
     });
@@ -712,6 +719,12 @@
       }
     };
 
+    const configureHostTerminal = (value: unknown) => {
+      const next = terminalWindowsPty(value);
+      const current = terminal.options.windowsPty;
+      if (current?.backend !== next.backend || current?.buildNumber !== next.buildNumber) terminal.options.windowsPty = next;
+    };
+
     const handleMessage = (event: MessageEvent) => {
       connectionHealth.received(Date.now());
       const message = JSON.parse(String(event.data));
@@ -720,6 +733,7 @@
           lastPongAt = Date.now();
           break;
         case 'created':
+          configureHostTerminal(message.session?.windowsPty);
           createdSessionId = message.session.id;
           attached = true;
           void Promise.resolve(onSessionCreated?.(message.session.id))
@@ -733,6 +747,7 @@
           if (typeof message.streamingOutput === 'boolean' && outputBuffer.isVisible !== message.streamingOutput) requestOutputSnapshot();
           break;
         case 'attached': {
+          configureHostTerminal(message.session?.windowsPty);
           const internal = viewAttachPending > 0;
           if (internal) viewAttachPending--;
           attached = true;

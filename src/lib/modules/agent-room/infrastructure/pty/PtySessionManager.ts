@@ -1,7 +1,7 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { readlink } from 'node:fs/promises';
-import { platform } from 'node:os';
+import { platform, release } from 'node:os';
 import { promisify } from 'node:util';
 import type { IPty } from 'node-pty';
 import type { WorkspaceExecutionRuntime } from '../../domain/types.ts';
@@ -11,6 +11,7 @@ import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
+import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
@@ -49,6 +50,8 @@ export type PtySessionInfo = {
   transcriptCwd?: string | null;
   /** Stable native/WSL identity used to avoid cross-runtime reattachment. */
   runtimeKey: string;
+  /** Host PTY backend; independent of the guest shell/provider. */
+  windowsPty?: { backend: 'conpty' | 'winpty'; buildNumber?: number };
 };
 
 export type PtySessionListener = (data: string) => void;
@@ -408,16 +411,20 @@ export class PtySessionManager {
           hostEnv: env,
           forwardEnvToWsl: input.forwardEnvToWsl,
           unsetEnvKeys: input.unsetEnvKeys,
+          trackWorkingDirectory: !input.provider,
         })
       : { ...(input.resolvedNativeCommand?.forCommand === input.command
           ? { command: input.resolvedNativeCommand.command, args: [...input.resolvedNativeCommand.args, ...(input.args ?? [])] }
           : resolveCommand(input.command, input.args ?? [], env)), cwd: input.cwd, env };
-    const ptyProcess = this.spawnPty(target.command, target.args, {
+    const shellIntegration = !input.provider && input.runtime?.kind !== 'wsl'
+      ? integrateNativeShellDirectory(input.command, target.args, target.env)
+      : { args: target.args, env: target.env };
+    const ptyProcess = this.spawnPty(target.command, shellIntegration.args, {
       name: 'xterm-256color',
       cols,
       rows,
       cwd: target.cwd,
-      env: target.env,
+      env: shellIntegration.env,
     });
 
     const session: PtySession = {
@@ -1474,6 +1481,7 @@ export class PtySessionManager {
       transcriptHome: session.transcriptHome,
       transcriptCwd: session.transcriptCwd,
       runtimeKey: session.runtimeKey,
+      ...(platform() === 'win32' ? { windowsPty: { backend: Number(release().split('.')[2]) >= 18309 ? 'conpty' as const : 'winpty' as const, ...(Number.isSafeInteger(Number(release().split('.')[2])) ? { buildNumber: Number(release().split('.')[2]) } : {}) } } : {}),
       /** Já produziu algum output (boot comecou/terminou) — usado na prontidao do ask. */
       hasOutput: session.scrollback.length > 0,
     };

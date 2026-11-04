@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { join, win32, posix, resolve } from 'node:path';
 import type { TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../domain/types.js';
 import { terminalExecutionRuntime, workspaceExecutionRuntime } from '../domain/runtime.ts';
+import { wslDirectoryShellScript } from './pty/ShellDirectoryIntegration.ts';
 
 export { terminalExecutionRuntime, workspaceExecutionRuntime } from '../domain/runtime.ts';
 
@@ -320,6 +321,7 @@ export function buildWslLaunch(input: {
       child environment; WSLENV forwards only these explicit names. */
   forwardEnvToWsl?: string[];
   unsetEnvKeys?: string[];
+  trackWorkingDirectory?: boolean;
 }): { command: string; args: string[]; cwd: string; env: Record<string, string> } {
   const { runtime } = input;
   const linuxRoot = runtime.linuxWorkingDir.replace(/\/$/, '') || '/';
@@ -366,7 +368,9 @@ export function buildWslLaunch(input: {
       '-lic',
       [
         ...(input.unsetEnvKeys ?? []).filter(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).map(name => `unset ${name};`),
-        'export PATH="$ORKESTRAI_WORKSPACE_BIN:$PATH"; exec "$@"',
+        input.trackWorkingDirectory && command === '/bin/bash' && input.args.length === 0
+          ? wslDirectoryShellScript
+          : 'export PATH="$ORKESTRAI_WORKSPACE_BIN:$PATH"; exec "$@"',
       ].join(' '),
       'orkestrai-runtime',
       command,

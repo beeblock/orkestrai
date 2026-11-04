@@ -24,6 +24,7 @@
   import TerminalNode from '../TerminalNode.svelte';
   import VoiceConfirmDialog from '../VoiceConfirmDialog.svelte';
   import { appSettingsStore, getAppSettings, updateAppSettings } from '../app-settings.svelte.js';
+  import { restoreShellDirectory, shellDirectoryForRuntime } from '../terminal-working-directory.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { voiceModelsReadyForUse } from '../voice-model-status.js';
   import { speakText } from '../voice-speech.js';
@@ -108,12 +109,10 @@
   let providerRequest = 0;
   const isWindows = typeof navigator !== 'undefined' && navigator.platform.startsWith('Win');
   const isPureShell = $derived(!data.payload.provider);
-  const isPureNativeShell = $derived(!data.payload.provider && data.executionRuntime.kind === 'native');
-  const launchWorkingDir = $derived(
-    isPureNativeShell && data.payload.currentWorkingDir
-      ? data.payload.currentWorkingDir
-      : data.workingDir
-  );
+  const shellLaunch = $derived(isPureShell
+    ? restoreShellDirectory(data.payload.command ?? '', data.payload.args ?? [], data.workingDir, data.payload.currentWorkingDir, data.executionRuntime, isWindows)
+    : { cwd: data.workingDir, args: data.payload.args ?? [] });
+  const launchWorkingDir = $derived(shellLaunch.cwd);
 
   onMount(() => {
     const provider = data.payload.provider;
@@ -141,8 +140,10 @@
   });
 
   function persistWorkingDirectory(cwd: string) {
-    if (!isPureNativeShell || !cwd || cwd === data.payload.currentWorkingDir) return;
-    data.onPayloadChange?.(id, { currentWorkingDir: cwd });
+    if (!isPureShell) return;
+    const directory = shellDirectoryForRuntime(cwd, data.executionRuntime);
+    if (!directory || directory === data.payload.currentWorkingDir) return;
+    data.onPayloadChange?.(id, { currentWorkingDir: directory });
   }
 
   $effect(() => {
@@ -609,7 +610,7 @@
   const respawnRequest = $derived.by(() => {
     const payload = data.payload as TerminalNodePayload & { agentSessionId?: string };
     const conversation = safeAgentRespawn(
-      payload.args ?? [],
+      shellLaunch.args,
       payload.agentSessionId ?? null,
       data.exactResumeArgsFor,
       data.freshSessionArgsFor?.(),
@@ -637,7 +638,7 @@
     if (forceRespawn || (payload.provider && (payload.agentSessionId || payload.resumeRecovery))) return respawnRequest;
     return {
       command: payload.command ?? '',
-      args: [...(payload.args ?? []), ...(payload.initialRoleArgs ?? [])],
+      args: [...shellLaunch.args, ...(payload.initialRoleArgs ?? [])],
       freshSessionArgs: data.freshSessionArgsFor?.() ?? undefined,
       cwd: launchWorkingDir,
       env: agentEnv,

@@ -29,6 +29,7 @@ const html = String.raw`<!doctype html><meta charset="utf-8"><link rel="styleshe
 <script src="/xterm.js"></script><div class="grid" id="root"></div>
 <script type="module">
 import {createTerminalOutputBuffer} from '/output.js';
+import {terminalWindowsPty} from '/windows-pty.js';
 let instances=[];
 const history='\x1b[?1049h'+('old colorful history\r\n'.repeat(14000)).slice(-256*1024);
 window.disposeTerminals=()=>{for(const {buffer,term} of instances){buffer.dispose();term.dispose();}instances=[];document.getElementById('root').replaceChildren();};
@@ -59,6 +60,22 @@ window.runTerminalRound=async()=>{
  const final=instances.map(({term})=>term.buffer.active.getLine(0)?.translateToString(true));
  return {hiddenWrites,peakQueued,hiddenPending,firstPaintMs,snapshots,parsed,final};
 };
+window.runWindowsResize=async()=>{
+ window.disposeTerminals();
+ const el=document.createElement('div');el.className='term';document.getElementById('root').append(el);
+ const term=new window.Terminal({cols:80,rows:5,scrollback:100,windowsPty:terminalWindowsPty({backend:'conpty',buildNumber:26100})});term.open(el);
+ await new Promise(done=>term.write(Array.from({length:15},(_,i)=>'ROW-'+i+'\r\n').join('')+'PROMPT> unfinished',done));
+ const before=term.buffer.active.baseY;
+ term.resize(80,10);
+ const after=term.buffer.active.baseY;
+ const cursor=term.buffer.active.cursorY;
+ await new Promise(done=>term.write(' continued',done));
+ const line=term.buffer.active.getLine(after+cursor)?.translateToString(true);
+ term.select(0,after+cursor,26);
+ const selection=term.getSelection();
+ term.dispose();el.remove();
+ return {before,after,line,selection};
+};
 window.ready=true;
 </script>`;
 
@@ -69,7 +86,8 @@ app.whenReady().then(async () => {
     ? execFileSync('git', ['show', '91b3af3a:src/lib/components/agent-room/terminal-output-buffer.ts'], { encoding: 'utf8' })
     : readFileSync(join(__dirname, '../src/lib/components/agent-room/terminal-output-buffer.ts'), 'utf8');
   const module = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
-  const assets = { '/xterm.js': readFileSync(require.resolve('@xterm/xterm')), '/xterm.css': readFileSync(join(require.resolve('@xterm/xterm'), '../../css/xterm.css')), '/output.js': module };
+  const windowsPtySource = ts.transpileModule(readFileSync(join(__dirname, '../src/lib/components/agent-room/terminal-windows-pty.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const assets = { '/xterm.js': readFileSync(require.resolve('@xterm/xterm')), '/xterm.css': readFileSync(join(require.resolve('@xterm/xterm'), '../../css/xterm.css')), '/output.js': module, '/windows-pty.js': windowsPtySource };
   server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': req.url === '/xterm.css' ? 'text/css' : req.url === '/' ? 'text/html' : 'text/javascript' });
     res.end(req.url === '/' ? html : assets[req.url] ?? '');
@@ -81,6 +99,11 @@ app.whenReady().then(async () => {
   for (let i=0;i<100&&!await window.webContents.executeJavaScript('!!window.ready');i++) await new Promise(resolve=>setTimeout(resolve,20));
   window.webContents.debugger.attach('1.3');
   const run = () => window.webContents.executeJavaScript('window.runTerminalRound()');
+  const windowsResize = await window.webContents.executeJavaScript('window.runWindowsResize()');
+  assert.equal(windowsResize.after, windowsResize.before, 'ConPTY growth must not pull already-scrolled lines back into its viewport');
+  assert.equal(windowsResize.line, 'PROMPT> unfinished continued');
+  assert.equal(windowsResize.selection, 'PROMPT> unfinished continu');
+  console.log(JSON.stringify({ windowsTerminalResize: windowsResize }));
   const warmup = await run();
   console.log(JSON.stringify({ baseline, round: 'warmup', ...warmup }));
   assert.equal(warmup.hiddenWrites, 0, 'Invisible terminal histories bypass paint eligibility and flood xterm');
