@@ -60,6 +60,12 @@ function lessonBody(item: AgentAttentionItem, lessons: Map<string, AgentLesson>)
 }
 
 export class AttentionService {
+  async markAllRead(input: { workspaceId?: string | null }): Promise<{ count: number; readAt: string }> {
+    const { count, readAt, workspaceIds } = await attentionRepository.markAllRead(input.workspaceId);
+    for (const workspaceId of workspaceIds) broadcast(workspaceId);
+    return { count, readAt };
+  }
+
   async syncActivity(activity: AgentActivity): Promise<void> {
     const requiresAttention = activity.attentionRequired || ATTENTION_STATES.has(activity.state);
     // A message sent or received by a blocked agent does not change why it

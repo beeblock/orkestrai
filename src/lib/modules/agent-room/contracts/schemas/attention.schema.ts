@@ -34,3 +34,7 @@ export const decideAttentionSchema = z.object({
 });
 
 export type DecideAttentionInput = z.infer<typeof decideAttentionSchema>;
+
+/** Reading acknowledges alerts without deciding their related question or approval. */
+export const markAttentionReadSchema = z.object({ workspaceId: z.string().uuid().optional() }).strict();
+export type MarkAttentionReadInput = z.infer<typeof markAttentionReadSchema>;

@@ -12,6 +12,11 @@ import { isPortFree, run } from '../../packages/orkestrai-cli/src/cli.js';
  * Testa a CLI `orkestrai` contra um servidor HTTP falso que emula a bridge.
  */
 describe('orkestrai CLI', () => {
+  it('marks workspace attention items read through CLI and MCP', async () => {
+    const bridge = vi.fn().mockResolvedValue({ count: 3 });
+    await executeMcpTool({ bridge, selfAgent: 'agent' }, 'attention_mark_all_read', {});
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/attention/read-all', {});
+  });
   it('exposes bounded task filters, cursor history and a full-detail read through MCP', async () => {
     const bridge = vi.fn().mockResolvedValue({ items: [], nextCursor: 'next' });
     const context = { bridge, findFreePort: async () => 4000, selfAgent: 'agent' };
@@ -304,6 +309,12 @@ describe('orkestrai CLI', () => {
     await expect(run(['fs', 'open-folder'], { cwd, out, env: {} })).rejects.toThrow('Usage:');
   });
 
+  it('marks all workspace attention items read without accepting a foreign scope', async () => {
+    const { out } = capture();
+    expect(await run(['attention', 'read-all'], { cwd, out, env: { ORKESTRAI_AGENT_TOKEN: 'terminal-token' } })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', url: '/api/agent-room/bridge/attention/read-all', body: {}, agentToken: 'terminal-token' });
+    await expect(run(['attention', 'resolve-all'], { cwd, out, env: {} })).rejects.toThrow('Usage:');
+  });
 
   it('list mostra agentes do workspace', async () => {
     const { lines, out } = capture();

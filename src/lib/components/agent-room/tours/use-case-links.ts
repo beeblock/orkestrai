@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'attention-read-all': 'attention-read-all',
   'canvas-file-source': 'canvas-file-source',
   'terminal-quick-prompt': 'terminal-quick-prompt',
   'leadership-handoff-review': 'leadership-handoff-review',

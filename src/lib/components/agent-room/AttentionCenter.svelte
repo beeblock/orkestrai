@@ -8,6 +8,8 @@
     Bell,
     BellRing,
     Check,
+    CheckCheck,
+    LoaderCircle,
     ChevronDown,
     CircleDot,
     Clock3,
@@ -35,12 +37,14 @@
   let { workspaceId = null }: { workspaceId?: string | null } = $props();
   let open = $state(false);
   let loading = $state(false);
+  let markingAll = $state(false);
   let items = $state<AgentAttentionItem[]>([]);
   let filter = $state<'action' | 'all' | 'snoozed'>('action');
   let expandedIds = $state<Set<string>>(new Set());
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let clock = $state(Date.now());
 
+  const unreadCount = $derived(items.filter(item => item.status === 'open').length);
   const actionable = $derived(items.filter((item) => (
     item.status === 'open'
     || item.status === 'read'
@@ -83,6 +87,27 @@
       if (!silent) toast.error(error instanceof Error ? error.message : m['attention.load_error']());
     } finally {
       if (!silent) loading = false;
+    }
+  }
+
+  async function markAllRead(): Promise<void> {
+    if (markingAll) return;
+    markingAll = true;
+    try {
+      const csrf = getCsrfToken();
+      const response = await fetch('/api/agent-room/attention/read-all', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+        body: '{}',
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? m['attention.update_error']());
+      await loadItems(true);
+      toast.success(m['attention.marked_all_read']({ count: payload.data.count }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m['attention.update_error']());
+    } finally {
+      markingAll = false;
     }
   }
 
@@ -208,11 +233,11 @@
           aria-label={m['attention.open']()}
           onclick={() => (open = true)}
         >
-          {#if actionable.length}<BellRing size={15} />{:else}<Bell size={15} />{/if}
-          {#if actionable.length}
+          {#if unreadCount}<BellRing size={15} />{:else}<Bell size={15} />{/if}
+          {#if unreadCount}
             <!-- Contador so com tokens (texto na cor da pagina contrasta nos dois temas); anel separa do icone. -->
             <span class="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--app-danger)] px-1 font-mono text-[11px] font-semibold leading-4 tabular-nums text-[var(--app-page)] ring-2 ring-[var(--app-sidebar)]">
-              {actionable.length > 99 ? '99+' : actionable.length}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           {/if}
         </Button>
@@ -247,6 +272,10 @@
           { value: 'snoozed', label: m['attention.filter_snoozed'](), count: snoozedCount },
         ]}
       />
+      <Button variant="ghost" size="sm" class="mt-2 self-start" onclick={() => void markAllRead()} disabled={markingAll || loading} data-testid="attention-read-all">
+        {#if markingAll}<LoaderCircle size={14} class="animate-spin" />{:else}<CheckCheck size={14} />{/if}
+        {m['attention.mark_all_read']()}
+      </Button>
     </Sheet.Header>
 
     <div class="min-h-0 flex-1 overflow-y-auto p-3">

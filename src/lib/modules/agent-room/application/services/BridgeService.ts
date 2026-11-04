@@ -1902,6 +1902,7 @@ Se uma tarefa exigir uma habilidade que você não tem, você pode AUTORAR uma s
     return [
       '<!-- orkestrai:begin -->',
       '## Ponte Orkestrai (agentes)',
+      '- Attention: `orkestrai attention read-all` (MCP `attention_mark_all_read`) marks unread items in your authenticated workspace as read; it never answers, approves, resolves or dismisses their underlying decisions.',
       '- Portal screenshots: `orkestrai portal <name-or-id> screenshot` (MCP `portal_screenshot`) saves a PNG of what the Portal shows, with its own session and login, under `.orkestrai/portal/screenshots/` and returns its path; open that file to see it. Never start Playwright, Puppeteer or another browser to look at a page already open in a Portal.',
       '- Portal hosts: read portal.revision from canvas_list and use portal_configure_hosts or `orkestrai canvas portal-hosts --task <id> --input <json>` for task-authorized exact host changes. localhost, 127.0.0.1 and [::1] are distinct hosts. Existing pauses, control, agent grants and browser state are preserved; explicit owner instructions and policies remain binding. Use the CLI if an old MCP lacks the tool, and keep independent cards progressing.',
       '',

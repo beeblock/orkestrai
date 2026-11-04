@@ -6163,5 +6163,7 @@
   "settings.terminal_quick_prompt_desc": "Show the input below Canvas terminals in every workspace. Hiding it keeps agents running; Conversation and terminal input remain available.",
   "node.reveal_source": "Show file in folder",
   "node.reveal_source_error": "Could not show this file in its folder. Check that it still exists and that the desktop app is connected.",
-  "settings.save_failed": "Could not save settings. Try again."
+  "settings.save_failed": "Could not save settings. Try again.",
+  "attention.mark_all_read": "Mark all as read",
+  "attention.marked_all_read": "{count} items marked as read. Pending decisions remain open."
 }

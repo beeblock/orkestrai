@@ -1,3 +1,6 @@
+import { MarkAttentionReadRequest } from '../requests/MarkAttentionReadRequest.js';
+import { MarkAttentionReadDto } from '../../../application/dto/MarkAttentionReadDto.js';
+import { markAttentionReadAction } from '../../../application/actions/MarkAttentionReadAction.js';
 import { DecideAttentionRequest } from '../requests/DecideAttentionRequest.js';
 import { DecideAttentionDto } from '../../../application/dto/DecideAttentionDto.js';
 import { decideAttentionAction } from '../../../application/actions/DecideAttentionAction.js';
@@ -15,6 +18,15 @@ export class AttentionController extends Controller {
       return this.json({ data: await attentionService.list(input) });
     } catch (error) {
       return this.failure(error, 'Could not load attention items.');
+    }
+  }
+
+  async markAllRead(event: RequestEvent) {
+    try {
+      const input = await MarkAttentionReadRequest.validate(event);
+      return this.json({ data: await markAttentionReadAction.execute(MarkAttentionReadDto.from(input)) });
+    } catch (error) {
+      return this.failure(error, 'Could not mark attention items as read.');
     }
   }
 

@@ -180,6 +180,7 @@ Uso:
   orkestrai computer watch '<watch-json>' --task <id> --idempotency <key>
   Computer effects require --task and --idempotency; declare --risk external_publication before sending or publishing.
   orkestrai port [--check <porta>]  — devolve uma porta livre (ou testa uma)
+  orkestrai attention read-all — mark workspace alerts read without resolving decisions
   orkestrai fs read <path> | fs write <path> <conteudo> | fs search <termo> [--content] | fs open-folder <path> | fs reveal <path>
   orkestrai say <texto>  — fala no desktop com a voz configurada
   orkestrai run <taskId>  — re-despacha a tarefa para o responsavel
@@ -2385,6 +2386,12 @@ async function runCommand(argv, options, sink) {
         input = { command: 'wait', condition: condition === 'focused' ? 'window_focused' : 'window_exists', value, timeoutMs: Number(flags.timeout ?? 10000), pollMs: Number(flags.poll ?? 300) };
       } else throw new Error('Usage: orkestrai computer <prepare|inspect|capabilities|read|interact|batch|watch|reply|send|media-send|media-receive|launch|focus|click|type|secret|shortcut|screenshot|wait> ...');
       const data = await bridge(config, 'POST', '/api/agent-room/bridge/computers', { from: selfAgent, taskId, idempotencyKey, ...('risk' in flags && flags.risk ? { risk: flags.risk } : {}), input });
+      out(JSON.stringify(data, null, 2));
+      return 0;
+    }
+    case 'attention': {
+      if (rest[0] !== 'read-all') throw new Error('Usage: orkestrai attention read-all');
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/attention/read-all', {});
       out(JSON.stringify(data, null, 2));
       return 0;
     }

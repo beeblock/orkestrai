@@ -1,3 +1,4 @@
+import { Connection } from '@beeblock/svelar/database';
 import { uuidv7 } from '@beeblock/svelar/support';
 import type {
   AgentActivityCategory,
@@ -114,6 +115,22 @@ export class AttentionRepository {
     if (!input.includeResolved) query.whereNull('resolved_at');
     const rows = await query.orderBy('updated_at', 'desc').limit(input.limit ?? 300).get();
     return rows.map(mapAttention);
+  }
+
+  async markAllRead(workspaceId?: string | null): Promise<{ count: number; readAt: string; workspaceIds: string[] }> {
+    return Connection.transaction(async () => {
+      const readAt = new Date().toISOString();
+      // Do not wake snoozed alerts or resolve the underlying decision. No list limit.
+      const unread = () => {
+        const query = AgentAttentionItem.query().where('status', 'open').whereNull('resolved_at');
+        if (workspaceId) query.where('workspace_id', workspaceId);
+        return query;
+      };
+      const workspaceIds = await unread().select('workspace_id').distinct().pluck('workspace_id') as string[];
+      await unread().whereNull('read_at').update({ read_at: readAt });
+      const count = await unread().update({ status: 'read', updated_at: readAt });
+      return { count, readAt, workspaceIds };
+    });
   }
 
   async updateStatus(

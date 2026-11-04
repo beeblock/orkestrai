@@ -8,6 +8,7 @@ pt-BR, English, and Spanish translations.
 ## 0.52.0 - 2026-11-04
 
 ### Added
+- Mark all unread Attention Center items as read in one action across local workspaces, without answering questions, approving requests or clearing snoozed decisions. Expose workspace-scoped acknowledgement through `orkestrai attention read-all` and `attention_mark_all_read`.
 - Reveal source files from Canvas image, document, media and editor nodes in the host file manager, requesting selection without executing the file. Expose the same confined action to agents through `fs_reveal` and `orkestrai fs reveal`.
 - Show or hide the quick message bar beneath Canvas terminals globally through Settings → Terminal, while keeping agents, terminal input and Conversation available.
 

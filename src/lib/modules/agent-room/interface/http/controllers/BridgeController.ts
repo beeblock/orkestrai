@@ -1,3 +1,6 @@
+import { MarkAttentionReadRequest } from '../requests/MarkAttentionReadRequest.js';
+import { MarkAttentionReadDto } from '../../../application/dto/MarkAttentionReadDto.js';
+import { markAttentionReadAction } from '../../../application/actions/MarkAttentionReadAction.js';
 import { instrumentCodeGraphController, setCodeGraphQuerySnapshot } from '../../../infrastructure/code-graph/CodeGraphQueryMetrics.js';
 import { codeGraphMetricsService } from '../../../application/services/CodeGraphMetricsService.js';
 import { ChangeTerminalProviderDto } from '../../../application/dto/WorkspaceDtos.js';
@@ -1986,6 +1989,19 @@ export class BridgeController extends Controller {
   }
 
   // -- FS via bridge (orkestrai fs) --------------------------------------------
+
+  async attentionMarkAllRead(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      if (!actor) return this.json({ error: 'Reading attention items requires an authenticated workspace agent.' }, 403);
+      const input = await MarkAttentionReadRequest.validate(event);
+      if (input.workspaceId && input.workspaceId !== workspace.id) return this.json({ error: 'Attention workspace does not match the authenticated workspace.' }, 403);
+      return this.json({ data: await markAttentionReadAction.execute(new MarkAttentionReadDto(workspace.id)) });
+    } catch (error) {
+      return this.errorResponse(error, 'Could not mark attention items as read.');
+    }
+  }
 
   async fsOpenFolder(event: any) {
     try {

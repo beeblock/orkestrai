@@ -68,6 +68,7 @@ type Expectation = { method: string; path: RegExp; schema?: z.ZodTypeAny };
 const EXPECTED: Record<string, Expectation> = {
   video_workflow_import: { method: 'POST', path: /\/bridge\/creative-media$/, schema: z.object({ command: z.literal('import'), taskId: z.string().uuid(), input: creativeVideoImportSchema }).strict() },
   fs_open_folder: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
+  attention_mark_all_read: { method: 'POST', path: /\/bridge\/attention\/read-all$/, schema: z.object({}).strict() },
   fs_reveal: { method: 'POST', path: /\/bridge\/fs\/open-folder$/, schema: openWorkspaceFolderSchema },
   list: { method: 'GET', path: /\/bridge\/agents\?/ },
   usage: { method: 'GET', path: /\/bridge\/usage$/ },
