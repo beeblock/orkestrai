@@ -8,11 +8,13 @@ pt-BR, English, and Spanish translations.
 ## 0.52.0 - 2026-11-04
 
 ### Added
+
 - Mark all unread Attention Center items as read in one action across local workspaces, without answering questions, approving requests or clearing snoozed decisions. Expose workspace-scoped acknowledgement through `orkestrai attention read-all` and `attention_mark_all_read`.
 - Reveal source files from Canvas image, document, media and editor nodes in the host file manager, requesting selection without executing the file. Expose the same confined action to agents through `fs_reveal` and `orkestrai fs reveal`.
 - Show or hide the quick message bar beneath Canvas terminals globally through Settings → Terminal, while keeping agents, terminal input and Conversation available.
 
 ### Fixed
+
 - Keep the microphone beside Send after dictation or typing in Conversation, the Canvas message bar, leader panel and agent conversation. Append further recordings to the same draft without requiring an early send.
 - Restore Shell working directories in Windows PowerShell, Command Prompt and WSL across Canvas and Focus, using session-only prompt integration and runtime-aware paths without modifying owner profiles.
 - Tell xterm the actual Windows ConPTY backend and OS build before replaying terminal output, preserving Windows-specific resize and wrapping compatibility for prompts and selection.

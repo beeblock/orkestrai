@@ -76,7 +76,7 @@ describe('terminal and Chat are one conversation', () => {
 
     started.mockResolvedValue(sentAt + 2_000);
     expect(await service.recordReply(workspace.id, leader.id, prompt.body, sentAt, prompt.id, true)).toBe(true);
-    const [reply] = await channelRepository.list(workspace.id, `dm:${leader.id}`);
+    const reply = (await channelRepository.list(workspace.id, `dm:${leader.id}`)).find(message => message.authorKind === 'agent' && message.meta.promptId === prompt.id);
     expect(reply).toMatchObject({ authorKind: 'agent', body: 'Os testes passaram.', meta: { promptId: prompt.id } });
   });
 
