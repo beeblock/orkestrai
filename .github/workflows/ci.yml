@@ -78,6 +78,17 @@ jobs:
       - name: Verify Windows workspace startup under slow filesystem probes
         run: npm test -- --run tests/feature/role-service.test.ts tests/unit/pty-ws.test.ts tests/unit/codex-mcp-config.test.ts --testNamePattern "loads and materializes|shares a slow catalog|keeps both viewers connected|canonicalizes only native trust" --maxWorkers=2 --testTimeout=20000
 
+      - name: Verify bridge token recovery and native file selection on Windows
+        env:
+          HOME: ${{ runner.temp }}/orkestrai-bridge-home
+          USERPROFILE: ${{ runner.temp }}/orkestrai-bridge-home
+          APPDATA: ${{ runner.temp }}/orkestrai-bridge-home/AppData/Roaming
+          LOCALAPPDATA: ${{ runner.temp }}/orkestrai-bridge-home/AppData/Local
+          XDG_CONFIG_HOME: ${{ runner.temp }}/orkestrai-bridge-home/.config
+          CODEX_HOME: ${{ runner.temp }}/orkestrai-bridge-home/.codex
+          ORKESTRAI_DATA_DIR: ${{ runner.temp }}/orkestrai-bridge-data
+        run: npm test -- --run tests/feature/bridge-token-consistency.test.ts tests/feature/workspace-folder.test.ts tests/unit/workspace-folder.test.ts tests/unit/desktop-folder-client.test.ts tests/unit/mcp-contract.test.ts tests/unit/packaged-ui-assets.test.ts --maxWorkers=2 --testTimeout=20000
+
       - name: Verify bounded workspace files and snapshot policies on Windows
         run: npm test -- --run tests/unit/floor-snapshot-policy.test.ts tests/unit/bridge-git-exclude.test.ts tests/unit/workspace-text-file.test.ts tests/unit/code-graph-source-policy.test.ts tests/feature/workspace-folder-availability.test.ts --maxWorkers=2 --testTimeout=20000
 

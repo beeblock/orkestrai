@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## 0.52.0 - 2026-11-04
+
+### Fixed
+- Keep one persisted workspace bridge token during concurrent startup. Repair stale, incomplete or mismatched bridge configuration before agent launches and workspace provisioning, preserve existing valid tokens, and reject redirected configuration files.
+- Check packaged entry points, lazy page modules, shared chunks and workers over HTTP during native startup validation; missing, stale or corrupt UI resources block publication.
+
 ## 0.51.3 - 2026-11-04
 
 ### Fixed

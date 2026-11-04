@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { reportedGroupsDDL } from './reported-workspace-schema.mjs';
 import { verifyPackagedPtyRecovery } from './packaged-pty-recovery.mjs';
 import { verifyForgeSignatureValidation } from './forge-signature-validation.mjs';
+import { verifyPackagedUiAssets } from './packaged-ui-assets.mjs';
 
 const appRoot = resolve(process.argv[2]);
 const require = createRequire(join(appRoot, 'package.json'));
@@ -95,6 +96,7 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert.equal(health?.data?.status, 'ok', `Packaged startup failed: ${output}`);
+  const uiAssets = await verifyPackagedUiAssets(appRoot, `http://127.0.0.1:${port}`);
   const progressDeadline = Date.now() + 2_000;
   while (phases.at(-1) !== 'prepared' && Date.now() < progressDeadline) await new Promise(done => setTimeout(done, 10));
   // Schema migration and isolated graph preparation are separate slow steps.
@@ -135,7 +137,7 @@ try {
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspace_groups)').all().some(column => column.name === 'position'), false);
     assert.equal(backup.prepare('PRAGMA table_xinfo(agent_workspaces)').all().some(column => column.name === 'position'), false);
   } finally { backup.close(); }
-  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', ptyRecovery, reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', packagedCodeGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
+  console.log(JSON.stringify({ version: require('./package.json').version, packagedStartup: 'passed', uiAssets, ptyRecovery, reportedLegacySchemaRecovery: 'passed', isolatedGraph: 'passed', packagedCodeGraph: 'passed', preservedRows: 3, migrationCount: entries.length, startupMs: Date.now() - started, locales: 3, verifiedBackup: 'passed', signatureValidation }));
 } finally {
   await stopChild();
   await Connection.disconnect();

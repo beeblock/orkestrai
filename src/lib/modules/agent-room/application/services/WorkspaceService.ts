@@ -178,6 +178,11 @@ export class WorkspaceService {
     // Uma unica checagem assincrona deixa threads livres enquanto o dialogo do
     // sistema aguarda o usuario; chamadas concorrentes esgotavam o pool fs.
     await access(workspace.workingDir, fsConstants.R_OK | fsConstants.W_OK);
+    // File existence alone does not prove ownership: an old/restored config
+    // can contain another workspace's token even with up-to-date skills.
+    // Restore it from the database before taking the provisioning shortcut.
+    const token = await bridgeService.getOrCreateToken(workspace.id).catch(() => null);
+    if (!token) return;
     const skillPath = resolve(workspace.workingDir, '.claude', 'skills', 'orkestrai', 'SKILL.md');
     const bridgeRuntime = await this.preferredBridgeRuntime(workspace);
     const cliEntry = process.env.ORKESTRAI_CLI_JS ?? resolve(process.cwd(), 'packages', 'orkestrai-cli', 'bin', 'orkestrai.js');
@@ -198,8 +203,6 @@ export class WorkspaceService {
       this.provisionChecked.add(workspace.id);
       return;
     }
-    const token = await bridgeService.getOrCreateToken(workspace.id).catch(() => null);
-    if (!token) return;
     await bridgeService.provisionSkill(workspace, token, bridgeRuntime ?? undefined);
     this.provisionChecked.add(workspace.id);
   }

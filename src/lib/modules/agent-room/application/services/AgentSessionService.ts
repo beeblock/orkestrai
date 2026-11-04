@@ -202,6 +202,9 @@ export class AgentSessionService {
     const workspaceConfig = runtime.kind === 'wsl'
       ? posix.join(runtime.linuxWorkingDir, '.orkestrai', 'workspace.json')
       : join(workspace.workingDir, '.orkestrai', 'workspace.json');
+    // Headless recovery must repair the bridge even if Canvas was never opened.
+    // Keep this I/O before the final profile/process ownership checks below.
+    await (await import('./BridgeService.js')).bridgeService.getOrCreateToken(workspaceId);
     const bridgeAgentToken = randomUUID();
     const autonomyPolicy = await autonomyPolicyService.get(workspaceId);
     const latestNode = await workspaceRepository.getNode(target.id);

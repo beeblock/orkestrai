@@ -78,6 +78,7 @@ const wsGlobal = globalThis as unknown as {
   __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
+  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string) => Promise<void>;
 };
 const allSockets = (wsGlobal.__orkestraiWsClients ??= new Set<WebSocket>());
 const subscriptions = (wsGlobal.__orkestraiWsSubscriptions ??= new WeakMap());
@@ -295,6 +296,10 @@ export function handlePtyConnection(socket: WebSocket): void {
           const resolvedNativeCommand = runtime.kind === 'native'
             ? await resolveCommandAsync(message.command.trim(), [], { ...preparedAgentEnvironment, ...normalizeWindowsPath({ ...message.env, ...profileEnv }) })
             : undefined;
+
+          if (message.provider && message.workspaceId) {
+            await wsGlobal.__orkestraiPrepareWorkspaceBridge?.(message.workspaceId);
+          }
 
           // Profile lookup/preflight yields. A stale reconnect must never retire
           // the replacement process that another account change just started.

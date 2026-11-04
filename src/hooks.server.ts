@@ -39,6 +39,7 @@ const globalRef = globalThis as unknown as {
   __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
+  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string) => Promise<void>;
 };
 globalRef.__orkestraiProfileAuthenticationKeys = provider => getAgentAdapter(provider).profileAuthenticationEnvKeys ?? [];
 globalRef.__orkestraiValidateNodeProfile = async (workspaceId, nodeId, provider, profileId) => {
@@ -52,6 +53,9 @@ globalRef.__orkestraiResolveProviderProfileEnv = (profileId, providerId, options
 globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
   const workspace = await workspaceRepository.getWorkspace(workspaceId);
   return Boolean(workspace && !workspace.suspendedAt);
+};
+globalRef.__orkestraiPrepareWorkspaceBridge = async workspaceId => {
+  await bridgeService.getOrCreateToken(workspaceId);
 };
 if (!building) {
   void afterDatabaseReady(() => {

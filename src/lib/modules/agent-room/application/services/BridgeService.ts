@@ -1,8 +1,9 @@
 import { Connection } from '@beeblock/svelar/database';
 import { randomBytes } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import { Event } from '@beeblock/svelar/events';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, lstat, mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import type { AgentActivityState, CanvasNode, ImageNodePayload, ModelEffort, TerminalNodePayload, Workspace, WorkspaceExecutionRuntime } from '../../domain/types.js';
@@ -211,9 +212,17 @@ export class BridgeService {
     }
 
     const generated = randomBytes(24).toString('hex');
-    await AgentWorkspace.query().where('id', workspaceId).update({ bridge_token: generated });
-    await this.writeBridgeConfig(workspace, generated, apiUrl);
-    return generated;
+    // Several boot/session requests may observe the initial empty token. Only
+    // the first may claim it; every caller must use the persisted winner.
+    const claim = AgentWorkspace.query().where('id', workspaceId);
+    if (token == null) claim.whereNull('bridge_token');
+    else claim.where('bridge_token', token);
+    await claim.update({ bridge_token: generated });
+    const winner = await AgentWorkspace.query().where('id', workspaceId).first();
+    const persisted = winner?.getAttribute('bridge_token') as string | null;
+    if (!persisted) throw new Error('Workspace não encontrado.');
+    await this.writeBridgeConfig(workspace, persisted, apiUrl);
+    return persisted;
   }
 
   /** Lista os terminais (agentes) do workspace com estado da sessão PTY. */
@@ -2260,35 +2269,52 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
   }
 
   private async writeBridgeConfig(workspace: Workspace, token: string, apiUrl?: string): Promise<void> {
-    try {
-      const dir = resolve(workspace.workingDir, '.orkestrai');
-      await mkdir(dir, { recursive: true });
-      await writeFile(
-        resolve(dir, 'workspace.json'),
-        JSON.stringify(
-          {
-            workspaceId: workspace.id,
-            workspaceName: workspace.name,
-            project: workspaceProjectContext(workspace),
-            token,
-            apiUrl: apiUrl ?? process.env.ORKESTRAI_API_URL ?? 'http://127.0.0.1:4173',
-            repository: {
-              reference: '.',
-              primary: true,
-              runtimeKind: workspace.runtimeKind,
-              ...(workspace.runtimeKind === 'wsl' && workspace.wslDistribution
-                ? { wslDistribution: workspace.wslDistribution }
-                : {}),
-            },
-            repositories: workspace.repositoryRoots.map(({ alias }) => ({ alias, reference: `@${alias}` })),
-          },
-          null,
-          2
-        )
-      );
-    } catch {
-      // Config local e conveniencia; não bloqueia o fluxo.
+    const dir = resolve(workspace.workingDir, '.orkestrai');
+    await mkdir(dir, { recursive: true });
+    const directory = await lstat(dir);
+    const target = resolve(dir, 'workspace.json');
+    const before = await lstat(target).catch(error => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (!directory.isDirectory() || directory.isSymbolicLink() || (before && (!before.isFile() || before.nlink !== 1))) {
+      throw new Error('Unsupported workspace bridge configuration path.');
     }
+    // Open without truncating: validate the actual handle before touching an
+    // existing file, including on Windows where O_NOFOLLOW is unavailable.
+    const handle = await open(target, fsConstants.O_WRONLY | fsConstants.O_CREAT | (fsConstants.O_NOFOLLOW ?? 0), 0o600);
+    try {
+      const [opened, current, currentDirectory] = await Promise.all([handle.stat(), lstat(target), lstat(dir)]);
+      if (!opened.isFile() || opened.nlink !== 1 || !current.isFile() || current.isSymbolicLink()
+        || current.dev !== opened.dev || current.ino !== opened.ino
+        || (before && (before.dev !== opened.dev || before.ino !== opened.ino))
+        || !currentDirectory.isDirectory() || currentDirectory.isSymbolicLink()
+        || currentDirectory.dev !== directory.dev || currentDirectory.ino !== directory.ino) {
+        throw new Error('Workspace bridge configuration changed before writing.');
+      }
+      const content = JSON.stringify(
+        {
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+          project: workspaceProjectContext(workspace),
+          token,
+          apiUrl: apiUrl ?? process.env.ORKESTRAI_API_URL ?? 'http://127.0.0.1:4173',
+          repository: {
+            reference: '.',
+            primary: true,
+            runtimeKind: workspace.runtimeKind,
+            ...(workspace.runtimeKind === 'wsl' && workspace.wslDistribution
+              ? { wslDistribution: workspace.wslDistribution }
+              : {}),
+          },
+          repositories: workspace.repositoryRoots.map(({ alias }) => ({ alias, reference: `@${alias}` })),
+        },
+        null,
+        2
+      );
+      await handle.writeFile(content, 'utf8');
+      await handle.truncate(Buffer.byteLength(content));
+    } finally { await handle.close(); }
   }
 }
 
