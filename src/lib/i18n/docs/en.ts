@@ -1014,7 +1014,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    {date: 'Unreleased', title: 'Orkestrai 0.51.3', summary: 'Lighter Git polling and asynchronous workspace asset access.', items: [
+    {date: 'November 4, 2026', title: 'Orkestrai 0.51.3', summary: 'Conversation synchronized with agents and more responsive large projects.', items: [
       "Show public terminal progress and final answers automatically in the Conversation after owner-message delivery, without requiring a bridge post or another model turn. Recover the exact saved conversation after reopening, deduplicate updates across concurrent readers/restarts, and exclude reasoning, tool output and other profiles.",
       'Canvas Git indicators and lists no longer hash every changed or untracked asset during polling. Concurrent display reads are shared; reviews and Git mutation guards retain exact content checks with bounded subprocess concurrency.',
       'Workspace file operations are asynchronous even with Code Intelligence disabled. Changes to the same file stay serialized without blocking unrelated files. HTTP previews and downloads stream with bounded buffering; internal buffered image operations accept files up to 64 MiB.',

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // A stand-in for an agent CLI: it reads a line from its terminal, works for a
 // few seconds and answers, recording both in a Claude-style transcript.
@@ -11,6 +12,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import readline from 'node:readline';
 const args = process.argv.slice(2);
+if (args.includes('--version')) { console.log('2.1.0 (Claude Code)'); process.exit(0); }
 const flag = args.findIndex((arg) => arg === '--session-id' || arg === '--resume');
 const session = flag >= 0 ? args[flag + 1] : crypto.randomUUID();
 const dir = join(homedir(), '.claude', 'projects', realpathSync(process.cwd()).replace(/[^a-zA-Z0-9]/g, '-'));
@@ -39,11 +41,26 @@ test('Conversation receives public terminal progress live during a long owner tu
   const dir = await mkdtemp(join(tmpdir(), 'orkestrai-public-progress-'));
   const script = join(dir, 'fake-agent.mjs');
   const progress = 'Progresso público: validando o deploy sem parar o turno.';
-  await writeFile(script, FAKE_AGENT.replace('if (++ticks < 12) return;', `
-    ++ticks;
-    if (ticks === 3) record({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(progress)} }], stop_reason: null } });
-    if (ticks < 40) return;
-  `));
+  // Reproduce a busy agent receiving the owner's message through an inbox
+  // tool result, exactly as a real CLI does in the reported long turn.
+  await writeFile(script, FAKE_AGENT
+    .replace("import readline from 'node:readline';", `import readline from 'node:readline';\nimport { run as runBridge } from ${JSON.stringify(pathToFileURL(resolve('packages/orkestrai-cli/src/cli.js')).href)};`)
+    .replace('let ticks = 0;', 'let ticks = 0; let checking = false; let announced = false;')
+    .replace('setInterval(() => {', 'setInterval(async () => {')
+    .replace('if (++ticks < 12) return;', `
+      if (!checking && !announced) {
+        checking = true;
+        try {
+          let batch;
+          await runBridge(['inbox', '--json'], { out: value => { batch = JSON.parse(value); }, err: () => {} });
+          if (batch?.items?.some(item => item.kind === 'owner')) {
+            announced = true;
+            record({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(progress)} }], stop_reason: null } });
+          }
+        } finally { checking = false; }
+      }
+      if (++ticks < 100) return;
+    `));
   const shims = resolve('test-runtime', 'bin');
   await mkdir(shims, { recursive: true });
   const fakeClaude = join(shims, 'claude');
@@ -55,7 +72,11 @@ test('Conversation receives public terminal progress live during a long owner tu
     const lead = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Public Lead',
       payload: { provider: 'claude', maestro: true }, x: 80, y: 80, width: 720, height: 420 } })).json()).data;
     await page.goto(`/canvas?workspace=${workspace.id}&node=${lead.id}`);
-    await expect(page.locator(`.svelte-flow__node[data-id="${lead.id}"] .xterm-rows`)).toContainText('? for shortcuts', { timeout: 20_000 });
+    const terminal = page.locator(`.svelte-flow__node[data-id="${lead.id}"]`);
+    await expect(terminal.locator('.xterm-rows')).toContainText('? for shortcuts', { timeout: 20_000 });
+    await terminal.locator('.xterm-helper-textarea').focus();
+    await page.keyboard.type('Execute o deploy e continue trabalhando.');
+    await page.keyboard.press('Enter');
     await page.goto(`/chat?workspace=${workspace.id}&channel=${encodeURIComponent(`dm:${lead.id}`)}`);
     await page.locator('#chat-composer-input').fill('Qual o andamento do deploy?');
     await page.locator('#chat-composer-input').press('Enter');

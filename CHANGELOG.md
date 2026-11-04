@@ -5,7 +5,7 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.51.3 - 2026-11-04
 
 ### Fixed
 - Show public terminal progress and final answers automatically in the Conversation after owner-message delivery, without requiring a bridge post or another model turn. Recover the exact saved conversation after reopening, deduplicate updates across concurrent readers/restarts, and exclude reasoning, tool output and other profiles.

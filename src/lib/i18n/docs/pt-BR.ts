@@ -1018,7 +1018,7 @@ Header: Authorization = Bearer {{accessToken}}`,
     },
   ],
   changelog: [
-    {date: 'Não publicado', title: 'Orkestrai 0.51.3', summary: 'Consultas Git mais leves e acesso assíncrono aos assets do workspace.', items: [
+    {date: '4 de novembro de 2026', title: 'Orkestrai 0.51.3', summary: 'Conversa sincronizada com os agentes e projetos grandes mais responsivos.', items: [
       "Mostrar automaticamente o progresso público e as respostas finais do terminal na Conversa após a entrega da mensagem do dono, sem depender de uma publicação pela ponte ou de outro turno do modelo. Recuperar a conversa salva exata ao reabrir, evitar duplicatas após leituras simultâneas/reinícios e excluir raciocínio privado, saídas de ferramentas e outros perfis.",
       'Indicadores e listas Git do Canvas não calculam mais o hash de cada asset novo ou alterado durante a atualização. Consultas visuais simultâneas são compartilhadas; revisões e operações Git mantêm a conferência exata do conteúdo, com concorrência limitada.',
       'Operações de arquivos do workspace são assíncronas mesmo com Inteligência de Código desligada. Alterações no mesmo arquivo continuam em sequência sem bloquear outros arquivos. Prévias e downloads usam streaming com memória limitada; operações internas que carregam imagens inteiras aceitam arquivos de até 64 MiB.',

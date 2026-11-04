@@ -51,3 +51,16 @@ that CLI closes its turn, without any bridge post.
 Full-suite, production-build and browser results are recorded with the release
 verification. This does not prove the external Windows Unity project is repaired;
 its large-Git/filesystem fix is separately measured and ships in the same patch.
+
+## Final local verification
+
+- Full suite: 3,048 passed, 18 skipped, zero failures (265.60 s; two workers).
+- Standard production build and native host postbuild: passed.
+- Production Playwright: 3/3 passed in 25.0 s, no retries. The regression uses
+  the official CLI `inbox --json` to claim owner input during a still-open turn;
+  public commentary reaches an already-open Conversation before completion and
+  survives a reload exactly once. Direct terminal exchanges remain covered.
+- Test homes, provider configuration, runtime discovery and database are isolated.
+- Companion site: 9 catalog tests passed; three-language 0.51.3 changelog deployed.
+- No live owner prompt was resent and no live app/agent was restarted for this
+  investigation or these tests.
