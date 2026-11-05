@@ -20,6 +20,7 @@ export const claudeAdapter: AgentAdapter = {
   async runDelegatedInference(input) { const { NativeInferenceProvider } = await import('./delegated-inference.js'); await new NativeInferenceProvider().run(input); },
   efforts: CLAUDE_EFFORTS,
   sessionStorage: 'claude-project-jsonl',
+  shellEntrypoints: ['@anthropic-ai/claude-code/cli.js'],
   supportsProfileSessionTransfer: true,
   profileAuthenticationEnvKeys: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN'],
   profileStrategy: { kind: 'configDir', envVar: 'CLAUDE_CONFIG_DIR', defaultDir: '~/.claude' },

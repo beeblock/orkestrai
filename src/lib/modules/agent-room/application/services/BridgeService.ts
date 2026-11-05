@@ -36,6 +36,7 @@ import { roleService } from './RoleService.js';
 import { providerProfileService } from './ProviderProfileService.js';
 import { agentTerminalDeliveryService } from './AgentTerminalDeliveryService.js';
 import { agentInboxService } from './AgentInboxService.js';
+import { shellAgentService, type ShellAgentContext } from './ShellAgentService.js';
 import { agentLearningService } from './AgentLearningService.js';
 import { attentionService } from './AttentionService.js';
 import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
@@ -492,7 +493,11 @@ export class BridgeService {
 
   private async performAsk(workspaceId: string, input: BridgeAskInput, releaseDelivery: () => void): Promise<BridgeAskResult> {
     const agents = await this.listAgents(workspaceId);
-    const target = await this.messageTarget(workspaceId, this.findAgent(agents, input.to));
+    const shellTarget = await this.messageTarget(workspaceId, this.findAgent(agents, input.to));
+    const shellAgent = !shellTarget.provider
+      ? await shellAgentService.detect(workspaceId, shellTarget.nodeId, shellTarget.sessionId)
+      : null;
+    const target = shellAgent ? { ...shellTarget, provider: shellAgent.provider } : shellTarget;
 
     const origin = input.from ? this.findAgent(agents, input.from) : null;
     if (origin) await this.ensureEdge(workspaceId, origin.nodeId, target.nodeId);
@@ -572,9 +577,10 @@ export class BridgeService {
           });
           markSubmitted?.();
         },
-        input.taskId
-          ? () => this.isTaskMessageRelevant(workspaceId, input.taskId!, target.nodeId, origin?.nodeId ?? null)
-          : undefined,
+        shellAgent || input.taskId ? async (beforeWrite?: boolean) => {
+          if (shellAgent && !await shellAgentService.stillRunning(workspaceId, target.nodeId, target.sessionId, shellAgent, beforeWrite)) return false;
+          return !input.taskId || await this.isTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
+        } : undefined,
       );
       const structuredReply = submitted.then(() => this.waitForTranscriptReply(
         workspaceId,
@@ -584,8 +590,19 @@ export class BridgeService {
         requestStartedAt,
         input.timeoutMs ?? 180_000,
         transcriptAbort.signal,
+        shellAgent,
       ));
+      // `reply <messageId>` is authoritative even when the manually launched
+      // CLI only prints an acknowledgement afterwards. Reuse inbox waiters so
+      // the real answer returns to this caller instead of being duplicated in
+      // its inbox while this tool waits for terminal/transcript text.
+      const recordedReply = shellAgent ? submitted.then(() => agentInboxService.awaitReply(messageId, {
+        timeoutMs: input.timeoutMs ?? 180_000,
+        busyGraceMs: input.timeoutMs ?? 180_000,
+        signal: transcriptAbort.signal,
+      })).then(value => ({ kind: 'recorded' as const, value })) : null;
       const winner = await Promise.race([
+        ...(recordedReply ? [recordedReply] : []),
         terminalReply.then(async (value) => target.provider && terminalDelivered
           ? { kind: 'transcript' as const, value: await structuredReply }
           : { kind: 'terminal' as const, value }),
@@ -593,10 +610,13 @@ export class BridgeService {
         submitted.then(() => directReply).then((value) => ({ kind: 'direct' as const, value })),
       ]);
       if (input.signal?.aborted) throw new Error('Agent request cancelled.');
-      if (winner.kind === 'direct') {
-        directReplyText = winner.value.text;
-        metadata.replySource = 'agent_message';
-        metadata.replyMessageId = winner.value.messageId;
+      const messageReply = winner.kind === 'direct' ? { ...winner.value, source: 'agent_message' }
+        : winner.kind === 'recorded' && winner.value.state === 'replied'
+          ? { text: winner.value.text, messageId, source: winner.value.source } : null;
+      if (messageReply) {
+        directReplyText = messageReply.text;
+        metadata.replySource = messageReply.source;
+        metadata.replyMessageId = messageReply.messageId;
         reply = { text: '', timedOut: false };
         transcriptAbort.abort();
         await terminalReply.catch(() => undefined);
@@ -613,6 +633,7 @@ export class BridgeService {
           target.sessionId,
           prompt,
           requestStartedAt,
+          shellAgent,
         ).catch(() => null);
         if (immediate?.complete) transcriptMatch = immediate;
         else if (immediate) transcriptMatch = await structuredReply ?? immediate;
@@ -633,6 +654,7 @@ export class BridgeService {
       target.sessionId,
       prompt,
       requestStartedAt,
+      shellAgent,
     ).catch(() => null);
     if (immediateTranscript?.complete) transcriptMatch = immediateTranscript;
     else incompleteTranscript = immediateTranscript;
@@ -800,11 +822,12 @@ export class BridgeService {
     since: number,
     timeoutMs: number,
     signal: AbortSignal,
+    shellAgent?: ShellAgentContext | null,
   ): Promise<MatchedTranscriptReply | null> {
     const deadline = Date.now() + timeoutMs;
     let incomplete: MatchedTranscriptReply | null = null;
     while (!signal.aborted && Date.now() < deadline) {
-      const match = await this.transcriptReply(workspaceId, nodeId, ptySessionId, prompt, since).catch(() => null);
+      const match = await this.transcriptReply(workspaceId, nodeId, ptySessionId, prompt, since, shellAgent).catch(() => null);
       if (match?.complete) return match;
       if (match) incomplete = match;
       await new Promise<void>((resolve) => {
@@ -824,7 +847,15 @@ export class BridgeService {
     ptySessionId: string,
     prompt: string,
     since: number,
+    shellAgent?: ShellAgentContext | null,
   ): Promise<MatchedTranscriptReply | null> {
+    if (shellAgent) {
+      // A Shell can run many CLI conversations over its lifetime. Bind only
+      // this request's exact marker; never persist a native-agent resume on it.
+      const match = await findReplyToPrompt(shellAgent.provider, shellAgent.cwd, shellAgent.sessionId, prompt, since, shellAgent.options);
+      if (match) shellAgent.sessionId = match.sessionId;
+      return match;
+    }
     const node = await workspaceRepository.getNode(nodeId);
     const payload = (node?.payload ?? {}) as { provider?: string; agentSessionId?: string };
     const session = ptySessionManager.get(ptySessionId);
@@ -1617,7 +1648,7 @@ Specialists implement, validate and report task done; report a concrete blocked/
 After dispatching independent work and completing available coordination actions, end the waiting model turn. Results, questions and proven unresolved worker stops wake the leader. A waiting turn does not end the delivery. Do not poll, negotiate GO windows or repeatedly reload tool catalogs. Use orkestrai heavy for heavy commands.
 
 ## Discover only the needed operation
-All workspace features remain available to leaders and specialists with their existing identity/scope rules. Load the current reference index with workspace_guide (CLI orkestrai guide); request a section by its id, then consult only the sections needed for the next action. REFERENCE.md beside this skill is the complete version-matched guide. Internal Canvas, Shell and Portal operations use native bridge tools; never require Computer to unlock them. Portal screenshots return a PNG path; open that file instead of starting another browser.
+All workspace features remain available to leaders and specialists with their existing identity/scope rules. For an agent started manually inside a Shell, only its exact structured conversation or explicit reply confirms an answer; terminal redraws and silence do not. A delivered but unconfirmed request is not permission to resend it. Load the current reference index with workspace_guide (CLI orkestrai guide); request a section by its id, then consult only the sections needed for the next action. REFERENCE.md beside this skill is the complete version-matched guide. Internal Canvas, Shell and Portal operations use native bridge tools; never require Computer to unlock them. Portal screenshots return a PNG path; open that file instead of starting another browser.
 `;
   }
 
@@ -2120,7 +2151,7 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
     signal?: AbortSignal,
     provider?: string | null,
     onSubmitted?: () => Promise<void>,
-    isStillRelevant?: () => Promise<boolean>,
+    isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>,
   ): Promise<{ text: string; timedOut: boolean }> {
     return new Promise((resolvePromise, reject) => {
       let captured = '';
@@ -2159,7 +2190,7 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
       let sent = false;
       let sentRealAt = 0;
       const maybeFinish = () => {
-        if (done || !sent) return; // boot quieto NAO e resposta — só vale depois do envio
+        if (done || !sent || provider) return; // boot quieto NAO e resposta — só vale depois do envio
         const now = Date.now();
         const quietFor = now - lastOutputAt;
         const elapsed = now - sentRealAt;
@@ -2185,7 +2216,9 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
         const attached = ptySessionManager.attach(
           sessionId,
           (data) => {
-            captured += data;
+            // TUI redraws are never a reply source. Do not retain minutes of
+            // screen output while waiting for a manual agent's transcript.
+            if (!provider) captured += data;
             lastOutputAt = Date.now();
           },
           undefined,

@@ -12,6 +12,8 @@ import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentSt
 import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
+import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
+import { workingDirectoryFromOsc, workingDirectoryFromWindowsOsc } from '../../domain/terminal-working-directory.ts';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
@@ -126,6 +128,10 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
 
 type PtySession = PtySessionInfo & {
   pty: IPty;
+  executionRuntime: WorkspaceExecutionRuntime;
+  guestShellPid?: number;
+  shellOscTail: string;
+  shellDirectory: string;
   /** Paths stay server-side; never return profile configuration to WebSocket clients. */
   storageRoots: AgentStorageRoots;
   /** Per-process bridge credential. It must never leave this private record. */
@@ -184,6 +190,7 @@ type ComposerDelivery = {
   reject: (error: Error) => void;
   requiresAcceptance: boolean;
   confirmAcceptance?: () => Promise<boolean>;
+  isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
   confirmationPending?: boolean;
   /** Actual Enter time, rather than when the delivery joined the queue. */
   submittedAt?: number;
@@ -451,6 +458,9 @@ export class PtySessionManager {
       transcriptCwd: input.transcriptCwd ?? input.cwd,
       runtimeKey: executionRuntimeKey(input.runtime ?? { kind: 'native' }),
       pty: ptyProcess,
+      executionRuntime: input.runtime ?? { kind: 'native' },
+      shellOscTail: '',
+      shellDirectory: input.transcriptCwd ?? input.cwd,
       storageRoots: agentStorageRoots({ ...(input.runtime?.kind === 'wsl' ? {} : process.env), ...input.env },
         input.transcriptCwd ?? input.cwd, input.runtime?.kind === 'wsl'
           ? path => wslHostPath((input.runtime as Extract<WorkspaceExecutionRuntime, { kind: 'wsl' }>).distribution, path) : null),
@@ -505,6 +515,20 @@ export class PtySessionManager {
       const modes = session.terminalModeTail + data;
       for (const match of modes.matchAll(/\x1b\[\?2004([hl])/g)) session.bracketedPaste = match[1] === 'h';
       session.terminalModeTail = modes.slice(-12);
+      if (!session.provider && (session.shellOscTail || data.includes('\x1b]'))) {
+        const output = session.shellOscTail + data;
+        for (const osc of output.matchAll(/\x1b\]([^\x07\x1b]{1,4100})(?:\x07|\x1b\\)/g)) {
+          if (osc[1].startsWith('777;orkestrai-pid;') && session.executionRuntime.kind === 'wsl' && !session.guestShellPid) {
+            const pid = Number(osc[1].slice('777;orkestrai-pid;'.length));
+            if (Number.isSafeInteger(pid) && pid > 1) session.guestShellPid = pid;
+          }
+          const cwd = osc[1].startsWith('7;') ? workingDirectoryFromOsc(osc[1].slice(2), platform() === 'win32' && session.executionRuntime.kind === 'native')
+            : osc[1].startsWith('9;') ? workingDirectoryFromWindowsOsc(osc[1].slice(2)) : null;
+          if (cwd) session.shellDirectory = cwd;
+        }
+        const start = output.lastIndexOf('\x1b]');
+        session.shellOscTail = start >= 0 && !/[\x07]/.test(output.slice(start)) && !output.slice(start).includes('\x1b\\') ? output.slice(start).slice(-4200) : '';
+      }
       session.startupGuard?.observe(data);
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
@@ -592,6 +616,14 @@ export class PtySessionManager {
   hasUnsubmittedOwnerInput(id: string): boolean {
     const session = this.sessions.get(id);
     return Boolean(session && (session.humanComposerLength > 0 || session.humanDraft.text.length || session.humanDraft.paste || session.deferredHumanInput.length));
+  }
+
+  /** On-demand only: no process polling for idle Shells or every Canvas refresh. */
+  async shellForeground(id: string, accepts?: (process: ShellForegroundProcess) => boolean) {
+    const session = this.requireSession(id);
+    if (session.provider) throw new Error('This terminal is already a managed agent.');
+    return inspectShellForeground({ pid: session.pty.pid, runtime: session.executionRuntime,
+      guestPid: session.guestShellPid, cwd: session.shellDirectory, accepts });
   }
 
   transcriptStorageRoots(id: string): AgentStorageRoots {
@@ -893,7 +925,7 @@ export class PtySessionManager {
       maxAttempts?: number;
       queueTimeoutMs?: number;
       isAccepted?: () => Promise<boolean>;
-      isStillRelevant?: () => Promise<boolean>;
+      isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
       signal?: AbortSignal;
       onSubmitted?: (mark: PtyOutputMark) => void;
     } = {},
@@ -906,7 +938,12 @@ export class PtySessionManager {
       acceptanceRead ??= Promise.resolve().then(options.isAccepted!).finally(() => { acceptanceRead = undefined; });
       return acceptanceRead;
     } : undefined;
-    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted);
+    const stillRelevant = options.isStillRelevant || options.signal ? async (beforeWrite?: boolean) => {
+      if (options.signal?.aborted) return false;
+      const relevant = options.isStillRelevant ? await options.isStillRelevant(beforeWrite) : true;
+      return relevant && !options.signal?.aborted;
+    } : undefined;
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted, stillRelevant);
     if (options.signal?.aborted) {
       queued.cancel();
       throw new Error('Agent message delivery cancelled.');
@@ -1022,6 +1059,7 @@ export class PtySessionManager {
     requiresAcceptance = false,
     confirmAcceptance?: () => Promise<boolean>,
     onSubmitted?: (mark: PtyOutputMark) => void,
+    isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>,
   ): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
@@ -1042,7 +1080,7 @@ export class PtySessionManager {
 
     let delivery!: ComposerDelivery;
     const submitted = new Promise<void>((resolve, reject) => {
-      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted };
+      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted, isStillRelevant };
       session.deliveryQueue.push(delivery);
       this.drainDeliveryQueue(session);
     });
@@ -1221,6 +1259,25 @@ export class PtySessionManager {
 
     session.activeDelivery = delivery;
     session.deliveryInProgress = true;
+    // A queued Shell agent can exit while an owner draft keeps this delivery
+    // parked. Revalidate after taking the writer slot, before typing any text.
+    void this.startDelivery(session, delivery);
+  }
+
+  private async startDelivery(session: PtySession, delivery: ComposerDelivery): Promise<void> {
+    try {
+      if (delivery.isStillRelevant && !await delivery.isStillRelevant(true)) throw new ObsoletePtyDeliveryError();
+      if (session.exited || this.sessions.get(session.id) !== session) throw new Error('Terminal is no longer available.');
+    } catch (error) {
+      session.deliveryInProgress = false;
+      session.activeDelivery = null;
+      delivery.reject(error instanceof Error ? error : new Error(String(error)));
+      if (!session.exited && this.sessions.get(session.id) === session) {
+        this.flushDeferredHumanInput(session);
+        this.drainDeliveryQueue(session);
+      } else session.deferredHumanInput.length = 0;
+      return;
+    }
     const outputRevisionAtWrite = session.outputRevision;
     const textWrittenAt = Date.now();
     delivery.humanInputRevision = session.humanInputRevision;

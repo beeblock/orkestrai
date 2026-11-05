@@ -17,7 +17,7 @@ const bashRc = [
   'esac',
 ].join('\n');
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
-export const wslDirectoryShellScript = "export PATH=\"$ORKESTRAI_WORKSPACE_BIN:$PATH\"; exec /bin/bash --rcfile <(builtin printf '%s\\n' " + quote(bashRc) + ') -i';
+export const wslDirectoryShellScript = 'builtin printf "\\033]777;orkestrai-pid;%s\\007" "$$"; ' + "export PATH=\"$ORKESTRAI_WORKSPACE_BIN:$PATH\"; exec /bin/bash --rcfile <(builtin printf '%s\\n' " + quote(bashRc) + ') -i';
 
 /** Session-only integration: never edit profile files or provider CLI arguments. */
 export function integrateNativeShellDirectory(command: string, args: string[], env: Record<string, string>, platform = process.platform) {

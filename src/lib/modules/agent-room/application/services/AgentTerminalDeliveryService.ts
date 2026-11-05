@@ -12,7 +12,7 @@ type DeliverAgentMessageInput = {
   submitDelayMs?: number;
   queueTimeoutMs?: number;
   signal?: AbortSignal;
-  isStillRelevant?: () => Promise<boolean>;
+  isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
   /** Called when Enter submits the message, with where the terminal's output stood. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -24,7 +24,7 @@ type DeliverAgentMessageInput = {
  */
 export class AgentTerminalDeliveryService {
   async deliver(input: DeliverAgentMessageInput): Promise<void> {
-    if (input.isStillRelevant && !(await input.isStillRelevant())) {
+    if (input.isStillRelevant && !(await input.isStillRelevant(true))) {
       throw new ObsoletePtyDeliveryError();
     }
     const startedAt = Date.now();

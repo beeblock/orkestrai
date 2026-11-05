@@ -133,6 +133,31 @@ describe('PTY WebSocket protocol', () => {
     vi.unstubAllEnvs();
   });
 
+  it('gives a manually launched Shell agent its own in-memory identity and pinned workspace config', async () => {
+    const globals = globalThis as { __orkestraiPrepareWorkspaceBridge?: (workspaceId: string, nodeId?: string) => Promise<{ configPath: string }> };
+    globals.__orkestraiPrepareWorkspaceBridge = vi.fn(async () => ({ configPath: '/original/.orkestrai/workspace.json' }));
+    const socket = new FakeSocket(); handlePtyConnection(socket as never);
+    const create = vi.spyOn(ptySessionManager, 'create');
+    const command = process.platform === 'win32' ? 'cmd.exe' : '/bin/cat';
+    try {
+      socket.emit('message', JSON.stringify({ type: 'create', command, cwd: tmpdir(), workspaceId: 'shell-workspace', nodeId: 'shell-node', label: 'Manual agent' }));
+      await vi.waitFor(() => expect(socket.frames.some(frame => frame.type === 'created')).toBe(true), { timeout: 5000 });
+      const input = create.mock.calls[0][0];
+      expect(globals.__orkestraiPrepareWorkspaceBridge).toHaveBeenCalledWith('shell-workspace', 'shell-node');
+      expect(input.env).toMatchObject({ ORKESTRAI_NODE_ID: 'shell-node', ORKESTRAI_AGENT_TITLE: 'Manual agent', ORKESTRAI_WORKSPACE_CONFIG: '/original/.orkestrai/workspace.json' });
+      expect(input.bridgeAgentToken).toBeTruthy();
+      expect(ptySessionManager.resolveBridgeAgent('shell-workspace', input.bridgeAgentToken!)).toBe('shell-node');
+      expect(ptySessionManager.resolveBridgeAgent('other-workspace', input.bridgeAgentToken!)).toBeNull();
+      expect(JSON.stringify(socket.frames)).not.toContain(input.bridgeAgentToken!);
+      ptySessionManager.kill((socket.frames.find(frame => frame.type === 'created')!.session as { id: string }).id);
+      expect(ptySessionManager.resolveBridgeAgent('shell-workspace', input.bridgeAgentToken!)).toBeNull();
+    } finally {
+      delete globals.__orkestraiPrepareWorkspaceBridge;
+      socket.emit('close');
+      for (const frame of socket.frames) if (frame.type === 'created') ptySessionManager.kill((frame.session as { id: string }).id);
+    }
+  });
+
   it('rejects a reconnect using a stale account without stopping the replacement terminal', async () => {
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', workspaceId: 'w', nodeId: 'n', provider: 'claude', profileId: 'b' });
     const globals = globalThis as { __orkestraiValidateNodeProfile?: (...args: unknown[]) => Promise<boolean> };

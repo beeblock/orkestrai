@@ -28,6 +28,8 @@ import { attentionService } from '$lib/modules/agent-room/application/services/A
 import { startDatabaseMaintenance } from '$lib/modules/agent-room/infrastructure/database-maintenance.js';
 import { agentSessionRotationService } from '$lib/modules/agent-room/application/services/AgentSessionRotationService.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
+import { workspaceFileForTerminal } from '$lib/modules/agent-room/infrastructure/WslRuntime.js';
+import type { TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 // Scheduler de rotinas do Agent Room (tick a cada 15s em processo).
@@ -39,7 +41,7 @@ const globalRef = globalThis as unknown as {
   __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
-  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string) => Promise<void>;
+  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string, nodeId?: string) => Promise<{ configPath: string } | void>;
 };
 globalRef.__orkestraiProfileAuthenticationKeys = provider => getAgentAdapter(provider).profileAuthenticationEnvKeys ?? [];
 globalRef.__orkestraiValidateNodeProfile = async (workspaceId, nodeId, provider, profileId) => {
@@ -54,8 +56,14 @@ globalRef.__orkestraiCanStartWorkspaceSession = async (workspaceId) => {
   const workspace = await workspaceRepository.getWorkspace(workspaceId);
   return Boolean(workspace && !workspace.suspendedAt);
 };
-globalRef.__orkestraiPrepareWorkspaceBridge = async workspaceId => {
+globalRef.__orkestraiPrepareWorkspaceBridge = async (workspaceId, nodeId) => {
+  const workspace = await workspaceRepository.getWorkspace(workspaceId);
+  const node = nodeId ? await workspaceRepository.getNode(nodeId) : null;
+  if (!workspace || (nodeId && (!node || node.workspaceId !== workspaceId || node.type !== 'terminal'))) {
+    throw new Error('Terminal does not belong to this workspace.');
+  }
   await bridgeService.getOrCreateToken(workspaceId);
+  return { configPath: workspaceFileForTerminal(workspace, node?.payload as TerminalNodePayload | undefined, '.orkestrai/workspace.json') };
 };
 if (!building) {
   void afterDatabaseReady(() => {

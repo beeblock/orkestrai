@@ -25,6 +25,7 @@ export const codexAdapter: AgentAdapter = {
   respondPrivately: codexCompanion,
   efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   sessionStorage: 'codex-rollout-jsonl',
+  shellEntrypoints: ['@openai/codex/bin/codex.js'],
   profileStrategy: { kind: 'configDir', envVar: 'CODEX_HOME', defaultDir: '~/.codex' },
   setup: {
     docsUrl: 'https://developers.openai.com/codex/cli/',

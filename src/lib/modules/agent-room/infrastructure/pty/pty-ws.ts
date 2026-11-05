@@ -78,7 +78,7 @@ const wsGlobal = globalThis as unknown as {
   __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
-  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string) => Promise<void>;
+  __orkestraiPrepareWorkspaceBridge?: (workspaceId: string, nodeId?: string) => Promise<{ configPath: string } | void>;
 };
 const allSockets = (wsGlobal.__orkestraiWsClients ??= new Set<WebSocket>());
 const subscriptions = (wsGlobal.__orkestraiWsSubscriptions ??= new WeakMap());
@@ -297,9 +297,9 @@ export function handlePtyConnection(socket: WebSocket): void {
             ? await resolveCommandAsync(message.command.trim(), [], { ...preparedAgentEnvironment, ...normalizeWindowsPath({ ...message.env, ...profileEnv }) })
             : undefined;
 
-          if (message.provider && message.workspaceId) {
-            await wsGlobal.__orkestraiPrepareWorkspaceBridge?.(message.workspaceId);
-          }
+          const workspaceBridge = message.workspaceId
+            ? await wsGlobal.__orkestraiPrepareWorkspaceBridge?.(message.workspaceId, message.nodeId)
+            : undefined;
 
           // Profile lookup/preflight yields. A stale reconnect must never retire
           // the replacement process that another account change just started.
@@ -323,7 +323,7 @@ export function handlePtyConnection(socket: WebSocket): void {
             ? message.freshSessionArgs!.map((arg) => String(arg).replace('__ORKESTRAI_SESSION_ID__', freshSessionId))
             : [];
           if (freshSessionId) tracker.claim(freshSessionId);
-          const bridgeAgentToken = message.provider && message.workspaceId && message.nodeId ? randomUUID() : null;
+          const bridgeAgentToken = message.workspaceId && message.nodeId ? randomUUID() : null;
           const trackingStartedAt = Date.now();
           const session = ptySessionManager.create({
             command: message.command.trim(),
@@ -342,7 +342,12 @@ export function handlePtyConnection(socket: WebSocket): void {
             env: {
               ...(message.env ?? {}),
               ...profileEnv,
-              ...(bridgeAgentToken ? { ORKESTRAI_AGENT_TOKEN: bridgeAgentToken } : {}),
+              ...(bridgeAgentToken ? {
+                ORKESTRAI_AGENT_TOKEN: bridgeAgentToken,
+                ORKESTRAI_NODE_ID: message.nodeId!,
+                ORKESTRAI_AGENT_TITLE: message.label || message.nodeId!,
+                ...(workspaceBridge?.configPath ? { ORKESTRAI_WORKSPACE_CONFIG: workspaceBridge.configPath } : {}),
+              } : {}),
             },
             forwardEnvToWsl: Object.keys(profileEnv),
             unsetEnvKeys: message.profileId && message.provider ? wsGlobal.__orkestraiProfileAuthenticationKeys?.(message.provider).filter(key => !Object.hasOwn(profileEnv, key)) : [],

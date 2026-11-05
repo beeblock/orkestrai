@@ -203,6 +203,7 @@ describe('server-independent native startup recovery', () => {
     expect(files).toContain('src/lib/database/resumable-workspace-schema.ts');
     expect(files).toContain('electron/**');
     expect(files).toContain('build/**');
+    expect(files).toContain('src/lib/modules/agent-room/domain/terminal-working-directory.ts');
   });
 
   it('assesses macOS trust asynchronously and defaults to manual installation when denied', async () => {

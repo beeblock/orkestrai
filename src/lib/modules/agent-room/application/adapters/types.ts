@@ -66,6 +66,8 @@ export interface AgentAdapter {
   efforts?: string[];
   /** Layout persistido pela CLI, usado para descobrir o id exato da sessao. */
   sessionStorage?: AgentSessionStorage;
+  /** Published Node CLI entrypoints, for agents started manually in a Shell. */
+  shellEntrypoints?: string[];
   /** Copy only this conversation when switching between this provider’s own profiles. */
   supportsProfileSessionTransfer?: boolean;
   /** Inherited authentication must not override an explicitly selected account. */
