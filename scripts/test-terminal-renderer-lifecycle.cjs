@@ -55,10 +55,14 @@ window.runTerminalRound=async()=>{
  hidden=false;
  const start=performance.now();
  for(const item of instances)item.buffer.setVisible(true);
- while(parsed<instances.length&&performance.now()-start<2500)await new Promise(resolve=>setTimeout(resolve,5));
+ let previousPoll=start,maxPollGapMs=0;
+ while(parsed<instances.length&&performance.now()-start<2500){
+  await new Promise(resolve=>setTimeout(resolve,5));
+  const now=performance.now();maxPollGapMs=Math.max(maxPollGapMs,now-previousPoll);previousPoll=now;
+ }
  const firstPaintMs=performance.now()-start;
  const final=instances.map(({term})=>term.buffer.active.getLine(0)?.translateToString(true));
- return {hiddenWrites,peakQueued,hiddenPending,firstPaintMs,snapshots,parsed,final};
+ return {hiddenWrites,peakQueued,hiddenPending,firstPaintMs,maxPollGapMs,visibilityState:document.visibilityState,snapshots,parsed,final};
 };
 window.runWindowsResize=async()=>{
  window.disposeTerminals();

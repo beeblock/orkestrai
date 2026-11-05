@@ -8,7 +8,19 @@ let renderId = 0;
 let cancelFrame: (() => void) | null = null;
 function requestFrame() {
   if (cancelFrame || !renders.size) return;
+  const page = typeof document === 'undefined' ? null : document;
+  let frame: number | null = null;
+  let deadline: ReturnType<typeof setTimeout> | null = null;
+  let settled = false;
+  const clear = () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    if (deadline !== null) clearTimeout(deadline);
+    page?.removeEventListener('visibilitychange', arm);
+  };
   const run = () => {
+    if (settled || page?.visibilityState === 'hidden') return;
+    settled = true;
+    clear();
     cancelFrame = null;
     let count = 0;
     for (const [id, render] of renders) {
@@ -18,12 +30,23 @@ function requestFrame() {
     }
     requestFrame();
   };
+  const arm = () => {
+    if (page?.visibilityState === 'hidden') {
+      if (deadline !== null) clearTimeout(deadline);
+      deadline = null;
+      return;
+    }
+    frame ??= requestAnimationFrame(() => { frame = null; run(); });
+    // A visible native/offscreen renderer may delay RAF independently of PTY
+    // readiness. Bound that delay without increasing the shared parse budget.
+    deadline ??= setTimeout(() => { deadline = null; run(); }, 50);
+  };
+  cancelFrame = () => { settled = true; clear(); };
   if (typeof requestAnimationFrame === 'function') {
-    const id = requestAnimationFrame(run);
-    cancelFrame = () => cancelAnimationFrame(id);
+    page?.addEventListener('visibilitychange', arm);
+    arm();
   } else {
-    const id = setTimeout(run, 16);
-    cancelFrame = () => clearTimeout(id);
+    deadline = setTimeout(run, 16);
   }
 }
 function scheduleRender(render: () => void): () => void {
