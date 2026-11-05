@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Preserve the owner's terminal cursor when another selected terminal finishes starting or recovering in the background. Delayed startup only focuses an unclaimed Canvas frame, never an active field or another window.
 - Keep Codex inbox delivery and activity status ready after a turn ends, even when its background commands finish later. Match late results to the exact completed or aborted turn; a genuinely newer or unidentifiable turn still blocks delivery.
 - Hold Space and drag to pan the Canvas over groups, images and other nodes without moving them, including at high zoom. Restore normal interaction on key release or focus loss, preserve typing and shortcut modifiers, and temporarily suspend creation tools during navigation.
 

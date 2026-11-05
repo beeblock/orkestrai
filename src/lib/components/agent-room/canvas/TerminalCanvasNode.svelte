@@ -178,7 +178,16 @@
     // Mantem o terminal criador montado ate o payload persistido apontar para
     // a nova sessao; liberar antes reanexaria por um instante ao id antigo.
     forceRespawn = false;
-    if (selected) requestAnimationFrame(() => requestAnimationFrame(() => terminalNode?.focus()));
+    if (selected) requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Startup/persistence may finish after the owner started typing elsewhere.
+      // Selection alone is not permission to take that field's cursor away.
+      if (!selected || !document.hasFocus()) return;
+      const active = document.activeElement;
+      const focusedFrame = active instanceof HTMLElement && active.matches('.svelte-flow__node') && active.dataset.id === id;
+      if (active !== document.body && active !== document.documentElement && !focusedFrame) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="menu"][data-state="open"]')) return;
+      terminalNode?.focus();
+    }));
   }
 
   function terminalCommands(): SavedTerminalCommand[] {
