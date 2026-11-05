@@ -5415,6 +5415,8 @@
   "topbar.usage_detail": "{provider}: {percent}% used, resets {time}. Open usage.",
   "topbar.no_workspaces": "No workspace found",
   "canvas.tool_select": "Select",
+  "canvas.pan_hint": "Hold Space and drag to move the Canvas without moving nodes",
+  "settings.shortcut_space_key": "Space",
   "canvas.tool_select_hint": "Esc drops the tool",
   "canvas.panels_label": "Canvas panels",
   "canvas.team_map": "Team map",

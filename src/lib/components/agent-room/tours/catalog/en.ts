@@ -1158,6 +1158,7 @@ export const TOURS_EN: Tour[] = [
         title: 'Keep the workspace readable',
         body: 'Connections remain behind every node, including on Windows displays with different scale factors. You can still fine-tune positions manually afterward.',
       },
+      {"id": "navigate-group", "title": "Navigate inside a large group", "body": "Zoom into grouped images, hold Space and drag across them to move the camera without moving the group or its members. Release Space to resume editing. Typing and Alt+Space dictation are unchanged."},
       {
         id: 'tune-connection-performance',
         title: 'Choose the connection workload',

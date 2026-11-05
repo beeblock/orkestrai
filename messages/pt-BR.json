@@ -5415,6 +5415,8 @@
   "topbar.usage_detail": "{provider}: {percent}% usado, reinicia {time}. Abrir o uso.",
   "topbar.no_workspaces": "Nenhum workspace encontrado",
   "canvas.tool_select": "Selecionar",
+  "canvas.pan_hint": "Segure Espaço e arraste para mover o canvas sem mover os nós",
+  "settings.shortcut_space_key": "Espaço",
   "canvas.tool_select_hint": "Esc solta a ferramenta",
   "canvas.panels_label": "Painéis do canvas",
   "canvas.team_map": "Mapa da equipe",

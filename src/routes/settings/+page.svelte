@@ -483,6 +483,7 @@
     ['Cmd/Ctrl+G', m['settings.shortcut_group']()],
     ['Cmd/Ctrl+Shift+G', m['settings.shortcut_ungroup']()],
     ['Cmd/Ctrl+Shift+!', m['settings.shortcut_zoom']()],
+    [m['settings.shortcut_space_key'](), m['canvas.pan_hint']()],
     ['N', m['settings.shortcut_new_note']()],
     ['L', m['settings.shortcut_connect']()],
     ['Alt+1..9', m['settings.shortcut_focus_terminal']()],

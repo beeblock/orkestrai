@@ -37,6 +37,7 @@
   import ApiClientCanvasNode from '$lib/components/agent-room/canvas/ApiClientCanvasNode.svelte';
   import LoopCanvasNode from '$lib/components/agent-room/canvas/LoopCanvasNode.svelte';
   import GroupCanvasNode from '$lib/components/agent-room/canvas/GroupCanvasNode.svelte';
+  import { spacePan } from '$lib/components/agent-room/canvas/space-pan.js';
   import OrkestraiEdge from '$lib/components/agent-room/canvas/OrkestraiEdge.svelte';
   import ShapeCanvasNode, { type ShapeStyle } from '$lib/components/agent-room/canvas/ShapeCanvasNode.svelte';
   import {
@@ -803,6 +804,7 @@
   // Modo "desenhar no": clique na ferramenta e arraste o retangulo no canvas.
   type DrawTool = 'terminal' | 'note' | 'fileTree' | 'git' | 'diff' | 'portal' | 'apiClient' | 'device' | 'computer' | 'toolWorkshop' | 'loop' | 'shape' | 'tasks' | 'flow' | 'image' | 'imageWorkflow' | 'videoWorkflow' | 'audioWorkflow' | 'sequence' | 'storyboard' | 'usage' | 'codeGraph' | 'design' | 'freehand' | 'checklist' | 'calendar';
   let drawTool = $state<DrawTool | null>(null);
+  let handPanning = $state(false);
   // Points of the stroke being drawn with the pen, in flow coordinates.
   let penStroke = $state.raw<Array<{ x: number; y: number }>>([]);
   // Pen ink is remembered per device; strokes keep the ink they were drawn with.
@@ -893,6 +895,7 @@
 
   function handlePanePointerDown(event: PointerEvent) {
     if (!(event.target as HTMLElement).closest?.('.svelte-flow__panel')) summaryCompact = true;
+    if (handPanning || event.button !== 0) return;
     if (!drawTool || !activeWorkspace) return;
     // So inicia o desenho no fundo vazio do canvas — cliques em nos, handles
     // e na toolbar nao contam (e o pointer capture nao rouba o clique).
@@ -3935,7 +3938,7 @@
   {/snippet}
   </aside>
 
-  <section class="canvas-area" class:drawing={drawTool !== null} class:tool-drop={toolDragOver} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondragleave={(event) => { if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as HTMLElement | null)) toolDragOver = false; }} ondrop={handleCanvasFileDrop}>
+  <section class="canvas-area" class:drawing={drawTool !== null} class:hand-panning={handPanning} class:tool-drop={toolDragOver} use:spacePan={{ enabled: Boolean(activeWorkspace) && !designModeNodeId, onChange: (active) => { handPanning = active; } }} aria-label={m['workspace_view.canvas']()} ondragover={handleCanvasFileDragOver} ondragleave={(event) => { if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as HTMLElement | null)) toolDragOver = false; }} ondrop={handleCanvasFileDrop}>
     {#if toolDragOver}<div class="tool-drop-hint" aria-hidden="true">{m['canvas.tool_drop_hint']()}</div>{/if}
     <SvelteFlowProvider>
     {#if activeWorkspace}
@@ -3976,7 +3979,9 @@
         proOptions={{ hideAttribution: true }}
         minZoom={0.05}
         maxZoom={4}
-        panOnDrag={drawTool === null ? true : [1, 2]}
+        panActivationKey={null}
+        panOnDrag={handPanning || drawTool === null ? true : [1, 2]}
+        panOnScroll={handPanning}
         deleteKey={designModeNodeId ? [] : ['Backspace', 'Delete']}
         onconnect={handleConnect}
         onedgeclick={handleEdgeClick}
@@ -4052,7 +4057,7 @@
                   </button>
                 {/snippet}
               </Tooltip.Trigger>
-              <Tooltip.Content side="right" class="flex-col items-start gap-0.5"><span>{m['canvas.tool_select']()}</span><span class="font-normal opacity-70">{m['canvas.tool_select_hint']()}</span></Tooltip.Content>
+              <Tooltip.Content side="right" class="flex-col items-start gap-0.5"><span>{m['canvas.tool_select']()}</span><span class="font-normal opacity-70">{m['canvas.tool_select_hint']()}</span><span class="font-normal opacity-70">{m['canvas.pan_hint']()}</span></Tooltip.Content>
             </Tooltip.Root>
             <span class="rail-sep" aria-hidden="true"></span>
             <div class="tool-group" role="group" aria-label={m['canvas.group_agents']()}>
@@ -5161,6 +5166,25 @@
     background: var(--app-canvas);
   }
 
+  /* Let XYFlow's pane receive the gesture even over a full-screen group,
+     image, drag handle or nested interactive node. Nothing moves in node data. */
+  .canvas-area.hand-panning :global(.svelte-flow__node),
+  .canvas-area.hand-panning :global(.svelte-flow__node *),
+  .canvas-area.hand-panning :global(.svelte-flow__edge),
+  .canvas-area.hand-panning :global(.svelte-flow__edge *),
+  .canvas-area.hand-panning :global(.svelte-flow__nodesselection),
+  .canvas-area.hand-panning :global(.svelte-flow__nodesselection *) {
+    pointer-events: none !important;
+  }
+
+  .canvas-area.hand-panning :global(.svelte-flow__pane) {
+    cursor: grab;
+  }
+
+  .canvas-area.hand-panning :global(.svelte-flow__pane:active) {
+    cursor: grabbing;
+  }
+
   /*
    * Minimapa e zoom flutuam acima da linha do dock (nunca por baixo da barra
    * de ferramentas), com a mesma superficie elevada dos outros flutuantes.
@@ -5277,7 +5301,7 @@
     pointer-events: none !important;
   }
 
-  .canvas-area.drawing :global(.svelte-flow__pane) {
+  .canvas-area.drawing:not(.hand-panning) :global(.svelte-flow__pane) {
     cursor: crosshair;
   }
 

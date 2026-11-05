@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Hold Space and drag to pan the Canvas over groups, images and other nodes without moving them, including at high zoom. Restore normal interaction on key release or focus loss, preserve typing and shortcut modifiers, and temporarily suspend creation tools during navigation.
+
 ## 0.52.0 - 2026-11-04
 
 ### Added

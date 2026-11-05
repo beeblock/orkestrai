@@ -1158,6 +1158,7 @@ export const TOURS_ES: Tour[] = [
         title: 'Mantén el workspace legible',
         body: 'Las conexiones permanecen detrás de todos los nodos, incluso en pantallas Windows con escalas diferentes. Luego puedes ajustar posiciones manualmente.',
       },
+      {"id": "navigate-group", "title": "Navega dentro de un grupo grande", "body": "Amplía las imágenes agrupadas, mantén Espacio y arrastra sobre ellas para mover la cámara sin mover el grupo ni sus miembros. Suelta Espacio para volver a editar. La escritura y el dictado con Alt+Espacio no cambian."},
       {
         id: 'tune-connection-performance',
         title: 'Elige el costo de las conexiones',
