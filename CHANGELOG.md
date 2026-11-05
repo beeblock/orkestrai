@@ -9,6 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Keep Codex inbox delivery and activity status ready after a turn ends, even when its background commands finish later. Match late results to the exact completed or aborted turn; a genuinely newer or unidentifiable turn still blocks delivery.
 - Hold Space and drag to pan the Canvas over groups, images and other nodes without moving them, including at high zoom. Restore normal interaction on key release or focus loss, preserve typing and shortcut modifiers, and temporarily suspend creation tools during navigation.
 
 ## 0.52.0 - 2026-11-04

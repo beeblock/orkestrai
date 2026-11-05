@@ -1476,10 +1476,21 @@ export function parseLatestTurnBoundary(storage: string, transcript: string, pro
   if (storage === 'codex-rollout-jsonl') {
     const lifecycleIndex = scoped.findLastIndex(event => ['task_started', 'task_complete', 'turn_aborted'].includes(event?.payload?.type));
     const lifecycle = scoped[lifecycleIndex];
-    const isWork = (event: any): boolean => event?.type === 'response_item'
-      && ['message', 'reasoning', 'function_call', 'function_call_output', 'custom_tool_call', 'custom_tool_call_output'].includes(event.payload?.type)
-      || event?.type === 'event_msg' && event.payload?.type === 'item_completed'
-        && ['Reasoning', 'McpToolCall', 'CommandExecution', 'AgentMessage'].includes(event.payload.item?.type);
+    const closedTurns = new Set(records
+      .filter(event => event?.type === 'event_msg' && ['task_complete', 'turn_aborted'].includes(event.payload?.type)
+        && typeof event.payload.turn_id === 'string' && event.payload.turn_id.length > 0)
+      .map(event => event.payload.turn_id));
+    const isWork = (event: any): boolean => {
+      // Background commands can finish hours after their model turn ended,
+      // including an errored turn. Their receipt cannot reopen that same turn.
+      // Missing/unknown identities remain conservative evidence of new work.
+      if (event?.type === 'event_msg' && event.payload?.type === 'item_completed'
+        && closedTurns.has(event.payload.turn_id)) return false;
+      return event?.type === 'response_item'
+        && ['message', 'reasoning', 'function_call', 'function_call_output', 'custom_tool_call', 'custom_tool_call_output'].includes(event.payload?.type)
+        || event?.type === 'event_msg' && event.payload?.type === 'item_completed'
+          && ['Reasoning', 'McpToolCall', 'CommandExecution', 'AgentMessage'].includes(event.payload.item?.type);
+    };
     beginning ??= scoped.find(event => event?.payload?.type === 'task_started' || isWork(event));
     if (lifecycle) {
       ready = lifecycle.payload.type !== 'task_started';

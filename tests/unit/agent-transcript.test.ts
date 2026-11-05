@@ -78,6 +78,51 @@ describe('async transcript lookup', () => {
 });
 
 describe('latest turn completion for supervision', () => {
+  it.each(['task_complete', 'turn_aborted'])('does not reopen a closed Codex turn when its background commands report later (%s)', (completionType) => {
+    const events = [
+      { timestamp: '2026-11-04T21:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-a' } },
+      { timestamp: '2026-11-04T21:40:04Z', type: 'event_msg', payload: {
+        type: completionType, turn_id: 'turn-a', root_turn_id: 'turn-a',
+        error: { message: 'stream disconnected before completion: Unable to verify model access right now. Please retry.' },
+      } },
+      { timestamp: '2026-11-04T21:46:48Z', type: 'event_msg', payload: {
+        type: 'item_completed', turn_id: 'turn-a', item: { type: 'CommandExecution', status: 'failed' },
+      } },
+      { timestamp: '2026-11-04T23:44:16Z', type: 'event_msg', payload: {
+        type: 'item_completed', turn_id: 'turn-a', item: { type: 'CommandExecution', status: 'failed' },
+      } },
+    ];
+    const text = (items: unknown[]) => items.map(item => JSON.stringify(item)).join('\n');
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text(events)))
+      .toEqual({ ready: true, startedAt: Date.parse(events[0].timestamp), finishedAt: Date.parse(events[1].timestamp) });
+    // The same proof survives a bounded tail that no longer contains the start.
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text(events.slice(1))))
+      .toMatchObject({ ready: true, finishedAt: Date.parse(events[1].timestamp) });
+    // A different turn, or unidentifiable work, must still block delivery.
+    for (const turn_id of ['turn-b', undefined]) {
+      expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([...events, {
+        timestamp: '2026-11-05T10:00:00Z', type: 'event_msg', payload: {
+          type: 'item_completed', turn_id, item: { type: 'Reasoning' },
+        },
+      }]))).toMatchObject({ ready: false, finishedAt: null });
+    }
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([...events, {
+      timestamp: '2026-11-05T10:00:00Z', type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-b' },
+    }]))).toMatchObject({ ready: false, finishedAt: null });
+    // A later prompt changes the reply scope, but does not erase proof that
+    // a previous turn ended when one of its background receipts arrives.
+    const second = [
+      { timestamp: '2026-11-05T10:00:00Z', type: 'response_item', payload: {
+        type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Next task' }],
+      } },
+      { timestamp: '2026-11-05T10:00:01Z', type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-b' } },
+      { timestamp: '2026-11-05T10:01:00Z', type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-b' } },
+      { ...events[3], timestamp: '2026-11-05T10:02:00Z' },
+    ];
+    expect(parseLatestTurnBoundary('codex-rollout-jsonl', text([...events, ...second])))
+      .toEqual({ ready: true, startedAt: Date.parse(second[0].timestamp), finishedAt: Date.parse(second[2].timestamp) });
+  });
+
   it('recognizes Codex work when the turn start has fallen outside the bounded tail', () => {
     const at = '2026-11-03T14:08:01Z';
     const work = { timestamp: at, type: 'event_msg', payload: { type: 'item_completed', item: { type: 'Reasoning' } } };

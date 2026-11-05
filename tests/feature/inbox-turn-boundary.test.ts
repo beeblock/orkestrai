@@ -12,7 +12,7 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 describe('inbox recovery at a real terminal turn boundary', () => {
   useSvelarTest({ refreshDatabase: true });
 
-  it.skipIf(process.platform === 'win32')('delivers the next message without manual input when the first exact receipt is missing', async () => {
+  it.skipIf(process.platform === 'win32')('delivers the next message despite a missing receipt and late results from the completed turn', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'ork-inbox-boundary-')));
     const home = join(root, 'home');
     const conversation = uuidv7();
@@ -31,12 +31,18 @@ describe('inbox recovery at a real terminal turn boundary', () => {
       import {createInterface} from 'node:readline';
       const file = ${JSON.stringify(transcript)}, received = ${JSON.stringify(received)};
       const record = e => appendFileSync(file, JSON.stringify({timestamp:new Date().toISOString(), ...e})+'\\n');
+      let turn = 0;
       console.log('Ready');
       createInterface({input:process.stdin}).on('line', line => {
+        const turn_id = 'turn-' + (++turn);
         appendFileSync(received, line+'\\n');
         record({type:'response_item',payload:{type:'message',role:'user',content:[{type:'input_text',text:'CLI-normalized envelope'}]}});
-        record({type:'event_msg',payload:{type:'task_started'}});
-        setTimeout(() => {record({type:'event_msg',payload:{type:'task_complete',last_agent_message:'Done'}});console.log('Done; ready');},100);
+        record({type:'event_msg',payload:{type:'task_started',turn_id}});
+        setTimeout(() => {
+          record({type:'event_msg',payload:{type:'task_complete',turn_id,last_agent_message:'Done'}});
+          record({type:'event_msg',payload:{type:'item_completed',turn_id,item:{type:'CommandExecution',status:'failed'}}});
+          console.log('Done; ready');
+        },100);
       });
     `);
     const workspace = await workspaceRepository.createWorkspace({ name: 'Isolated inbox boundary', workingDir: root });
