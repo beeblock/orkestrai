@@ -89,6 +89,17 @@ jobs:
           ORKESTRAI_DATA_DIR: ${{ runner.temp }}/orkestrai-bridge-data
         run: npm test -- --run tests/feature/bridge-token-consistency.test.ts tests/feature/workspace-folder.test.ts tests/unit/workspace-folder.test.ts tests/unit/desktop-folder-client.test.ts tests/unit/mcp-contract.test.ts tests/unit/packaged-ui-assets.test.ts tests/unit/terminal-working-directory.test.ts tests/unit/shell-directory-integration.test.ts tests/unit/terminal-windows-pty.test.ts tests/feature/attention-read-all.test.ts --maxWorkers=2 --testTimeout=20000
 
+      - name: Verify manually launched Shell agent replies on Windows
+        env:
+          HOME: ${{ runner.temp }}/orkestrai-shell-home
+          USERPROFILE: ${{ runner.temp }}/orkestrai-shell-home
+          APPDATA: ${{ runner.temp }}/orkestrai-shell-home/AppData/Roaming
+          LOCALAPPDATA: ${{ runner.temp }}/orkestrai-shell-home/AppData/Local
+          XDG_CONFIG_HOME: ${{ runner.temp }}/orkestrai-shell-home/.config
+          CODEX_HOME: ''
+          ORKESTRAI_DATA_DIR: ${{ runner.temp }}/orkestrai-shell-data
+        run: npm test -- --run tests/feature/manual-shell-agent.test.ts tests/unit/shell-agent-process.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
+
       - name: Verify bounded workspace files and snapshot policies on Windows
         run: npm test -- --run tests/unit/floor-snapshot-policy.test.ts tests/unit/bridge-git-exclude.test.ts tests/unit/workspace-text-file.test.ts tests/unit/code-graph-source-policy.test.ts tests/feature/workspace-folder-availability.test.ts --maxWorkers=2 --testTimeout=20000
 

@@ -591,3 +591,14 @@ Gatekeeper check is bypassed. A macOS regression fixture verifies that changing
 one of these sealed resources invalidates the bundle signature.
 See [electron-builder's signing filter](https://www.electron.build/v26/docs/mac/#signignore)
 and [Apple's resource sealing rules](https://developer.apple.com/library/archive/technotes/tn2206/).
+
+## Manual Shell agent replies in 0.52.2
+
+The Windows desktop transport gate now runs the real CMD fixture that changes
+directory and starts a simulated Claude. It checks structured answers, explicit
+bridge replies and reverse asks, child exit, cancellation, workspace identity
+and absence of duplicate delivery, without using provider credentials.
+`pty-packaged-imports.test.ts` stages only manifest-listed source files and loads
+the production type-stripped PTY transport, catching omitted runtime imports
+before packaging. These checks supplement the full suite and existing native
+startup/signature gates; they do not claim reproduction on every user's PC.
