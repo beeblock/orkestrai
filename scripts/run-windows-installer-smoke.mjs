@@ -25,6 +25,28 @@ export function installerChildEnvironment(source = process.env) {
   return env;
 }
 
+export async function assertNoExistingInstallation(powershell, registryRoots = [
+  String.raw`HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall`,
+  String.raw`HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall`,
+  String.raw`HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`,
+]) {
+  const script = String.raw`$ErrorActionPreference='Stop';
+    $roots=ConvertFrom-Json $env:ORKESTRAI_INSTALLER_QA_REGISTRY_ROOTS;
+    foreach($root in $roots){
+      if(Test-Path -LiteralPath $root -ErrorAction Stop){
+        foreach($key in (Get-ChildItem -LiteralPath $root -ErrorAction Stop)){
+          $entry=Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop;
+          if($entry.DisplayName -like 'Orkestrai*'){throw 'Refusing to change an existing Orkestrai installation'}
+        }
+      }
+    }
+    exit 0`;
+  await execute(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    env: { ...installerChildEnvironment(), ORKESTRAI_INSTALLER_QA_REGISTRY_ROOTS: JSON.stringify(registryRoots) },
+    windowsHide: true, timeout: 30_000,
+  });
+}
+
 async function sha256(file) {
   const hash = createHash('sha256');
   for await (const bytes of createReadStream(file)) hash.update(bytes);
@@ -45,8 +67,7 @@ export async function verifyWindowsInstaller(installer, unpacked, previousInstal
   const powershell = join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
   // Never uninstall an existing application. This test owns a new ephemeral
   // installation and its per-user registration on an otherwise fresh runner.
-  await run(powershell, ['-NoProfile', '-NonInteractive', '-Command',
-    String.raw`$ErrorActionPreference='Stop'; $keys=@('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'); $existing=Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Orkestrai*' }; if($existing){throw 'Refusing to change an existing Orkestrai installation'}`]);
+  await assertNoExistingInstallation(powershell);
   const root = await mkdtemp(join(process.env.RUNNER_TEMP, 'orkestrai-installer-'));
   const installed = join(root, 'App with spaces');
   const executable = join(installed, 'Orkestrai.exe');
@@ -58,6 +79,7 @@ export async function verifyWindowsInstaller(installer, unpacked, previousInstal
   ], env);
   const verifyFiles = async () => {
     for (const file of ['Orkestrai.exe', 'resources/app/package.json', 'resources/app/electron/main.cjs',
+      'resources/app/electron/update-policy.cjs', 'resources/app/electron/diagnostics.cjs',
       'resources/app/scripts/orkestrai-server.mjs', 'resources/orkestrai-cli-runtime/node.exe']) {
       assert.equal(await sha256(join(installed, file)), await sha256(join(reference, file)), `Installed file differs: ${file}`);
     }
