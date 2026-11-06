@@ -30,6 +30,9 @@ export async function assertNoExistingInstallation(powershell, registryRoots = [
   String.raw`HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall`,
   String.raw`HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`,
 ]) {
+  assert.ok(Array.isArray(registryRoots) && registryRoots.length > 0 && registryRoots.length <= 8
+    && registryRoots.every(root => typeof root === 'string' && root.length <= 1024
+      && /^HK(?:CU|LM):\\Software\\/i.test(root) && !/[\u0000-\u001f]/.test(root)), 'Unsupported registry root');
   const script = String.raw`$ErrorActionPreference='Stop';
     $roots=ConvertFrom-Json $env:ORKESTRAI_INSTALLER_QA_REGISTRY_ROOTS;
     foreach($root in $roots){

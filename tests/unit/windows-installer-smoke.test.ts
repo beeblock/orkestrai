@@ -26,8 +26,11 @@ it.skipIf(process.platform !== 'win32')('accepts a missing registry root without
   const powershell = join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe');
   const root = String.raw`HKCU:\Software\OrkestraiInstallerQA` + '\\' + randomUUID();
   await expect(assertNoExistingInstallation(powershell, [root])).resolves.toBeUndefined();
-  await expect(assertNoExistingInstallation(powershell, ['unknown-provider:\\missing'])).rejects.toThrow();
 }, 20_000);
+
+it('rejects an invalid registry provider before launching PowerShell', async () => {
+  await expect(assertNoExistingInstallation('must-not-run', ['unknown-provider:\\missing'])).rejects.toThrow('Unsupported registry root');
+});
 
 it.skipIf(process.platform !== 'win32' || process.env.GITHUB_ACTIONS !== 'true')('refuses an existing installer registration on an isolated Windows runner', async () => {
   const powershell = join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe');
