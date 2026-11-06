@@ -9,7 +9,7 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
-- Read replies from agents started manually inside owned Shell nodes from the exact provider transcript and current working directory, or their matching authenticated bridge reply. Do not confirm TUI redraws, prompts or a quiet screen as an agent answer; keep ordinary Shell command output unchanged. Recognize native and published Node launchers, scope process inspection to the owned foreground/Windows console or WSL shell, and cancel queued delivery when that process changes or exits.
+- Read replies from agents started manually inside owned Shell nodes from the exact provider transcript and current working directory, or their matching authenticated bridge reply. Do not confirm TUI redraws, prompts or a quiet screen as an agent answer; keep ordinary Shell command output unchanged. Recognize native and published Node launchers, including Linux/WSL runtimes reported as thread names rather than executable names, scope process inspection to the owned foreground/Windows console or WSL shell, and cancel queued delivery when that process changes or exits.
 - Give workspace Shell processes their own in-memory bridge identity and pin the original workspace configuration so a manually started agent retains its sender and workspace after changing directories. Never persist the credential or turn a Shell into a configured provider/resume session.
 
 ## 0.52.1 - 2026-11-05

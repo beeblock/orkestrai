@@ -65,6 +65,15 @@ describe('manual Shell process attribution', () => {
     } finally { release(); detach(); ptySessionManager.kill(session.id); }
   });
 
+  it('recognizes Node entrypoints when Linux reports the runtime thread name', () => {
+    const adapters = listAgentAdapters();
+    expect(shellProcessProvider(process('MainThread', ['/usr/local/bin/node', '/tmp/claude']), adapters)).toBe('claude');
+    expect(shellProcessProvider(process('MainThread', ['node', '/opt/node_modules/@anthropic-ai/claude-code/cli.js']), adapters)).toBe('claude');
+    expect(shellProcessProvider(process('MainThread', ['node', '/opt/node_modules/@openai/codex/bin/codex.js']), adapters)).toBe('codex');
+    expect(shellProcessProvider(process('MainThread', ['node', '/tmp/unrelated.js']), adapters)).toBeNull();
+    expect(shellProcessProvider(process('MainThread', ['echo', 'claude']), adapters)).toBeNull();
+  });
+
   it('recognizes Windows native and published Node launchers without matching prompt arguments', () => {
     const adapters = listAgentAdapters();
     expect(shellProcessProvider(process('C:\\Tools\\claude.exe', ['claude']), adapters)).toBe('claude');

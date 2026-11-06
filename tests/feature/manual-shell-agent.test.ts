@@ -70,7 +70,8 @@ describe('agents started manually inside a Shell', () => {
   it('returns the structured Claude answer after cd, never the quiet TUI redraw', async () => {
     const f = await fixture();
     try {
-      expect(await shellAgentService.detect(f.workspace.id, f.node.id, f.session.id)).toMatchObject({ provider: 'claude', cwd: f.project });
+      const foreground = await ptySessionManager.shellForeground(f.session.id);
+      expect(await shellAgentService.detect(f.workspace.id, f.node.id, f.session.id), JSON.stringify(foreground)).toMatchObject({ provider: 'claude', cwd: f.project });
       const start = Date.now();
       const reply = await bridgeService.ask(f.workspace.id, { to: f.node.id, message: 'Give the clean status', timeoutMs: 12_000 });
       expect(reply).toMatchObject({ reply: 'Clean answer for this exact question.', replyConfirmed: true, delivered: true, timedOut: false });

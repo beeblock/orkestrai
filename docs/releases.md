@@ -607,3 +607,9 @@ The child-exit regression waits for the actual terminal writer to queue the
 request behind the owner draft. An absent submit receipt is not a queue-entry
 signal: on Windows the initial CIM lookup can still be running. The fixture
 adds read latency on faster hosts and retains its original 15-second deadline.
+
+The Linux process `comm` is not always the executable name: Node 24.22.2
+reports `MainThread` while its executable argument remains `node`. Provider
+matching accepts the known runtime from either identity field and still checks
+its exact CLI entrypoint. The regression also rejects unrelated scripts and
+non-runtime commands with a provider name as an ordinary argument.

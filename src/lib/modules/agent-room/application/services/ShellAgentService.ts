@@ -15,10 +15,12 @@ const name = (path: string) => path.replaceAll('\\', '/').split('/').at(-1)?.rep
 
 export function shellProcessProvider(process: ShellForegroundProcess, adapters: AgentAdapter[]): string | null {
   const launchName = name(process.executable);
+  const argumentName = name(process.argv[0] ?? '');
   const providers = adapters.filter(adapter => {
     const command = name(adapter.interactiveCommand().command);
-    if (launchName === command || name(process.argv[0] ?? '') === command) return true;
-    if (!['node', 'nodejs', 'bun'].includes(launchName ?? '')) return false;
+    if (launchName === command || argumentName === command) return true;
+    // Linux Node 24 may expose its kernel thread name as comm (MainThread).
+    if (!['node', 'nodejs', 'bun'].some(runtime => runtime === launchName || runtime === argumentName)) return false;
     const entry = (process.argv[1] ?? '').replaceAll('\\', '/');
     return name(entry) === command || adapter.shellEntrypoints?.some(suffix => entry.endsWith('/' + suffix));
   });
