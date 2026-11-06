@@ -2068,7 +2068,7 @@
   "update.ready_title": "Nueva version lista",
   "update.manual_desc": "No pude instalar la actualizacion automaticamente. Descarga la version nueva en la pagina de releases — tus workspaces, configuraciones y modelos quedan intactos.",
   "update.manual_unsigned_desc": "La versión {version} está disponible. Este Mac todavía usa un paquete sin firma de Apple, por eso la instalación es manual para proteger la aplicación actual. Descarga la nueva versión; tus workspaces, configuraciones y modelos quedan intactos.",
-  "update.ready_desc": "La version {version} fue descargada y verificada. Reinicia para actualizar — tarda segundos y tus workspaces siguen donde estaban.",
+  "update.ready_desc": "La versión {version} fue descargada y verificada. Elige Reiniciar y actualizar para instalarla. Espera a que termine la instalación antes de abrir la app de nuevo. Tus workspaces se conservan.",
   "update.later": "Despues",
   "update.download_site": "Descargar del sitio",
   "update.restart": "Reiniciar y actualizar",

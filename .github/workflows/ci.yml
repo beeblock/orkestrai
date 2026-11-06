@@ -70,7 +70,7 @@ jobs:
           npm ci --no-audit --no-fund
 
       - name: Verify native desktop command transport
-        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/orkestrai-cli-inbox.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/agent-transcript.test.ts tests/unit/transcript-team-throughput.test.ts tests/unit/queue-health-check.test.ts tests/unit/zod-size-validation.test.ts tests/unit/electron-adventure-window.test.ts tests/unit/agent-path.test.ts tests/unit/package-ripgrep-runtime.test.ts
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/orkestrai-cli-inbox.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/agent-transcript.test.ts tests/unit/transcript-team-throughput.test.ts tests/unit/queue-health-check.test.ts tests/unit/zod-size-validation.test.ts tests/unit/electron-adventure-window.test.ts tests/unit/agent-path.test.ts tests/unit/package-ripgrep-runtime.test.ts tests/unit/updater-install-policy.test.ts tests/unit/updater-cache-contract.test.ts tests/unit/electron-diagnostics.test.ts
 
       - name: Verify public terminal updates reach Conversation on Windows
         run: npm test -- --run tests/feature/channel-transcript.test.ts tests/unit/transcript-public-messages.test.ts --maxWorkers=2 --testTimeout=20000

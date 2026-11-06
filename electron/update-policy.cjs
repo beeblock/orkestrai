@@ -41,6 +41,21 @@ function isNewerVersion(candidate, current) {
   return false;
 }
 
+function applyUpdateInstallPolicy(updater, { platform = process.platform, supported = false } = {}) {
+  updater.autoDownload = supported;
+  // NSIS removes the old application before extracting its replacement. A
+  // detached install started at quit can be killed by Windows session end,
+  // leaving a shortcut whose executable no longer exists (upstream #7807).
+  // Keep the verified download cached until the owner chooses Restart and update.
+  updater.autoInstallOnAppQuit = supported && platform !== 'win32';
+}
+
+function createUpdaterLogger(write) {
+  return Object.fromEntries(['info', 'warn', 'error', 'debug'].map(level => [level,
+    (...values) => write(level === 'debug' ? 'info' : level, 'updater', ...values),
+  ]));
+}
+
 async function canInstallUpdatesAutomaticallyAsync({
   platform = process.platform, execPath = process.execPath, assess = execFile,
 } = {}) {
@@ -55,4 +70,4 @@ async function canInstallUpdatesAutomaticallyAsync({
   } catch { return false; }
 }
 
-module.exports = { canInstallUpdatesAutomatically, canInstallUpdatesAutomaticallyAsync, isNewerVersion, macBundlePath };
+module.exports = { canInstallUpdatesAutomatically, canInstallUpdatesAutomaticallyAsync, isNewerVersion, macBundlePath, applyUpdateInstallPolicy, createUpdaterLogger };

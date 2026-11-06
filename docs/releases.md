@@ -613,3 +613,34 @@ reports `MainThread` while its executable argument remains `node`. Provider
 matching accepts the known runtime from either identity field and still checks
 its exact CLI entrypoint. The regression also rejects unrelated scripts and
 non-runtime commands with a provider name as an ordinary argument.
+
+## Windows update handoff and installed-package verification
+
+On Windows, verified updates remain cached until the existing Restart and
+update action. Closing the app must not start a detached silent NSIS installer:
+NSIS removes the previous installation before extracting the new one, so
+interruption can leave a shortcut without its executable. This is the failure
+class documented in [electron-builder #7807](https://github.com/electron-userland/electron-builder/issues/7807).
+It is a confirmed risk in the previous on-quit policy, not proof of the cause
+on every reporting machine. Antivirus quarantine, a stale shortcut and an
+interrupted installer still require the affected installation's evidence.
+
+The updater uses the existing bounded diagnostics logger for all stages and
+errors, with the same credential redaction as other native diagnostics. The
+regression drives the pinned updater's real quit hook after a synthetic verified
+download: Windows quits do not install, while the explicit install path and
+trusted macOS/Linux behavior remain available.
+
+Release validation now runs the real NSIS installer on a fresh Windows runner:
+install the preceding public version, apply the candidate with `--updated`,
+compare executable/runtime hashes, resolve shortcut targets, and execute the
+installed Core smoke twice. This supplements the existing unpacked-payload
+tests; it does not exercise every renderer interaction or external antivirus.
+The script refuses ordinary local machines and existing installations, removes
+its own temporary application afterwards and does not forward CI credentials.
+
+For a Windows-only QA build from a branch, dispatch Release Desktop with
+`tag=<branch>`, `build_only=true` and `windows_only=true`. It builds from that
+source without requiring a main CI artifact, runs the Windows gates and uploads
+QA artifacts. It skips all macOS/Linux jobs and publication. Real tag releases
+retain the complete CI and all-platform publication requirements.

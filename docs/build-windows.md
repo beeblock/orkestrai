@@ -80,6 +80,15 @@ Artefatos em `release/`:
 
 ## Runtime no Windows
 
+- **Atualizações**: o download verificado fica em cache até escolher
+  **Reiniciar e atualizar**. Fechar o app ou encerrar a sessão do Windows não
+  dispara o instalador NSIS. As etapas e falhas do atualizador ficam no log
+  rotativo do app, com ocultação de credenciais.
+- **Gate do instalador**: `scripts/run-windows-installer-smoke.mjs` executa
+  somente em um runner Windows isolado do GitHub. Instala a versão pública
+  anterior, aplica o candidato, verifica hashes e atalhos e inicia o Core
+  instalado duas vezes. Não substitui o aplicativo deste computador.
+
 - **Dados do app**: `%APPDATA%\orkestrai\` (SQLite, backups rotativos,
   `bin/orkestrai.cmd` da CLI da ponte — entra no PATH dos terminais PTY
   automaticamente a cada boot do servidor interno).

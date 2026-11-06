@@ -14,7 +14,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
-const { canInstallUpdatesAutomaticallyAsync, isNewerVersion } = require('./update-policy.cjs');
+const { canInstallUpdatesAutomaticallyAsync, isNewerVersion, applyUpdateInstallPolicy, createUpdaterLogger } = require('./update-policy.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
@@ -1121,11 +1121,11 @@ async function setupAutoUpdater() {
   // the main thread, native recovery controls, or starting the HTTP child.
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.logger = createUpdaterLogger((...values) => diagnostics?.write(...values));
   autoUpdater.on('error', (error) => sendUpdate(updateErrorPayload(error)));
   automaticUpdateInstallSupported = await canInstallUpdatesAutomaticallyAsync();
   if (isQuitting) return;
-  autoUpdater.autoDownload = automaticUpdateInstallSupported;
-  autoUpdater.autoInstallOnAppQuit = automaticUpdateInstallSupported;
+  applyUpdateInstallPolicy(autoUpdater, { supported: automaticUpdateInstallSupported });
   // Repeated Windows delta checksum failures already fall back to a complete
   // artifact. Skip the unreliable delta path and keep SHA-512 verification.
   autoUpdater.disableDifferentialDownload = true;

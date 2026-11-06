@@ -15,6 +15,11 @@ on:
         required: false
         default: false
         type: boolean
+      windows_only:
+        description: Build and test only the Windows installer (requires build_only; never publishes)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -30,6 +35,7 @@ env:
   NODE_OPTIONS: '--max-old-space-size=6144'
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only && 'true' || 'false' }}
+  WINDOWS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_only && 'true' || 'false' }}
 
 jobs:
   validate:
@@ -53,6 +59,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${WINDOWS_ONLY:-false}" == "true" && "$BUILD_ONLY" != "true" ]]; then
+            echo "::error::Windows-only QA requires build_only and cannot publish a release"
+            exit 1
+          fi
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
           if [[ "$BUILD_ONLY" == "true" ]]; then
             if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -84,6 +94,7 @@ jobs:
 
       - name: Require successful CI for tagged commit
         id: ci
+        if: github.event_name != 'workflow_dispatch' || !inputs.build_only || !inputs.windows_only
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -127,6 +138,7 @@ jobs:
 
   build-macos:
     name: Build macOS (${{ matrix.arch }})
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     needs: validate
     # Standard Intel macOS 26 has 14 GB RAM; the M1 label only has 7 GB.
     # Independent runners sign/notarize each CPU concurrently, with 14 GB each.
@@ -272,6 +284,7 @@ jobs:
 
   verify-macos-arm64-voice:
     name: Verify packaged voice on Apple Silicon
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_only
     needs: [validate, build-macos]
     runs-on: macos-15
     timeout-minutes: 10
@@ -313,7 +326,7 @@ jobs:
 
   build-windows:
     name: Build Windows (x64)
-    if: github.event_name != 'workflow_dispatch' || !inputs.build_only
+    if: github.event_name != 'workflow_dispatch' || !inputs.build_only || inputs.windows_only
     needs: validate
     runs-on: windows-latest
     steps:
@@ -344,7 +357,7 @@ jobs:
           npm ci --no-audit --no-fund
 
       - name: Verify native desktop command transport
-        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/orkestrai-cli-inbox.test.ts
+        run: npm test -- --run tests/unit/computer-native-adapters.test.ts tests/unit/computer-native-runner.test.ts tests/unit/knowledge-extraction.test.ts tests/unit/knowledge-runtime.test.ts tests/unit/production-bundle.test.ts tests/unit/orkestrai-cli-inbox.test.ts tests/unit/updater-install-policy.test.ts tests/unit/updater-cache-contract.test.ts tests/unit/electron-diagnostics.test.ts tests/unit/windows-installer-smoke.test.ts
 
       - name: Verify Windows workspace startup under slow filesystem probes
         run: npm test -- --run tests/feature/role-service.test.ts tests/unit/pty-ws.test.ts tests/unit/codex-mcp-config.test.ts --testNamePattern "loads and materializes|shares a slow catalog|keeps both viewers connected|canonicalizes only native trust" --maxWorkers=2 --testTimeout=20000
@@ -391,6 +404,20 @@ jobs:
 
       - name: Verify packaged Windows startup and code graph
         run: node scripts/run-packaged-startup-smoke.mjs release/win-unpacked/Orkestrai.exe release/win-unpacked/resources/app
+
+      - name: Verify real NSIS upgrade and repeated installed startup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $previousDir = Join-Path $env:RUNNER_TEMP "orkestrai-previous-installer"
+          gh release download --repo beeblock/orkestrai --pattern "Orkestrai-Setup-*.exe" --dir $previousDir
+          if ($LASTEXITCODE -ne 0) { throw "Could not download the published Windows installer" }
+          $previous = @(Get-ChildItem $previousDir -Filter *.exe)
+          if ($previous.Count -ne 1) { throw "Expected exactly one published Windows installer" }
+          $previousPath = $previous[0].FullName
+          node scripts/run-windows-installer-smoke.mjs "release/Orkestrai-Setup-${{ needs.validate.outputs.version }}.exe" release/win-unpacked $previousPath
+          if ($LASTEXITCODE -ne 0) { throw "Installed Windows upgrade smoke failed" }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7

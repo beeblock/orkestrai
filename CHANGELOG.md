@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Keep downloaded Windows updates cached until the explicit Restart and update action, instead of starting a silent NSIS uninstall/reinstall when the app closes or Windows ends the session. Persist bounded, redacted updater diagnostics and validate real NSIS installation, upgrade, shortcuts and repeated installed startup before publication.
+
 ## 0.52.2 - 2026-11-06
 
 ### Fixed

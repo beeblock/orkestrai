@@ -97,6 +97,18 @@ These fixes reduce measured sources of work, not every possible CPU spike.
 Code-graph resizing redraws its visible and picking buffers in one settled frame,
 so a just-resized visible symbol does not temporarily lose click detection.
 
+## Windows updates
+
+Verified updates download in the background. On Windows, use **Restart and update**
+when ready to install; closing the app or ending the Windows session leaves the
+download cached. Wait for installation to finish before reopening the app.
+Updater stages and errors are written to the rotating, credential-redacted
+diagnostics log available through **Help → Open logs folder**.
+
+Windows release validation installs the previous public version, applies the new
+NSIS installer, verifies installed file hashes and shortcut targets, and starts
+the installed Core twice. It runs only on an isolated Windows CI runner.
+
 ## Startup recovery
 
 If the app cannot start, use its native recovery dialog to download the latest

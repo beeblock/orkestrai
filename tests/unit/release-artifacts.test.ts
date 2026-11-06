@@ -199,19 +199,40 @@ describe('release artifact validation', () => {
     for (const name of ['build-macos', 'build-windows', 'build-linux', 'publish']) {
       expect(workflow.jobs[name].steps[0].with.ref).toBe('${{ needs.validate.outputs.source_sha }}');
     }
-    for (const name of ['build-windows', 'build-linux', 'publish']) {
+    for (const name of ['build-linux', 'publish']) {
       expect(workflow.jobs[name].if).toBe("github.event_name != 'workflow_dispatch' || !inputs.build_only");
     }
+    expect(workflow.on.workflow_dispatch.inputs.windows_only).toMatchObject({ type: 'boolean', default: false });
+    const enabled = (name: string, event: string, inputs: Record<string, boolean>) => {
+      const condition = workflow.jobs[name].if;
+      return condition === undefined || Boolean(new Function('github', 'inputs', `return (${condition})`)({ event_name: event }, inputs));
+    };
+    for (const name of ['build-macos', 'build-windows', 'build-linux', 'publish']) {
+      expect(enabled(name, 'push', {}), `${name} runs in a real tagged release`).toBe(true);
+      expect(enabled(name, 'workflow_dispatch', { build_only: true, windows_only: true }), `${name} Windows-only QA`).toBe(name === 'build-windows');
+      expect(enabled(name, 'workflow_dispatch', { build_only: true, windows_only: false }), `${name} Mac-only QA`).toBe(name === 'build-macos');
+    }
+    const windows = workflow.jobs['build-windows'].steps;
+    const installedCheck = windows.findIndex((step: { name?: string }) => step.name === 'Verify real NSIS upgrade and repeated installed startup');
+    const upload = windows.findIndex((step: { name?: string }) => step.name === 'Upload Windows artifacts');
+    expect(installedCheck).toBeGreaterThan(0);
+    expect(installedCheck).toBeLessThan(upload);
+    expect(windows[installedCheck].run).toContain('scripts/run-windows-installer-smoke.mjs');
+    const ciCondition = workflow.jobs.validate.steps.find((step: { id?: string }) => step.id === 'ci').if;
+    const ciRequired = new Function('github', 'inputs', `return (${ciCondition})`);
+    expect(ciRequired({ event_name: 'push' }, {})).toBe(true);
+    expect(ciRequired({ event_name: 'workflow_dispatch' }, { build_only: true, windows_only: false })).toBe(true);
+    expect(ciRequired({ event_name: 'workflow_dispatch' }, { build_only: true, windows_only: true })).toBe(false);
     const script = workflow.jobs.validate.steps.find((step: { id?: string }) => step.id === 'release').run;
     const directory = mkdtempSync(path.join(tmpdir(), 'orkestrai-release-source-'));
     temporaryDirectories.push(directory);
     const output = path.join(directory, 'output.txt');
     const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
-    const invoke = (source: string, buildOnly: string) => {
+    const invoke = (source: string, buildOnly: string, windowsOnly = 'false') => {
       writeFileSync(output, '');
       return spawnSync('bash', ['-c', script], {
         encoding: 'utf8', timeout: 10_000,
-        env: { ...process.env, RELEASE_TAG: source, BUILD_ONLY: buildOnly, GITHUB_OUTPUT: output },
+        env: { ...process.env, RELEASE_TAG: source, BUILD_ONLY: buildOnly, WINDOWS_ONLY: windowsOnly, GITHUB_OUTPUT: output },
       });
     };
     expect(invoke('main', 'true').status).toBe(0);
@@ -220,6 +241,8 @@ describe('release artifact validation', () => {
     expect(invoke('main', 'false').status).toBe(1);
     expect(invoke('v0.0.0', 'false').status).toBe(1);
     expect(invoke(`v${version}`, 'false').status).toBe(0);
+    expect(invoke('main', 'true', 'true').status).toBe(0);
+    expect(invoke(`v${version}`, 'false', 'true').status).toBe(1);
   });
 
   it('declares the maintainer metadata required by native Linux packages', () => {
