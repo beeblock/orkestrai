@@ -111,18 +111,30 @@ describe('agents started manually inside a Shell', () => {
 
   it('cancels a queued agent prompt if its child exits instead of executing it in the parent shell', async () => {
     const f = await fixture();
+    const writes = vi.spyOn(ptySessionManager, 'writeWithConfirmedSubmit');
+    const detect = shellAgentService.detect.bind(shellAgentService);
+    const detection = vi.spyOn(shellAgentService, 'detect').mockImplementation(async (...args) => {
+      // Reproduce Windows CIM latency on faster hosts without mocking identity.
+      if (!windows) await new Promise(resolve => setTimeout(resolve, 500));
+      return detect(...args);
+    });
     try {
       const context = await shellAgentService.detect(f.workspace.id, f.node.id, f.session.id);
       expect(context).not.toBeNull();
       ptySessionManager.writeHumanInput(f.session.id, 'OWNER_DRAFT');
       const pending = bridgeService.ask(f.workspace.id, { to: f.node.id, message: 'Never run this as a shell command', timeoutMs: 2000 });
       const cancelled = expect(pending).rejects.toThrow(/obsolete|no longer|ativa|active/i);
-      await vi.waitFor(() => expect(ptySessionManager.pendingAutomaticDeliveryAt(f.session.id)).toBeNull());
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // A missing submit receipt also means "not queued yet". Wait until the
+      // real writer has queued this handoff behind the owner's draft instead.
+      await vi.waitFor(() => expect(writes).toHaveBeenCalledWith(
+        f.session.id, expect.stringContaining('Never run this as a shell command'), expect.any(Object),
+      ), { timeout: 5000 });
+      expect(ptySessionManager.outputTail(f.workspace.id, f.node.id)).not.toContain('Never run this as a shell command');
       process.kill(Number(context!.processKey.split(':')[0]), 'SIGTERM');
       await cancelled;
       expect(ptySessionManager.hasUnsubmittedOwnerInput(f.session.id)).toBe(true);
-    } finally { await f.dispose(); }
+      expect(ptySessionManager.outputTail(f.workspace.id, f.node.id)).not.toContain('Never run this as a shell command');
+    } finally { writes.mockRestore(); detection.mockRestore(); await f.dispose(); }
   }, 15_000);
 
   it('does not adopt an agent from another node or workspace', async () => {

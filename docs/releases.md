@@ -602,3 +602,8 @@ and absence of duplicate delivery, without using provider credentials.
 the production type-stripped PTY transport, catching omitted runtime imports
 before packaging. These checks supplement the full suite and existing native
 startup/signature gates; they do not claim reproduction on every user's PC.
+
+The child-exit regression waits for the actual terminal writer to queue the
+request behind the owner draft. An absent submit receipt is not a queue-entry
+signal: on Windows the initial CIM lookup can still be running. The fixture
+adds read latency on faster hosts and retains its original 15-second deadline.
