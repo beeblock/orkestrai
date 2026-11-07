@@ -473,9 +473,14 @@
     const paintCanvas = container.closest<HTMLElement>('.svelte-flow');
     const syncPaintEligibility = () => {
       const focused = paintBody?.matches(':focus-within') ?? false;
-      const deferred = !!paintBody && (paintCanvas?.dataset.canvasMoving === 'true'
-        || paintCanvas?.dataset.canvasOverview === 'true');
-      outputBuffer.setVisible(paintable && intersects && document.visibilityState !== 'hidden' && (!deferred || focused), focused);
+      const navigating = paintCanvas?.dataset.canvasNavigating === 'true';
+      const available = paintable && document.visibilityState !== 'hidden'
+        && (paintCanvas?.dataset.canvasOverview !== 'true' || focused);
+      outputBuffer.setPaused(navigating && !focused);
+      // A camera move is not a detach. Preserve the painted screen/stream until
+      // it settles, including brief intersection changes while crossing an edge.
+      // Actual hidden views still suspend transport; queued deltas stay bounded.
+      if (!navigating || !available || focused) outputBuffer.setVisible(available && intersects, focused);
     };
     // A terminal swept past while panning or zooming stays buffered: only one
     // that remains in view is painted, so a pan never parses every backlog.
@@ -488,7 +493,7 @@
     // even when CSS defers its body. Do not churn xterm DOM for invisible TUIs.
     // Observe only the two boundary attributes, never viewport transforms.
     const paintObserver = new MutationObserver(syncPaintEligibility);
-    if (paintCanvas) paintObserver.observe(paintCanvas, { attributes: true, attributeFilter: ['data-canvas-moving', 'data-canvas-overview'] });
+    if (paintCanvas) paintObserver.observe(paintCanvas, { attributes: true, attributeFilter: ['data-canvas-navigating', 'data-canvas-overview'] });
     const syncFocusPaint = () => queueMicrotask(syncPaintEligibility);
     paintBody?.addEventListener('focusin', syncFocusPaint);
     paintBody?.addEventListener('focusout', syncFocusPaint);

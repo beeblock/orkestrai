@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -77,6 +77,114 @@ test('elastic edges settle without restarting from their own render updates', as
     await request.put('/api/agent-room/settings', { data: settings });
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('keeps painted terminals and node bodies intact while panning a dense Canvas', async ({ page, request }) => {
+  test.skip(process.platform === 'win32', 'Native ConPTY delivery is exercised separately.');
+  test.setTimeout(90000);
+  const dir = await mkdtemp(join(tmpdir(), 'orkestrai-pan-preserve-'));
+  const script = join(dir, 'screen.mjs');
+  await writeFile(script, `
+    import { writeFileSync } from 'node:fs';
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdout.write('\\x1b[?1049h\\x1b[2J\\x1b[HKEEP_SCREEN');
+    process.stdin.on('data', () => {
+      writeFileSync('received.txt', 'yes');
+      process.stdout.write('\\x1b[2;1HAFTER_NAVIGATION');
+    });
+  `);
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: {
+    name: 'E2E retained pan surfaces', workingDir: dir, codeIntelligenceMode: 'manual',
+  } })).json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  let socket: WebSocket | undefined;
+  const attaches: unknown[] = [];
+  const outputFrames: string[] = [];
+  await page.routeWebSocket('**/ws/agent-room/pty', client => {
+    const server = client.connectToServer();
+    client.onMessage(message => {
+      const frame = JSON.parse(String(message));
+      if (frame.type === 'attach') attaches.push(frame);
+      server.send(message);
+    });
+    server.onMessage(message => {
+      const frame = JSON.parse(String(message));
+      if (frame.type === 'output') outputFrames.push(frame.data);
+      client.send(message);
+    });
+  });
+  try {
+    const terminal = (await (await request.post(`${base}/nodes`, { data: {
+      type: 'terminal', title: 'Retained screen', x: 100, y: 100, width: 560, height: 360,
+      payload: { command: process.execPath, args: [script] },
+    } })).json()).data;
+    // Exercise the actual >=150-node navigation policy with genuine node data.
+    for (let i = 0; i < 149; i++) await request.post(`${base}/nodes`, { data: {
+      type: 'note', title: `Retained note ${i}`, x: 5000 + i * 400, y: 100, width: 300, height: 220,
+      payload: { content: 'Keep this body visible while moving the camera.' },
+    } });
+    socket = new WebSocket('ws://127.0.0.1:5199/ws/agent-room/pty', { origin: 'http://127.0.0.1:5199' });
+    const sessionId = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Pan fixture PTY timed out')), 10000);
+      socket!.once('error', reject);
+      socket!.on('open', () => socket!.send(JSON.stringify({ type: 'create', command: process.execPath, args: [script],
+        cwd: dir, workspaceId: workspace.id, workspaceRoot: dir, nodeId: terminal.id, stream: false })));
+      socket!.on('message', raw => { const frame = JSON.parse(raw.toString());
+        if (frame.type === 'created') { clearTimeout(timeout); resolve(frame.session.id); }
+      });
+    });
+    await request.patch(`${base}/nodes/${terminal.id}`, { data: { payload: { ...terminal.payload, sessionId } } });
+    await page.goto(`/canvas?workspace=${workspace.id}&node=${terminal.id}`);
+    const node = page.locator(`.svelte-flow__node[data-id="${terminal.id}"]`);
+    await expect(node.locator('.xterm-rows')).toContainText('KEEP_SCREEN');
+    await expect(page.locator('.svelte-flow__node')).toHaveCount(150);
+    await page.evaluate(() => { (window as any).__retainedPanTerminal = document.querySelector('.xterm-helper-textarea'); });
+    const flow = page.locator('.svelte-flow');
+    const { x, y } = await page.locator('.svelte-flow__pane').evaluate(pane => {
+      const box = pane.getBoundingClientRect();
+      for (let y = box.top + 60; y < box.bottom - 100; y += 20) {
+        for (let x = box.left + 70; x < box.right - 70; x += 20) {
+          const hit = document.elementFromPoint(x, y);
+          if (hit && pane.contains(hit) && !hit.closest('.svelte-flow__node, .svelte-flow__panel, .svelte-flow__minimap, .svelte-flow__edge, button, input, textarea')) return { x, y };
+        }
+      }
+      throw new Error('Pan fixture has no empty canvas hit target');
+    });
+    await page.mouse.click(x, y);
+    await expect(flow).not.toHaveAttribute('data-canvas-navigating');
+    await page.waitForTimeout(350);
+    attaches.length = 0;
+    await page.evaluate(() => {
+      const flow = document.querySelector<HTMLElement>('.svelte-flow')!;
+      const samples: boolean[] = [];
+      const observer = new MutationObserver(() => {
+        if (flow.dataset.canvasMoving !== 'true') return;
+        samples.push([...document.querySelectorAll('.node-body')].every(body => getComputedStyle(body).contentVisibility !== 'hidden'));
+      });
+      observer.observe(flow, { attributes: true, attributeFilter: ['data-canvas-moving'] });
+      Object.assign(window, { __retainedPanSamples: samples, __retainedPanObserver: observer });
+    });
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x - 50, y - 20, { steps: 8 });
+    await expect.poll(() => page.evaluate(() => (window as any).__retainedPanSamples)).toContain(true);
+    expect(attaches, 'Panning must not detach or replay the terminal').toHaveLength(0);
+    await expect(node.locator('.xterm-rows')).toContainText('KEEP_SCREEN');
+    socket.send(JSON.stringify({ type: 'input', sessionId, data: 'x' }));
+    await page.mouse.up();
+    await expect(flow).not.toHaveAttribute('data-canvas-navigating');
+    await expect.poll(() => readFile(join(dir, 'received.txt'), 'utf8').catch(() => '')).toBe('yes');
+    await expect.poll(() => outputFrames.join('')).toContain('AFTER_NAVIGATION');
+    await expect(node.locator('.xterm-rows')).toContainText('AFTER_NAVIGATION');
+    expect(attaches, 'An ordinary delta after panning needs no full snapshot').toHaveLength(0);
+    expect(await page.evaluate(() => (window as any).__retainedPanTerminal === document.querySelector('.xterm-helper-textarea'))).toBe(true);
+    const saved = (await (await request.get(`${base}/nodes`)).json()).data.find((item: any) => item.id === terminal.id);
+    expect(saved.payload.sessionId).toBe(sessionId);
+    await page.evaluate(() => (window as any).__retainedPanObserver.disconnect());
+  } finally {
+    await page.mouse.up().catch(() => {}); await page.goto('about:blank'); socket?.close();
+    await request.delete(base); await rm(dir, { recursive: true, force: true });
   }
 });
 
@@ -342,7 +450,7 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await page.mouse.move(panStart.x, panStart.y);
     await page.mouse.down();
     await page.mouse.move(panStart.x + 70, panStart.y + 120, { steps: 20 });
-    await expect.poll(() => page.evaluate(() => (window as any).__denseMotionSamples)).toContainEqual({ navigating: true, dash: 'none', body: 'hidden' });
+    await expect.poll(() => page.evaluate(() => (window as any).__denseMotionSamples)).toContainEqual({ navigating: true, dash: 'none', body: 'auto' });
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await page.mouse.up();
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');

@@ -27,6 +27,41 @@ describe('terminal output paint eligibility', () => {
     buffer.dispose();
   });
 
+  it('pauses parsing during navigation without detaching, resetting or losing live deltas', () => {
+    const visibility = vi.fn(), snapshot = vi.fn(() => true);
+    const text: string[] = [];
+    const buffer = createTerminalOutputBuffer((data, done) => { text.push(data); done(); }, {
+      onVisibilityChange: visibility, requestSnapshot: snapshot,
+    });
+    buffer.setVisible(true, true); buffer.write('painted screen');
+    vi.advanceTimersByTime(16);
+    for (let pan = 0; pan < 5; pan++) {
+      buffer.setPaused(true); buffer.write(` delta-${pan}`);
+      vi.advanceTimersByTime(1000);
+      expect(text).toHaveLength(pan + 1);
+      expect(buffer.isVisible).toBe(true);
+      buffer.setPaused(false); vi.advanceTimersByTime(16);
+    }
+    expect(text.join('')).toBe('painted screen delta-0 delta-1 delta-2 delta-3 delta-4');
+    expect(visibility.mock.calls).toEqual([[true]]);
+    expect(snapshot).not.toHaveBeenCalled();
+    buffer.dispose();
+  });
+
+  it('keeps paused backlogs bounded and requests a snapshot only on overflow', () => {
+    const write = vi.fn((_text: string, done: () => void) => done());
+    const snapshot = vi.fn(() => true);
+    const buffer = createTerminalOutputBuffer(write, { requestSnapshot: snapshot });
+    buffer.setVisible(true, true); buffer.setPaused(true);
+    for (let i = 0; i < 20; i++) buffer.write('x'.repeat(64 * 1024));
+    vi.advanceTimersByTime(1000);
+    expect(buffer.pendingCharacters).toBeLessThanOrEqual(512 * 1024);
+    expect(write).not.toHaveBeenCalled(); expect(snapshot).not.toHaveBeenCalled();
+    buffer.setPaused(false);
+    expect(snapshot).toHaveBeenCalledOnce();
+    buffer.dispose();
+  });
+
   it('does not replay a terminal swept past during a pan', () => {
     const { write, buffer, text } = fixture();
     buffer.write('background');

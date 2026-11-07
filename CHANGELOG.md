@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Preserve painted node bodies while panning the Canvas. Pause terminal parsing without detaching its output stream or resetting xterm on every camera movement; retain bounded deltas and request a full replay only on backlog overflow or an actual visibility change.
+
 - Recover an unsent Codex paste when native Windows ConPTY clears a blank footer after painting the paste badge. Recognize cursor-proven footer erases without treating them as draft text, keep unknown/composer erases and owner edits protected, and verify the normal alternate-screen TUI with first-turn Enter loss and shell tool execution.
 
 ## 0.52.4 - 2026-11-07

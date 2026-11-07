@@ -401,9 +401,8 @@
     contain-intrinsic-size: auto 300px;
   }
 
-  /* Keep DOM, drafts, subscriptions and dimensions; only skip expensive
-     subtree paint while navigating a dense canvas. Headers stay visible. */
-  :global(.svelte-flow[data-canvas-moving='true']) .node-body:not(:focus-within),
+  /* Overview may defer unreadable terminal bodies. Camera movement keeps
+     existing surfaces visible; terminal parsing pauses without resetting them. */
   :global(.svelte-flow[data-canvas-overview='true']) .node-shell:global(.canvas-terminal) .node-body:not(:focus-within) {
     content-visibility: hidden;
     contain-intrinsic-size: auto 300px;

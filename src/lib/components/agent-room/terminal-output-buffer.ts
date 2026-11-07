@@ -68,6 +68,7 @@ type Options = {
 /** A bounded viewer queue. The PTY remains authoritative and keeps running. */
 export function createTerminalOutputBuffer(write: (data: string, parsed: () => void) => void, options: Options = {}) {
   let visible = false;
+  let paused = false;
   let desiredVisible = false;
   let disposed = false;
   let chunks: string[] = [];
@@ -93,7 +94,7 @@ export function createTerminalOutputBuffer(write: (data: string, parsed: () => v
   }
 
   function pump() {
-    if (disposed || !visible || inFlight || waitingSnapshot || cancelRender) return;
+    if (disposed || !visible || paused || inFlight || waitingSnapshot || cancelRender) return;
     if (needsSnapshot) {
       waitingSnapshot = true;
       if (options.requestSnapshot?.() !== true) waitingSnapshot = false;
@@ -102,7 +103,7 @@ export function createTerminalOutputBuffer(write: (data: string, parsed: () => v
     if (!characters) return;
     cancelRender = scheduleRender(() => {
       cancelRender = null;
-      if (disposed || !visible || inFlight || waitingSnapshot || needsSnapshot) { pump(); return; }
+      if (disposed || !visible || paused || inFlight || waitingSnapshot || needsSnapshot) { pump(); return; }
       const parts: string[] = [];
       let length = 0;
       while (head < chunks.length && length < PARSER_CHUNK_CHARACTERS) {
@@ -170,6 +171,14 @@ export function createTerminalOutputBuffer(write: (data: string, parsed: () => v
       snapshotParsed = parsed ?? null;
       enqueue(data);
       if (!data.length) { const done = snapshotParsed; snapshotParsed = null; done?.(); }
+    },
+    // Navigation pauses parsing, not the output subscription. Keep the painted
+    // screen and bounded deltas; only overflow needs an authoritative replay.
+    setPaused(next: boolean) {
+      if (disposed || paused === next) return;
+      paused = next;
+      if (paused) { cancelRender?.(); cancelRender = null; }
+      else pump();
     },
     setVisible(next: boolean, immediate = false) {
       if (disposed || (desiredVisible === next && !(next && immediate && !visible))) return;
