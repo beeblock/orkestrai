@@ -779,13 +779,9 @@ export class AgentInboxService {
     }
     if (!batch.length) return null;
     const titles = await this.titles(workspaceId);
-    let contextTimer: ReturnType<typeof setTimeout> | undefined;
     const ownerBatch = batch.every(envelope => envelope.kind === 'owner' && !['telegram', 'slack'].includes(String(envelope.metadata.via)));
     const learningContext = ownerBatch
-      ? await Promise.race([
-        agentLearningService.context(workspaceId, nodeId, batch.map(envelope => envelope.content).join('\n').slice(0, 4000)).catch(() => ''),
-        new Promise<string>(resolve => { contextTimer = setTimeout(() => resolve(''), 400); }),
-      ]).finally(() => clearTimeout(contextTimer))
+      ? await agentLearningService.contextForDelivery(workspaceId, nodeId, batch.map(envelope => envelope.content).join('\n').slice(0, 4000))
       : '';
     const prompt = [this.compose(batch, titles), learningContext].filter(Boolean).join('\n\n');
     const batchId = uuidv7();
@@ -1149,7 +1145,7 @@ export class AgentInboxService {
   }
 
   private async titles(workspaceId: string): Promise<Map<string, string>> {
-    const nodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
+    const nodes = await workspaceRepository.listBoardNodeSummaries(workspaceId, { includeArchived: true, terminalsOnly: true });
     return new Map(nodes.filter((node) => node.type === 'terminal').map((node) => [node.id, node.title ?? 'agente']));
   }
 

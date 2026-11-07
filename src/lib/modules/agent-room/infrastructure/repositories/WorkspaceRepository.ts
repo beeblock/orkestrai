@@ -352,11 +352,12 @@ export class WorkspaceRepository {
   // -- Nos do canvas ----------------------------------------------------------
 
   /** Board pickers need identities, not megabytes of notes/images or live PTY repair. */
-  async listBoardNodeSummaries(workspaceId: string): Promise<Array<Pick<CanvasNode, 'id' | 'type' | 'title'>>> {
+  async listBoardNodeSummaries(workspaceId: string, options: { includeArchived?: boolean; terminalsOnly?: boolean } = {}): Promise<Array<Pick<CanvasNode, 'id' | 'type' | 'title'>>> {
     const activeFloorIds = await AgentFloor.query().where('workspace_id', workspaceId).where('status', 'active').pluck('id') as string[];
     const query = AgentCanvasNode.query().select('id', 'type', 'title')
-      .where('workspace_id', workspaceId).whereNull('archived_at').whereIn('type', ['terminal', 'note'])
+      .where('workspace_id', workspaceId).whereIn('type', options.terminalsOnly ? ['terminal'] : ['terminal', 'note'])
       .orderBy('created_at', 'asc');
+    if (!options.includeArchived) query.whereNull('archived_at');
     query.whereNested(nested => {
       nested.whereNull('floor_id');
       if (activeFloorIds.length) nested.orWhereIn('floor_id', activeFloorIds);

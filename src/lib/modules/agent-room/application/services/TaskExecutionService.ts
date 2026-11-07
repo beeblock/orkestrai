@@ -92,7 +92,7 @@ export class TaskExecutionService {
       if (await controlCenterRepository.openAsksFrom(nodeId, execution.claimedAt, execution.taskId)) return;
       const { autonomyPolicyService } = await import('./AutonomyPolicyService.js');
       if (!(await autonomyPolicyService.runWindow(workspaceId, 'leader_supervision')).allowed) return;
-      const leader = (await workspaceRepository.listNodes(workspaceId, undefined, false, true))
+      const leader = (await workspaceRepository.listNodes(workspaceId, undefined, false, true, true))
         .find(candidate => candidate.type === 'terminal' && (candidate.payload as TerminalNodePayload).maestro);
       if (!leader || leader.id === nodeId) return;
       const { agentInboxService } = await import('./AgentInboxService.js');

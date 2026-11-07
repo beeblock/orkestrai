@@ -110,7 +110,7 @@ function normalizeAttachments(attachments: WorkspaceAttachment[] | undefined): W
 async function taskBrief(task: AgentBoardTask): Promise<string> {
   const description = String(task.getAttribute('description') ?? '').trim();
   const assignee = task.getAttribute('assignee_node_id') as string | null;
-  const learning = assignee ? await agentLearningService.context(String(task.getAttribute('workspace_id')), assignee, `${task.getAttribute('title')} ${description}`) : '';
+  const learning = assignee ? await agentLearningService.contextForDelivery(String(task.getAttribute('workspace_id')), assignee, `${task.getAttribute('title')} ${description}`) : '';
   const images = imagesOf(task);
   const attachments = attachmentsOf(task);
   const noteId = task.getAttribute('note_node_id') as string | null;
@@ -274,7 +274,7 @@ export class TaskBoardService {
     // Quadro: só tarefas NAO arquivadas (arquivadas vivem em history()).
     const rows = await AgentBoardTask.query().where('workspace_id', workspaceId).whereNull('archived_at').orderBy('created_at', 'asc').get();
     // includeArchived: notas arquivadas junto com a tarefa ainda resolvem o título.
-    const nodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
+    const nodes = await workspaceRepository.listBoardNodeSummaries(workspaceId, { includeArchived: true });
     const titles = new Map(nodes.map((node) => [node.id, node.title ?? node.type]));
     const reviewIds = rows.map((row) => row.getAttribute('leadership_review_id')).filter(Boolean) as string[];
     const reviews = await workspaceLeadershipRepository.reviewSummaries(workspaceId, reviewIds);
@@ -303,7 +303,7 @@ export class TaskBoardService {
     const rows = [...done, ...archived]
       .sort((a, b) => String(b.getAttribute('updated_at')).localeCompare(String(a.getAttribute('updated_at'))))
       .slice(0, limit);
-    const nodes = await workspaceRepository.listNodes(workspaceId, undefined, true);
+    const nodes = await workspaceRepository.listBoardNodeSummaries(workspaceId, { includeArchived: true });
     const titles = new Map(nodes.map((node) => [node.id, node.title ?? node.type]));
     return rows.map((row) => {
       const assigneeId = row.getAttribute('assignee_node_id') as string | null;
@@ -407,7 +407,7 @@ export class TaskBoardService {
     const createdBy = String(task.getAttribute('created_by') ?? '');
     const creator = createdBy ? await workspaceRepository.getNode(createdBy) : null;
     if (creator?.type === 'terminal' && creator.workspaceId === workspaceId && creator.id !== assigneeNodeId) return creator.id;
-    const leader = (await workspaceRepository.listNodes(workspaceId)).find((candidate) =>
+    const leader = (await workspaceRepository.listTerminalNodes(workspaceId)).find((candidate) =>
       candidate.type === 'terminal' && Boolean((candidate.payload as { maestro?: boolean }).maestro));
     return leader && leader.id !== assigneeNodeId ? leader.id : null;
   }
@@ -840,7 +840,7 @@ export class TaskBoardService {
    * Sem responsável = precisa de ação (distribuir); com responsável = FYI.
    */
   private async notifyLeader(workspaceId: string, taskId: string, assigned: boolean): Promise<void> {
-    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const nodes = await workspaceRepository.listTerminalNodes(workspaceId);
     const leader = nodes.find(
       (node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro)
     );
@@ -947,7 +947,7 @@ export class TaskBoardService {
     task: BoardTask,
     completedBy: string | null,
   ): Promise<NonNullable<BoardTask['completionHandoff']>> {
-    const nodes = await workspaceRepository.listNodes(workspaceId);
+    const nodes = await workspaceRepository.listTerminalNodes(workspaceId);
     const leader = nodes.find(
       (node) => node.type === 'terminal' && Boolean((node.payload as { maestro?: boolean }).maestro)
     );

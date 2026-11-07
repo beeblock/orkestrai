@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Keep task dispatch independent of unrelated Canvas image payloads. Read lightweight agent/note identities for inbox routing and board titles, restrict leader lookups to terminals, and bound optional learning recall to 400 ms with shared, capped background reads so a stalled lookup cannot strand a saved assignment before it reaches the inbox.
+
 - Preserve painted node bodies while panning the Canvas. Pause terminal parsing without detaching its output stream or resetting xterm on every camera movement; retain bounded deltas and request a full replay only on backlog overflow or an actual visibility change.
 
 - Recover an unsent Codex paste when native Windows ConPTY clears a blank footer after painting the paste badge. Recognize cursor-proven footer erases without treating them as draft text, keep unknown/composer erases and owner edits protected, and verify the normal alternate-screen TUI with first-turn Enter loss and shell tool execution.

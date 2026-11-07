@@ -141,6 +141,27 @@ export class AgentLearningService {
     for (const workspaceId of await agentLearningRepository.workspacesWith('pending')) settled += await this.settlePending(workspaceId);
     return settled;
   }
+  private deliveryContexts = new Map<string, { query: string; value: Promise<string> }>();
+
+  /** Optional recall cannot hold task dispatch or owner messages. A stalled
+   * reader is shared per recipient and capped globally instead of multiplying
+   * abandoned lookups after every 400 ms delivery budget. */
+  async contextForDelivery(workspaceId: string, nodeId: string, query: string): Promise<string> {
+    const key = JSON.stringify([workspaceId, nodeId]);
+    let pending = this.deliveryContexts.get(key);
+    if (pending && pending.query !== query) return '';
+    if (!pending) {
+      if (this.deliveryContexts.size >= 4) return '';
+      pending = { query, value: Promise.resolve().then(() => this.context(workspaceId, nodeId, query)).catch(() => '') };
+      this.deliveryContexts.set(key, pending);
+      const entry = pending;
+      void pending.value.finally(() => { if (this.deliveryContexts.get(key) === entry) this.deliveryContexts.delete(key); });
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([pending.value, new Promise<string>(resolve => { timer = setTimeout(() => resolve(''), 400); })])
+      .finally(() => clearTimeout(timer));
+  }
+
   async context(workspaceId: string, nodeId: string, query: string): Promise<string> {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal' || !node.payload.provider || agentLearningMode(node.payload) === 'off') return '';

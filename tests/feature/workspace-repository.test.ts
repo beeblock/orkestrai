@@ -34,6 +34,10 @@ describe('WorkspaceRepository', () => {
     await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', floorId, title: 'Retired agent' });
     const summaries = await workspaceRepository.listBoardNodeSummaries(workspace.id);
     expect(summaries).toEqual([{ id: terminal.id, type: 'terminal', title: 'Agent' }, { id: note.id, type: 'note', title: 'Note' }]);
+    expect((await workspaceRepository.listBoardNodeSummaries(workspace.id, { includeArchived: true })).map(node => node.id))
+      .toEqual([terminal.id, note.id, archived.id]);
+    expect(await workspaceRepository.listBoardNodeSummaries(workspace.id, { includeArchived: true, terminalsOnly: true }))
+      .toEqual([{ id: terminal.id, type: 'terminal', title: 'Agent' }]);
     expect(JSON.stringify(summaries)).not.toContain('private');
     expect(JSON.stringify(summaries).length).toBeLessThan(250);
     const get = vi.spyOn(workspaceService, 'get');
