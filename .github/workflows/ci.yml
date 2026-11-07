@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      windows_codex_soak:
+        description: Exercise the real Codex TUI on native Windows for more than one hour
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -20,6 +25,9 @@ env:
   NODE_OPTIONS: '--max-old-space-size=6144'
 
 jobs:
+  windows-codex-soak:
+    if: github.event_name == 'workflow_dispatch' && inputs.windows_codex_soak
+    uses: ./.github/workflows/windows-codex-soak.yml
   relay-container:
     name: Verify production relay container
     runs-on: ubuntu-latest

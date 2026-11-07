@@ -2,7 +2,7 @@ import { open, readdir, realpath, stat } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
 
 const paths = new Map<string, { at: number; value: Promise<string | null> }>();
-const listings = new Map<string, { at: number; value: Promise<Array<{ path: string; mtime: number }>> }>();
+const listings = new Map<string, { at: number; pending: boolean; value: Promise<Array<{ path: string; mtime: number }>> }>();
 const CACHE_LIMIT = 128;
 
 function trimCache<T>(cache: Map<string, T>): void {
@@ -76,7 +76,8 @@ export function invalidateTranscriptListing(root: string, maxDepth: number): voi
 export function recentTranscriptFiles(root: string, maxDepth: number, fresh = false): Promise<Array<{ path: string; mtime: number }>> {
   const key = JSON.stringify([root, maxDepth]);
   const cached = listings.get(key);
-  if (cached && !fresh && Date.now() - cached.at < 1_000) return cached.value;
+  // Slow Windows/UNC walks must remain single-flight even after the TTL expires.
+  if (cached && (cached.pending || (!fresh && Date.now() - cached.at < 1_000))) return cached.value;
   const value = (async () => {
     const files: Array<{ path: string; mtime: number }> = [];
     let visited = 0;
@@ -97,7 +98,9 @@ export function recentTranscriptFiles(root: string, maxDepth: number, fresh = fa
     await walk(root, 0);
     return files.sort((a, b) => b.mtime - a.mtime);
   })();
-  listings.set(key, { at: Date.now(), value });
+  const entry = { at: Date.now(), pending: true, value };
+  void value.finally(() => { entry.pending = false; entry.at = Date.now(); }).catch(() => {});
+  listings.set(key, entry);
   trimCache(listings);
   return value;
 }

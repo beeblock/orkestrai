@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Frame automatic Codex pastes explicitly on Windows/WSL even when ConPTY consumes the terminal mode announcement. Recover an owned, unchanged pasted block using Enter only after an older structured turn has finished; recognize Codex partial composer redraws, preserve exact receipts and never replay message text or blindly submit dialogs. Coalesce slow transcript directory scans beyond their cache TTL.
+
 - Keep downloaded Windows updates cached until the explicit Restart and update action, instead of starting a silent NSIS uninstall/reinstall when the app closes or Windows ends the session. Persist bounded, redacted updater diagnostics and validate real NSIS installation, upgrade, shortcuts and repeated installed startup before publication.
 
 ## 0.52.2 - 2026-11-06

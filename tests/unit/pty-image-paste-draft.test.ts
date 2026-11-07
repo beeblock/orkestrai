@@ -77,11 +77,11 @@ describe('missed automatic paste submission', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
   });
 
-  it.skipIf(process.platform === 'win32')('preserves the separate ConPTY submit retry policy', async () => {
+  it.skipIf(process.platform === 'win32')('recovers an owned current paste on ConPTY with the same safeguards', async () => {
     const { manager, session, at } = await pasted();
     const state = manager as unknown as { sessions: Map<string, { conptySubmitGuard: boolean }> };
     state.sessions.get(session.id)!.conptySubmitGuard = true;
-    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
   });
 });
 

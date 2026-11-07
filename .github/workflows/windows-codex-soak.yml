@@ -1,0 +1,59 @@
+name: Windows Codex delivery soak
+
+on:
+  workflow_call:
+    inputs:
+      soak_seconds:
+        default: '3900'
+        type: string
+  workflow_dispatch:
+    inputs:
+      soak_seconds:
+        description: Real TUI exercise duration (3900 verifies the reported one-hour boundary)
+        default: '3900'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  codex-conpty:
+    runs-on: windows-latest
+    timeout-minutes: 85
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      ORKESTRAI_REAL_CODEX_TEST: '1'
+      ORKESTRAI_CODEX_SOAK_SECONDS: ${{ inputs.soak_seconds }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install isolated test dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Download pinned official Codex CLI
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'codex-fixture.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'codex-fixture'
+          Invoke-WebRequest 'https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-pc-windows-msvc.exe.zip' -OutFile $archive
+          $digest = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -ne '94b51ca84648a6923784ef71f06e2feb1e10796ddb3f5d033ccb0fbe8daa2f16') { throw 'Codex archive digest mismatch' }
+          Expand-Archive $archive -DestinationPath $destination
+          $binary = Get-ChildItem $destination -Recurse -Filter 'codex*.exe' | Select-Object -First 1
+          if (!$binary) { throw 'Missing official Codex executable' }
+          "ORKESTRAI_TEST_CODEX_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
+      - name: Check Windows recovery guards
+        run: npm test -- --run tests/unit/codex-paste-submit.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
+      - name: Exercise real Codex over native ConPTY with loopback-only model responses
+        shell: pwsh
+        run: |
+          npm test -- --run tests/feature/codex-tui-delivery.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
+          if ($LASTEXITCODE -ne 0) { throw 'Real Codex TUI delivery failed' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-codex-soak-log
+          path: windows-codex-soak.log
+          retention-days: 7

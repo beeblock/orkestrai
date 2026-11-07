@@ -9,7 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
-import { interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { frameAutomaticPaste, hasOwnedCodexPaste, interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
@@ -197,6 +197,7 @@ type ComposerDelivery = {
   humanInputRevision?: number;
   pasteRetryCount?: number;
   pasteRetryAt?: number;
+  pasteOutputStart?: number;
   /** Where the terminal's output stood when Enter submitted this delivery. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -513,8 +514,10 @@ export class PtySessionManager {
       if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
       session.scrollback = retained.kept;
       const modes = session.terminalModeTail + data;
-      for (const match of modes.matchAll(/\x1b\[\?2004([hl])/g)) session.bracketedPaste = match[1] === 'h';
-      session.terminalModeTail = modes.slice(-12);
+      for (const match of modes.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
+        if (match[1].split(';').includes('2004')) session.bracketedPaste = match[2] === 'h';
+      }
+      session.terminalModeTail = modes.slice(-128);
       if (!session.provider && (session.shellOscTail || data.includes('\x1b]'))) {
         const output = session.shellOscTail + data;
         for (const osc of output.matchAll(/\x1b\]([^\x07\x1b]{1,4100})(?:\x07|\x1b\\)/g)) {
@@ -1008,7 +1011,9 @@ export class PtySessionManager {
       if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
       if (attempt === maxAttempts) break;
       revisionAtSubmit = current.outputRevision;
-      if (!this.submitIfComposerFree(id)) {
+      // Exact transcript confirmation also owns evidence-based paste recovery.
+      // A missing receipt alone never authorizes Enter in an arbitrary dialog.
+      if (!confirmAcceptance && !this.submitIfComposerFree(id)) {
         throw new Error(`A sessão PTY ${id} não pôde confirmar o envio porque o composer está ocupado.`);
       }
     }
@@ -1170,14 +1175,19 @@ export class PtySessionManager {
   retryPendingAutomaticPaste(id: string, submittedAt: number, lastFinishedAt: number): boolean {
     const session = this.sessions.get(id);
     const delivery = session?.lastSubmittedDelivery;
-    if (!session || !delivery || session.conptySubmitGuard
+    if (!session || !delivery
       || !Number.isFinite(lastFinishedAt) || lastFinishedAt >= submittedAt
       || this.pendingAutomaticDeliveryAt(id) !== submittedAt
       || delivery.humanInputRevision !== session.humanInputRevision || session.deferredHumanInput.length
       || (delivery.pasteRetryCount ?? 0) >= 2
       || Date.now() - (delivery.pasteRetryAt ?? submittedAt) < 5000
-      || Date.now() - session.lastOutputAt < SESSION_IDLE_MS
-      || !session.startupGuard?.hasPendingPaste(session.scrollback)) return false;
+      || Date.now() - session.lastOutputAt < SESSION_IDLE_MS) return false;
+    const retainedFrom = session.outputLength - session.scrollback.length;
+    if (delivery.pasteOutputStart === undefined || delivery.pasteOutputStart < retainedFrom) return false;
+    const freshOutput = session.scrollback.slice(delivery.pasteOutputStart - retainedFrom);
+    const pending = session.provider === 'codex' ? hasOwnedCodexPaste(freshOutput, delivery.text)
+      : session.startupGuard?.hasPendingPaste(freshOutput);
+    if (!pending) return false;
     if (!this.submitIfComposerFree(id)) return false;
     delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
     delivery.pasteRetryAt = Date.now();
@@ -1281,12 +1291,11 @@ export class PtySessionManager {
     const outputRevisionAtWrite = session.outputRevision;
     const textWrittenAt = Date.now();
     delivery.humanInputRevision = session.humanInputRevision;
+    delivery.pasteOutputStart = session.outputLength;
     try {
       // Explicit paste boundaries avoid provider heuristics turning a large
       // handoff and its following Enter into a single never-submitted paste.
-      this.write(session.id, session.bracketedPaste
-        ? `\x1b[200~${delivery.text}\x1b[201~`
-        : delivery.text);
+      this.write(session.id, frameAutomaticPaste(session.provider, session.bracketedPaste, session.conptySubmitGuard, delivery.text));
     } catch (error) {
       session.deliveryInProgress = false;
       session.activeDelivery = null;

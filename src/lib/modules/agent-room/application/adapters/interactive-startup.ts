@@ -1,5 +1,31 @@
 import { stripVTControlCharacters } from 'node:util';
 
+/** ConPTY can consume DECSET 2004 instead of forwarding it to the host. Codex
+ * explicitly accepts bracketed paste, including when that output is missing. */
+export function frameAutomaticPaste(provider: string | null | undefined, enabled: boolean, conpty: boolean, text: string): string {
+  return enabled || (provider === 'codex' && conpty) ? `\x1b[200~${text}\x1b[201~` : text;
+}
+
+/** Inspect only output produced for this delivery. A badge in historical output
+ * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
+export function hasOwnedCodexPaste(output: string, text: string): boolean {
+  let fresh = output.slice(-32_768);
+  const clear = [...fresh.matchAll(/\x1b\[[23]J/g)].at(-1);
+  if (clear) fresh = fresh.slice(clear.index! + clear[0].length);
+  const tail = stripVTControlCharacters(fresh
+    .replace(/\x1b\[[\d;]*[BHEFfd]/g, '\n').replace(/\x1b\[\d*[CG]/g, ' '));
+  const prompt = tail.lastIndexOf('›');
+  const composer = prompt >= 0 ? tail.slice(prompt) : tail;
+  // The real TUI also paints just the badge at an absolute cursor position,
+  // leaving the existing › untouched. Require that fresh badge to be the final
+  // visible content; unknown text/dialogs or subsequent clears refuse recovery.
+  const badge = /(?:^›[\s\u00a0]*|(?:^|\n)[\t ]*)\[Pasted Content (\d+) chars\](?: #\d+)?\s*$/.exec(composer);
+  // More than one block or non-whitespace composer text may belong to a human.
+  if (!badge || Number(badge[1]) !== Array.from(text.replace(/\r\n?/g, '\n')).length) return false;
+  const rawBadgeAt = fresh.lastIndexOf('[Pasted Content ');
+  return rawBadgeAt >= 0 && !/\x1b\[[\d;]*[JK]/.test(fresh.slice(rawBadgeAt));
+}
+
 /** Bootstrap dialogs are not agent composers, even when their output is idle. */
 export class InteractiveStartupGuard {
   private output = '';
