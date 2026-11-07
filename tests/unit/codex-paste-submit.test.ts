@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
-import { frameAutomaticPaste, hasOwnedCodexPaste } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
+import { frameAutomaticPaste, hasOwnedCodexPaste, nativeComposerState } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
 describe('Codex automatic paste on ConPTY', () => {
@@ -19,12 +19,22 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(hasOwnedCodexPaste('› [Pasted Content 3 chars]', 'a😃b')).toBe(true);
     expect(hasOwnedCodexPaste('› [Pasted Content 3 chars] #2', 'a😃b')).toBe(true);
     expect(hasOwnedCodexPaste('\x1b[28;3H\x1b[38;5;6m[Pasted Content 3 chars]\x1b[0m\x1b[28;30H\x1b[?25h', 'a😃b')).toBe(true);
+    expect(hasOwnedCodexPaste('[Pasted Content 4 chars]', 'a😃b', 1)).toBe(true);
+    expect(hasOwnedCodexPaste('[Pasted Content 5 chars]', 'a😃b', 1)).toBe(false);
     for (const output of ['› [Pasted Content 4 chars]', '› a human draft [Pasted Content 3 chars]',
       '› [Pasted Content 3 chars] + changed', '› [Pasted Content 3 chars] [Pasted Content 3 chars]',
       '› [Pasted Content 3 chars]\r\nAnswer\r\n› ', '[Pasted Content 3 chars]\x1b[2J',
       '[Pasted Content 3 chars]\x1b[1G\x1b[K', 'No composer']) {
       expect(hasOwnedCodexPaste(output, 'a😃b'), output).toBe(false);
     }
+  });
+
+  it('recognizes native idle reports and conservatively blocks other states', () => {
+    expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex\x1b\\')).toBe('idle');
+    expect(nativeComposerState('codex', '\x1b]7501;state=working:app=codex\x07')).toBe('working');
+    expect(nativeComposerState('codex', '\x1b]7501;state=approval:app=codex\x07')).toBe('working');
+    expect(nativeComposerState('other', '\x1b]7501;state=idle:app=codex\x07')).toBeUndefined();
+    expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex')).toBeUndefined();
   });
 
   async function fixture() {
@@ -42,7 +52,7 @@ describe('Codex automatic paste on ConPTY', () => {
     await vi.advanceTimersByTimeAsync(65 * 60_000);
     const text = 'Owned draft '.repeat(120).trimEnd();
     const delivery = manager.queueWithSubmit(session.id, text, 10, true, async () => false);
-    await vi.advanceTimersByTimeAsync(2500); await delivery.submitted;
+    await vi.advanceTimersByTimeAsync(6000); await delivery.submitted;
     const at = manager.automaticDeliverySubmittedAt(session.id)!;
     const badge = () => emit(`\x1b[28;3H[Pasted Content ${text.length} chars]\x1b[28;30H`);
     badge(); await vi.advanceTimersByTimeAsync(6000);
@@ -74,5 +84,14 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at + 100)).toBe(false);
     emit('› \r\nnew empty composer'); await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+  });
+
+  it('recovers the first native conversation using an idle report even if Enter became a newline', async () => {
+    const { manager, session, at, text, emit } = await fixture();
+    emit(`\x1b]7501;state=idle:app=codex\x1b\\\x1b[28;3H[Pasted Content ${text.length + 1} chars]`);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, Number.NaN)).toBe(true);
+    emit('\x1b]7501;state=working:app=codex\x1b\\'); await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+    expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
   });
 });

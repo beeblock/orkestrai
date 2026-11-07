@@ -9,7 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
-import { frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
@@ -145,6 +145,7 @@ type PtySession = PtySessionInfo & {
   managedTurn: boolean;
   startupGuard: InteractiveStartupGuard | null;
   bracketedPaste: boolean;
+  nativeComposerState?: 'idle' | 'working';
   terminalModeTail: string;
   scrollback: string;
   /** Modes in effect where the retained scrollback starts. */
@@ -198,6 +199,7 @@ type ComposerDelivery = {
   pasteRetryCount?: number;
   pasteRetryAt?: number;
   pasteOutputStart?: number;
+  pasteEchoAt?: number;
   /** Where the terminal's output stood when Enter submitted this delivery. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -514,6 +516,8 @@ export class PtySessionManager {
       if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
       session.scrollback = retained.kept;
       const modes = session.terminalModeTail + data;
+      const composerState = nativeComposerState(session.provider, modes);
+      if (composerState !== undefined) session.nativeComposerState = composerState;
       for (const match of modes.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
         if (match[1].split(';').includes('2004')) session.bracketedPaste = match[2] === 'h';
       }
@@ -533,13 +537,14 @@ export class PtySessionManager {
         session.shellOscTail = start >= 0 && !/[\x07]/.test(output.slice(start)) && !output.slice(start).includes('\x1b\\') ? output.slice(start).slice(-4200) : '';
       }
       session.startupGuard?.observe(data);
+      if (composerState !== undefined && !session.deliveryInProgress) this.setWaiting(session, composerState === 'idle');
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
       // `waiting` stays set on purpose (deliveries rely on it), so the burst
       // flag remembers to report idle once the output goes quiet again.
       const repaint = resumedFromIdle && Date.now() < session.redrawUntil;
-      if (firstOutput || (resumedFromIdle && !repaint && !session.outputBurst)) {
+      if (session.nativeComposerState !== 'idle' && (firstOutput || (resumedFromIdle && !repaint && !session.outputBurst))) {
         if (resumedFromIdle) session.outputBurst = true;
         this.recordLifecycle(session, 'working');
       }
@@ -1110,9 +1115,15 @@ export class PtySessionManager {
   }
 
   /** Read-only gate for optional supervision, not a reservation or delivery receipt. */
+  hasNativeIdleComposer(id: string): boolean {
+    const session = this.sessions.get(id);
+    return Boolean(session && !session.exited && !session.managedTurn && session.nativeComposerState === 'idle');
+  }
+
   canAcceptAutomaticMessage(id: string): boolean {
     const session = this.sessions.get(id);
-    return Boolean(session && !session.exited && !session.managedTurn && session.waiting && session.scrollback.length > 0
+    return Boolean(session && !session.exited && !session.managedTurn && session.nativeComposerState !== 'working'
+      && (session.waiting || session.nativeComposerState === 'idle') && session.scrollback.length > 0
       && !session.deliveryInProgress && !session.awaitingDeliveryIdle && !session.deliveryQueue.length
       && session.humanComposerLength === 0
       && (!session.startupGuard || session.startupGuard.canAcceptMessages));
@@ -1139,7 +1150,8 @@ export class PtySessionManager {
   /** Only an idle, empty composer may recover an unconfirmed automatic submit. */
   pendingAutomaticDeliveryAt(id: string): number | null {
     const session = this.sessions.get(id);
-    return session && !session.exited && session.waiting && session.scrollback.length > 0
+    return session && !session.exited && session.nativeComposerState !== 'working'
+      && (session.waiting || session.nativeComposerState === 'idle') && session.scrollback.length > 0
       && !session.deliveryInProgress && session.humanComposerLength === 0
       && (!session.startupGuard || session.startupGuard.canAcceptMessages)
       && session.awaitingDeliveryIdle && session.lastSubmittedDelivery?.requiresAcceptance
@@ -1176,16 +1188,17 @@ export class PtySessionManager {
     const session = this.sessions.get(id);
     const delivery = session?.lastSubmittedDelivery;
     if (!session || !delivery
-      || !Number.isFinite(lastFinishedAt) || lastFinishedAt >= submittedAt
+      || (Number.isFinite(lastFinishedAt) ? lastFinishedAt >= submittedAt : session.nativeComposerState !== 'idle')
+      || session.nativeComposerState === 'working'
       || this.pendingAutomaticDeliveryAt(id) !== submittedAt
       || delivery.humanInputRevision !== session.humanInputRevision || session.deferredHumanInput.length
       || (delivery.pasteRetryCount ?? 0) >= 2
       || Date.now() - (delivery.pasteRetryAt ?? submittedAt) < 5000
-      || Date.now() - session.lastOutputAt < SESSION_IDLE_MS) return false;
+      || (session.nativeComposerState !== 'idle' && Date.now() - session.lastOutputAt < SESSION_IDLE_MS)) return false;
     const retainedFrom = session.outputLength - session.scrollback.length;
     if (delivery.pasteOutputStart === undefined || delivery.pasteOutputStart < retainedFrom) return false;
     const freshOutput = session.scrollback.slice(delivery.pasteOutputStart - retainedFrom);
-    const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard);
+    const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard, 1 + (delivery.pasteRetryCount ?? 0));
     if (!pending) return false;
     if (!this.submitIfComposerFree(id)) return false;
     delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
@@ -1212,6 +1225,7 @@ export class PtySessionManager {
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => {
       if (session.managedTurn) return;
+      if (session.nativeComposerState === 'working') return;
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) return;
       if (session.outputBurst && session.waiting) {
         session.outputBurst = false;
@@ -1315,7 +1329,13 @@ export class PtySessionManager {
       const elapsed = now - textWrittenAt;
       const sawComposerOutput = session.outputRevision > outputRevisionAtWrite;
       const outputQuiet = !sawComposerOutput || now - session.lastOutputAt >= COMPOSER_OUTPUT_QUIET_MS;
-      if (elapsed < submitDelayMs || (!outputQuiet && elapsed < COMPOSER_SETTLE_LIMIT_MS)) {
+      const expectsEcho = expectsPasteEcho(session.provider, delivery.text, session.conptySubmitGuard);
+      const retainedFrom = session.outputLength - session.scrollback.length;
+      const echoed = expectsEcho && delivery.pasteOutputStart! >= retainedFrom
+        && hasPendingAutomaticPaste(session.provider, session.scrollback.slice(delivery.pasteOutputStart! - retainedFrom), delivery.text, session.startupGuard);
+      if (echoed && delivery.pasteEchoAt === undefined) delivery.pasteEchoAt = now;
+      const echoReady = echoed && now - (delivery.pasteEchoAt ?? now) >= COMPOSER_OUTPUT_QUIET_MS;
+      if (elapsed < submitDelayMs || (elapsed < COMPOSER_SETTLE_LIMIT_MS && (expectsEcho ? !echoReady : !outputQuiet))) {
         session.deliveryTimer = setTimeout(submit, Math.min(100, Math.max(20, submitDelayMs - elapsed)));
         session.deliveryTimer.unref?.();
         return;

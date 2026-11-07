@@ -8,7 +8,7 @@ export function frameAutomaticPaste(provider: string | null | undefined, enabled
 
 /** Inspect only output produced for this delivery. A badge in historical output
  * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
-export function hasOwnedCodexPaste(output: string, text: string): boolean {
+export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0): boolean {
   let fresh = output.slice(-32_768);
   const clear = [...fresh.matchAll(/\x1b\[[23]J/g)].at(-1);
   if (clear) fresh = fresh.slice(clear.index! + clear[0].length);
@@ -21,7 +21,8 @@ export function hasOwnedCodexPaste(output: string, text: string): boolean {
   // visible content; unknown text/dialogs or subsequent clears refuse recovery.
   const badge = /(?:^›[\s\u00a0]*|(?:^|\n)[\t ]*)\[Pasted Content (\d+) chars\](?: #\d+)?\s*$/.exec(composer);
   // More than one block or non-whitespace composer text may belong to a human.
-  if (!badge || Number(badge[1]) !== Array.from(text.replace(/\r\n?/g, '\n')).length) return false;
+  const length = Array.from(text.replace(/\r\n?/g, '\n')).length;
+  if (!badge || Number(badge[1]) < length || Number(badge[1]) > length + extraEnters) return false;
   const rawBadgeAt = fresh.lastIndexOf('[Pasted Content ');
   return rawBadgeAt >= 0 && !/\x1b\[[\d;]*[JK]/.test(fresh.slice(rawBadgeAt));
 }
@@ -82,6 +83,21 @@ export function interactiveStartupGuard(provider: string | null | undefined): In
   return provider === 'claude' ? new InteractiveStartupGuard() : null;
 }
 
-export function hasPendingAutomaticPaste(provider: string | null | undefined, output: string, text: string, startup: InteractiveStartupGuard | null): boolean {
-  return provider === 'codex' ? hasOwnedCodexPaste(output, text) : startup?.hasPendingPaste(output) ?? false;
+export function hasPendingAutomaticPaste(provider: string | null | undefined, output: string, text: string, startup: InteractiveStartupGuard | null, extraEnters = 0): boolean {
+  return provider === 'codex' ? hasOwnedCodexPaste(output, text, extraEnters) : startup?.hasPendingPaste(output) ?? false;
+}
+
+/** Codex emits OSC 7501 independently of repaint noise. This is readiness
+ * evidence, never a receipt or permission to replay an uncertain prompt. */
+export function nativeComposerState(provider: string | null | undefined, output: string): 'idle' | 'working' | undefined {
+  if (provider !== 'codex') return undefined;
+  let state: 'idle' | 'working' | undefined;
+  for (const match of output.matchAll(/\x1b\]7501;state=([a-z_-]+):app=codex(?:\x07|\x1b\\)/g)) {
+    state = match[1] === 'idle' ? 'idle' : 'working';
+  }
+  return state;
+}
+
+export function expectsPasteEcho(provider: string | null | undefined, text: string, conpty: boolean): boolean {
+  return provider === 'codex' && conpty && Array.from(text).length > 1000;
 }

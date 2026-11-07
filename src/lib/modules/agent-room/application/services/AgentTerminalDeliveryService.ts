@@ -93,6 +93,11 @@ export class AgentTerminalDeliveryService {
         // after the CLI has completed a newer turn. Read one coherent snapshot,
         // at most once per 1.5 s, and keep the original delivery unverified.
         const pendingAt = ptySessionManager.pendingAutomaticDeliveryAt(input.sessionId);
+        if (submission.at !== null && pendingAt === submission.at && ptySessionManager.hasNativeIdleComposer(input.sessionId)) {
+          // A new Codex conversation may have no completed transcript yet. Its
+          // native idle marker plus the owned current paste can still recover Enter.
+          ptySessionManager.retryPendingAutomaticPaste(input.sessionId, pendingAt, Number.NaN);
+        }
         if (submission.at !== null && pendingAt === submission.at
           && Date.now() - submission.boundaryCheckedAt >= 1500 && preferredSessionId) {
           submission.boundaryCheckedAt = Date.now();

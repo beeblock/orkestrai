@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Observe native Codex idle reports and wait for an owned paste echo on ConPTY before submitting. Recover first-turn pastes without requiring a prior transcript, tolerate only the extra newlines from Orkestrai's own Enter attempts, and keep working turns protected from repaint-driven idle detection.
+
 - Keep structured inbox deliveries pending until an exact receipt arrives, including after ten minutes. Never promote an unconfirmed task to running; repair legacy running states without receipts while retaining custody and preventing duplicate submission.
 
 - Frame automatic Codex pastes explicitly on Windows/WSL even when ConPTY consumes the terminal mode announcement. Recover an owned, unchanged pasted block using Enter only after an older structured turn has finished; recognize Codex partial composer redraws, preserve exact receipts and never replay message text or blindly submit dialogs. Coalesce slow transcript directory scans beyond their cache TTL.
