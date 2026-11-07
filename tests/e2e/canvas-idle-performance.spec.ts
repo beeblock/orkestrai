@@ -225,16 +225,15 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     // A leader-like hub is not the same workload as a low-degree chain.
     // Drag it in the fixture, never move nodes in the owner's workspace.
     const hub = page.locator('.svelte-flow__node').first();
-    // Overview tiles intentionally defer headers until selected/readable.
-    await hub.click({ position: { x: 5, y: 5 } });
-    await expect(hub.locator('.node-icon')).toBeVisible();
-    // Header actions are intentionally nodrag. Use the icon as the stable drag surface.
-    const hubHeader = (await hub.locator('.node-icon').boundingBox())!;
-    const hubBefore = await hub.getAttribute('style');
-    await page.mouse.move(hubHeader.x + hubHeader.width / 2, hubHeader.y + hubHeader.height / 2);
+    // Overview tiles are the drag surface until selected. Wait for fit-view
+    // stability; selected resize handles can cover the tiny header icon.
+    await hub.hover({ timeout: 5000 });
+    const hubBox = (await hub.boundingBox())!;
+    const hubBefore = await hub.evaluate(element => element.style.transform);
+    await page.mouse.move(hubBox.x + hubBox.width / 2, hubBox.y + hubBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(hubHeader.x + hubHeader.width / 2 + 30, hubHeader.y + hubHeader.height / 2 + 20, { steps: 16 });
-    await expect(hub).not.toHaveAttribute('style', hubBefore!);
+    await page.mouse.move(hubBox.x + hubBox.width / 2 + 30, hubBox.y + hubBox.height / 2 + 20, { steps: 16 });
+    await expect.poll(() => hub.evaluate(element => element.style.transform)).not.toBe(hubBefore);
     await page.mouse.up();
     await expect(page.locator('.svelte-flow__node')).toHaveCount(nodes.length);
     await expect.poll(() => Boolean(activitySocket)).toBe(true);
