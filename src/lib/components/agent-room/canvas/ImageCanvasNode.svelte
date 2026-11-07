@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NodeProps } from '@xyflow/svelte';
+  import { Handle, Position, type NodeProps } from '@xyflow/svelte';
   import { Image as ImageIcon, ImagePlus, Columns2, LoaderCircle, WandSparkles, X } from '@lucide/svelte';
   import CreativeAssetActionDialog from '../CreativeAssetActionDialog.svelte';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
@@ -8,9 +8,9 @@
   import NodeShell from './NodeShell.svelte';
   import HeaderIconButton from './HeaderIconButton.svelte';
   import RevealSourceButton from './RevealSourceButton.svelte';
+  import CanvasImagePreview from './CanvasImagePreview.svelte';
   import { canvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
-  import { isCanvasOverview } from './viewport-settle.js';
-  import { canCacheImageOverview, paintImageOverview } from './image-overview-preview.js';
+  import { edgeIntersectsViewport } from './edge-performance.js';
 
   export type ImageNodeData = {
     title: string;
@@ -25,40 +25,26 @@
     onRename?: (id: string, title: string) => void;
   };
 
-  let { id, data, selected } = $props<NodeProps & { data: ImageNodeData }>();
+  let { id, data, selected, width, height, positionAbsoluteX = 0, positionAbsoluteY = 0 } = $props<NodeProps & { data: ImageNodeData }>();
 
   let fileInput: HTMLInputElement;
   let reviewing = $state(false);
   let editing = $state(false);
   let dragActive = $state(false);
   let uploading = $state(false);
-  let originalImage = $state<HTMLImageElement>();
-  let overviewPreview = $state<HTMLCanvasElement>();
-  let previewTarget = $state<HTMLCanvasElement>();
-  let previewFor = $state<string | null>(null);
+  const inViewport = $derived.by(() => {
+    const runtime = canvasEdgeRuntime.current, viewport = runtime.viewport;
+    return Boolean(viewport && edgeIntersectsViewport({ ax: positionAbsoluteX, ay: positionAbsoluteY,
+      bx: positionAbsoluteX + (width ?? 320), by: positionAbsoluteY + (height ?? 240) },
+      viewport, runtime.width, runtime.height));
+  });
+  const details = $derived(Boolean(selected || reviewing || editing || uploading)
+    || (inViewport && (width ?? 320) * (canvasEdgeRuntime.current.viewport?.zoom ?? 0.05) >= 140));
   const imageUrl = $derived(
     data.payload.path
       ? `/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(data.payload.path)}`
       : null
   );
-  const usePreview = $derived(previewFor === imageUrl && previewTarget === overviewPreview && imageUrl !== null && !selected && !editing && !reviewing
-    && isCanvasOverview(canvasEdgeRuntime.current.viewport?.zoom ?? 1));
-
-  function refreshPreview(force = false) {
-    if (!originalImage || !overviewPreview || !imageUrl || !canCacheImageOverview(data.payload.path)) return;
-    if (!force && previewFor === imageUrl && previewTarget === overviewPreview) return;
-    const expected = new URL(imageUrl, window.location.href).href;
-    if (originalImage.currentSrc !== expected || !originalImage.complete) return;
-    previewFor = null; previewTarget = undefined;
-    if (paintImageOverview(originalImage, overviewPreview)) { previewTarget = overviewPreview; previewFor = imageUrl; }
-  }
-  $effect(() => {
-    // Source changes invalidate display-only pixels. A late load must never
-    // show the previous asset, and pan/zoom must never redraw this bitmap.
-    if (!imageUrl || !originalImage || !overviewPreview) { previewFor = null; previewTarget = undefined; return; }
-    if (previewFor !== imageUrl || previewTarget !== overviewPreview) refreshPreview();
-  });
-
   async function saveBlob(blob: Blob) {
     if (data.payload.characterId && data.payload.characterDigest) return;
     const buffer = await blob.arrayBuffer();
@@ -132,6 +118,7 @@
   }
 </script>
 
+{#if details}
 <NodeShell
   {id}
   {selected}
@@ -160,13 +147,11 @@
       <X size={13} /></HeaderIconButton>
   {/snippet}
 
-  <input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
   {#if imageUrl}
     <div class="image-body nodrag" onpaste={handlePaste} tabindex="-1" role="presentation">
-      <img bind:this={originalImage} class="img-outline" class:overview-original={usePreview} src={imageUrl} alt={data.title || m['img.alt_fallback']()} draggable="false" loading="lazy" decoding="async" onload={() => refreshPreview(true)} />
-      <div class="overview-preview" class:active={usePreview} role="img" aria-label={data.title || m['img.alt_fallback']()} aria-hidden={!usePreview}>
-        <canvas bind:this={overviewPreview} class="img-outline" aria-hidden="true"></canvas>
-      </div>
+      <CanvasImagePreview src={imageUrl} alt={data.title || m['img.alt_fallback']()} selected={Boolean(selected)}
+        layoutWidth={width ?? 320} layoutHeight={Math.max(1, (height ?? 240) - 32)}
+        animated={/\.(?:gif|apng|webp|svg)$/i.test(data.payload.path ?? '')} />
       {#if uploading}
         <span class="image-status" role="status"><LoaderCircle size={13} class="animate-spin" />{m['node.image_uploading']()}</span>
       {/if}
@@ -192,10 +177,25 @@
     </button>
   {/if}
 </NodeShell>
-<CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />
-<CreativeAssetActionDialog bind:open={editing} workspaceId={data.workspaceId} nodeId={id} onOpenNode={data.onJumpToNode} />
+{:else}
+  <!-- Keep graph handles/data, but no thousands of headers, tooltips, forms or
+       offscreen canvases. Selected/editing/uploading images retain full controls. -->
+  <div class="canvas-image image-tile" role="img" aria-label={data.title || m['img.alt_fallback']()}>
+    <Handle type="source" position={Position.Right} class="node-handle" />
+    {#if inViewport && imageUrl}
+      <CanvasImagePreview src={imageUrl} alt={data.title || m['img.alt_fallback']()}
+        layoutWidth={width ?? 320} layoutHeight={height ?? 240} />
+    {/if}
+  </div>
+{/if}
+<input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
+
+{#if reviewing}<CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />{/if}
+{#if editing}<CreativeAssetActionDialog bind:open={editing} workspaceId={data.workspaceId} nodeId={id} onOpenNode={data.onJumpToNode} />{/if}
 
 <style>
+  .image-tile { position: relative; width: 100%; height: 100%; border: 1px solid var(--app-border);
+    border-radius: 8px; background: var(--app-canvas); }
   .hidden-input {
     display: none;
   }
@@ -209,37 +209,6 @@
     justify-content: center;
     overflow: hidden;
     background: var(--app-canvas);
-  }
-
-  .image-body img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    display: block;
-  }
-
-  .overview-original {
-    visibility: hidden;
-  }
-
-  .overview-preview {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    display: none;
-    pointer-events: none;
-  }
-
-  .overview-preview.active {
-    display: block;
-  }
-
-  .overview-preview canvas {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
   }
 
   /* Status flutuante sobre a imagem enquanto a troca e enviada. */

@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { useSvelteFlow, useViewport, type FitViewOptions } from '@xyflow/svelte';
   import { createViewportSettler, isCanvasOverview } from './viewport-settle.js';
-  import { settleCanvasViewport } from './edge-performance-runtime.svelte.js';
+  import { retainCanvasEdgeRuntime, settleCanvasViewport } from './edge-performance-runtime.svelte.js';
 
   type ZoomApi = {
     setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => void;
@@ -16,6 +17,9 @@
 
   const { setCenter, fitView, screenToFlowPosition, getViewport, setViewport } = useSvelteFlow();
   const viewportStore = useViewport();
+  // Images also consume viewport dimensions/visibility. A canvas without edges
+  // still needs this runtime; zero dimensions otherwise disable viewport culling.
+  onMount(retainCanvasEdgeRuntime);
   let marker: HTMLSpanElement;
   let movingCanvas: HTMLElement | null = null;
   let overviewCanvas: HTMLElement | null = null;

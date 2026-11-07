@@ -15,6 +15,8 @@ pt-BR, English, and Spanish translations.
 
 - Keep structured inbox deliveries pending until an exact receipt arrives, including after ten minutes. Never promote an unconfirmed task to running; repair legacy running states without receipts while retaining custody and preventing duplicate submission.
 
+- Bound Canvas image previews by visibility, displayed size, two concurrent decode jobs and shared pixel budgets. Release offscreen canvases and full-resolution decode buffers, and mount creative dialogs only when opened. Keep original workspace assets and agent references unchanged; exercise 300 and 3,000 large-image fixtures.
+
 - Frame automatic Codex pastes explicitly on Windows/WSL even when ConPTY consumes the terminal mode announcement. Recover an owned, unchanged pasted block using Enter only after an older structured turn has finished; recognize Codex partial composer redraws, preserve exact receipts and never replay message text or blindly submit dialogs. Coalesce slow transcript directory scans beyond their cache TTL.
 
 - Keep downloaded Windows updates cached until the explicit Restart and update action, instead of starting a silent NSIS uninstall/reinstall when the app closes or Windows ends the session. Persist bounded, redacted updater diagnostics and validate real NSIS installation, upgrade, shortcuts and repeated installed startup before publication.

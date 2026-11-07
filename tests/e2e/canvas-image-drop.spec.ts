@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openWorkspace } from './helpers';
 
-const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=';
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAAElFTkSuQmCC';
 
 async function transfer(page: Page, names: string[]) {
   return page.evaluateHandle(({ names, png }) => {
@@ -36,18 +36,18 @@ test('external images become separate Canvas references or agent attachments acc
     expect(accepted).toEqual({ prevented: true, protectedFiles: 0 });
     const images = await transfer(page, ['reference-one.png', 'reference-two.png']);
     await pane.dispatchEvent('drop', { dataTransfer: images, clientX: rect!.x + 160, clientY: rect!.y + 120 });
-    await expect(page.locator('.canvas-image img')).toHaveCount(2);
-    await expect.poll(() => page.locator('.canvas-image img').evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    await expect(page.locator('.canvas-image canvas[data-image-preview]')).toHaveCount(2);
+    await expect.poll(() => page.locator('.canvas-image canvas[data-image-preview]').evaluateAll(images => images.every(image => (image as HTMLCanvasElement).classList.contains('ready')))).toBe(true);
     const list = async () => (await (await request.get(`/api/agent-room/workspaces/${workspaceId}/nodes`)).json()).data;
     const nodes = await list();
     expect(nodes.map((node: { title: string }) => node.title).sort()).toEqual(['reference-one.png', 'reference-two.png']);
     expect(nodes[0].x !== nodes[1].x || nodes[0].y !== nodes[1].y).toBe(true);
     for (const node of nodes) expect(readFileSync(join(workingDir, node.payload.path))).toEqual(Buffer.from(png, 'base64'));
     await page.reload();
-    await expect(page.locator('.canvas-image img')).toHaveCount(2);
+    await expect(page.locator('.canvas-image canvas[data-image-preview]')).toHaveCount(2);
     const single = await transfer(page, ['single-reference.png']);
     await pane.dispatchEvent('drop', { dataTransfer: single, clientX: rect!.x + 500, clientY: rect!.y + 300 });
-    await expect(page.locator('.canvas-image img')).toHaveCount(3);
+    await expect(page.locator('.canvas-image canvas[data-image-preview]')).toHaveCount(3);
     await single.dispose();
 
     const agent = await request.post(`/api/agent-room/workspaces/${workspaceId}/nodes`, {

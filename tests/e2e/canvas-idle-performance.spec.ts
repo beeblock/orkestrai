@@ -225,6 +225,9 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     // A leader-like hub is not the same workload as a low-degree chain.
     // Drag it in the fixture, never move nodes in the owner's workspace.
     const hub = page.locator('.svelte-flow__node').first();
+    // Overview tiles intentionally defer headers until selected/readable.
+    await hub.click({ position: { x: 5, y: 5 } });
+    await expect(hub.locator('.node-icon')).toBeVisible();
     // Header actions are intentionally nodrag. Use the icon as the stable drag surface.
     const hubHeader = (await hub.locator('.node-icon').boundingBox())!;
     const hubBefore = await hub.getAttribute('style');
@@ -260,24 +263,15 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       badge.blur();
       return visible;
     })).toBe('visible');
-    await test.step('decode all 208 full-size PNGs', async () => {
-      await expect.poll(() => page.locator('.canvas-image img.img-outline').evaluateAll(images => images.filter(image => (image as HTMLImageElement).naturalWidth === 1024).length), { timeout: 30000 }).toBe(208);
-      // naturalWidth proves headers loaded, not that async pixel decoding has
-      // completed. Keep the full 832 MiB fixture, but finish preparation before
-      // measuring navigation, rather than attributing cold decode to a gesture.
-      await page.locator('.canvas-image img.img-outline').evaluateAll(async images => {
-        await Promise.all(images.map(image => (image as HTMLImageElement).decode()));
-      });
-      await page.evaluate(() => document.fonts.ready.then(() => undefined));
-    });
-    // All original pixels are still loaded; the visible overview additionally
-    // uses actual bounded rasters, not empty-image or header-only fixtures.
-    await expect.poll(() => page.locator('.canvas-image .overview-preview.active').count()).toBeGreaterThan(200);
-    await expect(page.locator('.canvas-image .overview-preview canvas')).toHaveCount(208);
-    expect(await page.locator('.canvas-image .overview-preview canvas').evaluateAll(canvases =>
-      canvases.every(canvas => (canvas as HTMLCanvasElement).width <= 256 && (canvas as HTMLCanvasElement).height <= 256))).toBe(true);
+    // Originals are decoded two at a time and closed; only visible display
+    // rasters remain. Do not force all full-size originals into memory.
+    await expect.poll(() => page.locator('.canvas-image canvas.ready').count(), { timeout: 30000 }).toBeGreaterThan(150);
+    await expect(page.locator('.canvas-image .image-body img')).toHaveCount(0);
+    await expect(page.locator('.canvas-image canvas[data-image-preview]')).toHaveCount(208);
+    expect(await page.locator('.canvas-image canvas[data-image-preview]').evaluateAll(canvases =>
+      canvases.reduce((sum, canvas) => sum + (canvas as HTMLCanvasElement).width * (canvas as HTMLCanvasElement).height, 0))).toBeLessThanOrEqual(16 * 1024 * 1024);
     await page.evaluate(() => {
-      (window as any).__retainedImage = document.querySelector('.canvas-image img.img-outline');
+      (window as any).__retainedImage = document.querySelector('.canvas-image canvas[data-image-preview]');
       (window as any).__retainedNote = document.querySelector('.canvas-note textarea');
       const note = (window as any).__retainedNote as HTMLTextAreaElement;
       note.value = 'Unsaved review draft';
@@ -353,7 +347,7 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
     await page.evaluate(() => { (window as any).__denseMotionObserver.disconnect(); delete (window as any).__denseMotionObserver; });
     await expect(page.locator('.canvas-image .node-body').first()).toHaveCSS('content-visibility', 'auto');
-    expect(await page.evaluate(() => ({ image: (window as any).__retainedImage === document.querySelector('.canvas-image img.img-outline'),
+    expect(await page.evaluate(() => ({ image: (window as any).__retainedImage === document.querySelector('.canvas-image canvas[data-image-preview]'),
       note: (window as any).__retainedNote === document.querySelector('.canvas-note textarea'),
       draft: (window as any).__retainedNote.value }))).toEqual({ image: true, note: true, draft: 'Unsaved review draft' });
     if (await page.locator('.svelte-flow').getAttribute('data-canvas-overview')) {
@@ -364,7 +358,7 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     // A slow runner must not silently finish sampling before the pan. Measure
     // every zoom, the real pan and paint restoration, with a bounded failsafe.
     const gaps = await page.evaluate(() => (window as any).__denseFrameGaps as number[]);
-    console.log(JSON.stringify({ nodes: nodes.length, loadedImages: 208, decodedImageMiB: 832, longNotes: 188, portals: 3, edges: 727, sampledMs: Math.round(sample.elapsedMs), maxFrameGapMs: Math.round(Math.max(...gaps)), initialFrameGapsMs: gaps.slice(0, 10).map(Math.round) }));
+    console.log(JSON.stringify({ nodes: nodes.length, imageNodes: 208, originalImageElements: 0, longNotes: 188, portals: 3, edges: 727, sampledMs: Math.round(sample.elapsedMs), maxFrameGapMs: Math.round(Math.max(...gaps)), initialFrameGapsMs: gaps.slice(0, 10).map(Math.round) }));
     expect(sample.expired).toBe(false);
     expect(gaps.length).toBeGreaterThan(5);
     expect(Math.max(...gaps)).toBeLessThan(500);
@@ -373,20 +367,19 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     await test.step('rebuild the display cache after removing and restoring the same source', async () => {
       const image = page.locator(`.svelte-flow__node[data-id="${nodes[1].id}"]`);
       const beforeCanvas = await image.locator('canvas').evaluate(canvas => { (window as any).__previousOverviewCanvas = canvas; return (canvas as HTMLCanvasElement).width; });
-      expect(beforeCanvas).toBe(256);
+      expect(beforeCanvas).toBeGreaterThanOrEqual(1);
       nodes[1].payload = { path: '' };
       activitySocket!.send(JSON.stringify({ type: 'workspaceChanged', workspaceId: workspace.id }));
-      await expect(image.locator('img.img-outline')).toHaveCount(0);
+      await expect(image.locator('canvas[data-image-preview]')).toHaveCount(0);
       nodes[1].payload = { path: 'fixture-1.png' };
       activitySocket!.send(JSON.stringify({ type: 'workspaceChanged', workspaceId: workspace.id }));
-      await expect(image.locator('img.img-outline')).toHaveCount(1);
-      await expect(image.locator('.overview-preview.active')).toHaveCount(1);
+      await expect(image.locator('canvas[data-image-preview]')).toHaveCount(1);
       expect(await image.locator('canvas').evaluate(canvas => ({
         fresh: canvas !== (window as any).__previousOverviewCanvas, width: (canvas as HTMLCanvasElement).width,
-      }))).toEqual({ fresh: true, width: 256 });
+      }))).toMatchObject({ fresh: true });
     });
-    // Readable zoom restores the very same original elements and URLs, not a
-    // thumbnail pretending to be the reference/master.
+    // Zoom replaces display pixels at the new screen size, retaining node
+    // identity, drafts and the same source references.
     // The app top bar leaves a shorter canvas, so the fitted start is a little
     // farther out; zoom until readable instead of counting a fixed number of steps.
     for (let i = 0; i < 12; i++) {
@@ -395,9 +388,8 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       await page.waitForTimeout(200);
     }
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
-    await expect(page.locator('.canvas-image .overview-preview.active')).toHaveCount(0);
-    await expect(page.locator('.canvas-image img.img-outline').first()).toHaveCSS('visibility', 'visible');
-    expect(await page.evaluate(() => (window as any).__retainedImage === document.querySelector('.canvas-image img.img-outline'))).toBe(true);
+    await expect(page.locator('.canvas-image .image-body img')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).__retainedImage === document.querySelector('.canvas-image canvas[data-image-preview]'))).toBe(true);
     await page.screenshot({ path: '/tmp/orkestrai-dense-canvas.png' });
   } finally {
     await page.evaluate(() => { (window as any).__denseMotionObserver?.disconnect(); (window as any).__denseStopFrames?.(); }).catch(() => {});

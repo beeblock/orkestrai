@@ -70,11 +70,15 @@ unfocused node body and secondary header paint until viewport motion settles.
 Overview zoom defers unreadable terminal paint, not the live PTY or its output.
 Those invisible TUIs also batch DOM updates instead of rebuilding hidden rows
 for every output chunk; focus flushes immediately and visible terminals resume.
-At overview zoom, PNG/JPEG/BMP nodes reuse bounded 256-pixel browser bitmaps.
-Original images stay mounted and are shown at readable zoom, selection or review;
-workspace files and agent references are unchanged. The cache preserves aspect
-ratio/alpha, draws once per source load, and creates no disk files. Known
-animated/vector formats keep their original renderer.
+Image nodes load only near the visible viewport, with two concurrent image
+jobs. Full-resolution decode buffers are closed after a display-sized preview
+is made. Display canvases share a 16-megapixel budget and reusable previews an
+8-megapixel cache; offscreen canvases release their backing pixels. Tiny nodes
+skip decode entirely. Selected animated images can use their original renderer
+within the same pixel budget (at most two animations); comparison/review keeps
+the original asset. Creative dialogs mount only when opened. Workspace files,
+reference paths, alpha and aspect ratio are preserved; no thumbnails are written
+to disk. The regression fixtures exercise 300 and 3,000 large image references.
 
 Connections remain solid while panning/zooming and in overview, avoiding native
 dash subdivision; readable idle zoom restores their decorative pattern.
