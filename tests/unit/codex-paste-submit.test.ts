@@ -82,6 +82,36 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
   });
 
+  it.each([false, true])('does not treat a requested cursor-position report as an owner edit (split=%s)', async split => {
+    const { manager, session, at, emit, badge } = await fixture();
+    if (split) { emit('\x1b['); emit('6n'); } else emit('\x1b[6n');
+    manager.writeHumanInput(session.id, '\x1b[28;3R');
+    badge(); await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+  });
+
+  it('counts batched cursor queries and responses without disabling paste recovery', async () => {
+    const { manager, session, at, emit, badge } = await fixture();
+    emit('\x1b[6n\x1b[6n'); manager.writeHumanInput(session.id, '\x1b[28;3R\x1b[28;3R');
+    badge(); await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+  });
+
+  it.each(['\x1b[28;3R', 'owner\x1b[28;3R', '\x1b[1;2R'])('keeps unsolicited or mixed input protected (%j)', async input => {
+    const { manager, session, at, emit, badge } = await fixture();
+    if (input.startsWith('owner')) emit('\x1b[6n');
+    manager.writeHumanInput(session.id, input); badge(); await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+  });
+
+  it('recognizes a split DSR query but refuses its expired reply', async () => {
+    const { manager, session, at, emit, badge } = await fixture();
+    emit('\x1b['); emit('6n');
+    await vi.advanceTimersByTimeAsync(10_001);
+    manager.writeHumanInput(session.id, '\x1b[28;3R'); badge(); await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+  });
+
   it('requires an older finished turn and fresh current composer evidence', async () => {
     const { manager, session, at, emit } = await fixture();
     expect(manager.retryPendingAutomaticPaste(session.id, at, NaN)).toBe(false);

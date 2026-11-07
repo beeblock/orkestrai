@@ -38,6 +38,7 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
+  let liveSessionId: string | null = null;
   const manager = new PtySessionManager(((command: string, args: string[], options: any) => {
     // Only an allowlist enters the CLI. Never read or forward the owner's accounts.
     const allowed = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'LANG', 'TERM'];
@@ -54,8 +55,13 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
       output = (output + chunk).slice(-32768);
       // This isolated TUI has no xterm viewer. Supply the terminal cursor/device
       // reports that the real renderer normally answers (especially on Windows).
-      if (chunk.includes('\x1b[6n')) child.write('\x1b[1;1R');
-      if (/\x1b\[(?:0)?c/.test(chunk)) child.write('\x1b[?1;2c');
+      // Use the same inbound path as xterm: bypassing it hid DSR replies
+      // incorrectly counted as owner edits, which disabled lost-Enter recovery.
+      queueMicrotask(() => {
+        if (!liveSessionId) return;
+        if (chunk.includes('\x1b[6n')) manager.writeHumanInput(liveSessionId, '\x1b[1;1R');
+        if (/\x1b\[(?:0)?c/.test(chunk)) manager.writeHumanInput(liveSessionId, '\x1b[?1;2c');
+      });
     });
     const write = child.write.bind(child);
     child.write = text => { if (dropEnter && text === '\r') { dropEnter = false; dropped++; } else write(text); };
@@ -70,6 +76,7 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
       '-c', `projects.${JSON.stringify(cwd)}.trust_level="trusted"`];
     const session = manager.create({ command: process.env.ORKESTRAI_TEST_CODEX_BINARY ?? 'codex', args, cwd, provider: 'codex',
       env: { CODEX_HOME: codexHome, HOME: home, USERPROFILE: home } });
+    liveSessionId = session.id;
     await expect.poll(() => output.includes('›'), { timeout: 30000, message: 'Codex did not reach its composer' }).toBe(true)
       .catch(error => { throw new Error(`${error.message}\n${output.slice(-8000)}`); });
     await new Promise(resolve => setTimeout(resolve, 3000));

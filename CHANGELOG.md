@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Keep requested terminal cursor-position reports out of the owner-edit guard so Codex can recover an unsent automatic paste on Windows/WSL. Preserve real owner edits, expired or unsolicited reports, working turns and exact delivery receipts.
+
 ## 0.52.3 - 2026-11-07
 
 ### Fixed

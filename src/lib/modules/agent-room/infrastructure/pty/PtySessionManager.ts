@@ -146,6 +146,8 @@ type PtySession = PtySessionInfo & {
   startupGuard: InteractiveStartupGuard | null;
   bracketedPaste: boolean;
   nativeComposerState?: 'idle' | 'working';
+  cursorReportExpectedUntil?: number;
+  cursorReportsPending?: number;
   terminalModeTail: string;
   scrollback: string;
   /** Modes in effect where the retained scrollback starts. */
@@ -516,6 +518,14 @@ export class PtySessionManager {
       if (retained.dropped) applyTerminalModes(session.trimmedModes, retained.dropped);
       session.scrollback = retained.kept;
       const modes = session.terminalModeTail + data;
+      // DSR replies are emitted by xterm, not the owner. ConPTY/Codex asks
+      // again on redraw, including long after startup. Correlate the reply
+      // with a fresh query so a modified F3 key is still a real owner edit.
+      const cursorQueries = [...modes.matchAll(/\x1b\[\??6n/g)].filter(match => match.index! + match[0].length > session.terminalModeTail.length).length;
+      if (cursorQueries) {
+        session.cursorReportsPending = Math.min(32, ((session.cursorReportExpectedUntil ?? 0) >= Date.now() ? session.cursorReportsPending ?? 0 : 0) + cursorQueries);
+        session.cursorReportExpectedUntil = Date.now() + 10_000;
+      }
       const composerState = nativeComposerState(session.provider, modes);
       if (composerState !== undefined) session.nativeComposerState = composerState;
       for (const match of modes.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
@@ -730,7 +740,15 @@ export class PtySessionManager {
     const imagePaste = options.imagePaste === true;
     // xterm sends focus/device/color reports through onData too. Those are
     // terminal protocol replies, not edits to the owner's draft.
-    const protocolOnly = /^(?:\x1b\[[IO]|\x1b\[[?>]?[\d;:]+c|\x1b\](?:10|11|12);rgba?:[a-fA-F\d/]+(?:\x07|\x1b\\))+$/.test(data);
+    let possibleProtocol = data;
+    if ((session.cursorReportExpectedUntil ?? 0) >= Date.now()) {
+      possibleProtocol = possibleProtocol.replace(/\x1b\[\??\d{1,5};\d{1,5}R/g, reply => {
+        if (!session.cursorReportsPending) return reply;
+        session.cursorReportsPending--;
+        return '';
+      });
+    }
+    const protocolOnly = data.length > 0 && (possibleProtocol === '' || /^(?:\x1b\[[IO]|\x1b\[[?>]?[\d;:]+c|\x1b\](?:10|11|12);rgba?:[a-fA-F\d/]+(?:\x07|\x1b\\))+$/.test(possibleProtocol));
     if (imagePaste || (data.length && !protocolOnly)) session.humanInputRevision += 1;
     if (session.deliveryInProgress) {
       session.deferredHumanInput.push({ data, imagePaste });
