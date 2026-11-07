@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { emulateSlowCpu } from './helpers';
 
 test('bounded previews preserve SVG pixels, transparency and aspect ratio', async ({ page, request }) => {
   const directory = await mkdtemp(join(tmpdir(), 'orkestrai-image-format-'));
@@ -14,6 +15,8 @@ test('bounded previews preserve SVG pixels, transparency and aspect ratio', asyn
     await request.post(`/api/agent-room/workspaces/${workspace.id}/nodes`, { data: {
       type: 'image', title: 'Vector reference', x: 100, y: 100, width: 320, height: 240, payload: { path: 'reference.svg' },
     } });
+    await page.addInitScript(id => localStorage.setItem(`orkestrai.canvasViewport.${id}`,
+      JSON.stringify({ x: 100, y: 100, zoom: 0.8 })), workspace.id);
     await page.goto(`/canvas?workspace=${workspace.id}`);
     const canvas = page.locator('.canvas-image canvas.ready');
     await expect(canvas).toHaveCount(1);
@@ -22,6 +25,18 @@ test('bounded previews preserve SVG pixels, transparency and aspect ratio', asyn
       center: [...surface.getContext('2d')!.getImageData(surface.width / 2, surface.height / 2, 1, 1).data],
       corner: [...surface.getContext('2d')!.getImageData(0, 0, 1, 1).data],
     }))).toEqual({ ratio: 2, center: [255, 204, 85, 255], corner: [0, 0, 0, 0] });
+    await page.locator('.svelte-flow__controls-zoomin').click();
+    await expect.poll(() => canvas.evaluate((surface: HTMLCanvasElement) => surface.width)).toBe(512);
+    await canvas.evaluate(surface => {
+      (window as any).__previewResizes = 0;
+      const observer = new MutationObserver(records => { (window as any).__previewResizes += records.length; });
+      observer.observe(surface, { attributes: true, attributeFilter: ['width', 'height'] });
+    });
+    const before = await page.locator('.zoom-level').innerText();
+    await page.locator('.svelte-flow__controls-zoomin').click();
+    await expect(page.locator('.zoom-level')).not.toHaveText(before);
+    await page.waitForTimeout(350);
+    expect(await page.evaluate(() => (window as any).__previewResizes)).toBe(0);
   } finally {
     await page.goto('about:blank');
     await request.delete(`/api/agent-room/workspaces/${workspace.id}`);
@@ -31,6 +46,7 @@ test('bounded previews preserve SVG pixels, transparency and aspect ratio', asyn
 
 for (const count of [300, 3000]) test(`${count} large image references keep bounded decodes and responsive Canvas input`, async ({ page, request }) => {
   test.setTimeout(150000);
+  await emulateSlowCpu(page);
   const directory = await mkdtemp(join(tmpdir(), 'orkestrai-image-scale-'));
   const response = await request.post('/api/agent-room/workspaces', { data: { name: `Image scale ${count}`, workingDir: directory } });
   const workspace = (await response.json()).data;
@@ -76,9 +92,15 @@ for (const count of [300, 3000]) test(`${count} large image references keep boun
     await expect(page.locator('.canvas-image')).toHaveCount(count, { timeout: 90000 });
     await expect.poll(() => page.locator('.canvas-image canvas.ready').count(), { timeout: 30000 }).toBeGreaterThan(2);
     const mountedMs = Date.now() - start;
+    await page.evaluate(firstId => {
+      (window as any).__imageScaleHandle = document.querySelector(`[data-id="${firstId}"] .node-handle`);
+    }, nodes[0].id);
     console.info(JSON.stringify({ count, mountedMs, phase: 'mounted', errors }));
     if (!process.env.ORKESTRAI_IMAGE_PROFILE) expect(mountedMs).toBeLessThan(10000);
-    if (process.env.ORKESTRAI_IMAGE_PROFILE) { profiler = await page.context().newCDPSession(page); await profiler.send('Profiler.enable'); await profiler.send('Profiler.start'); }
+    if (process.env.ORKESTRAI_IMAGE_PROFILE) {
+      profiler = await page.context().newCDPSession(page);
+      await profiler.send('Profiler.enable'); await profiler.send('Profiler.start');
+    }
     await expect(page.locator('.canvas-image .image-body img')).toHaveCount(0);
     await page.evaluate(() => {
       const gaps: number[] = []; let last = performance.now();
@@ -101,7 +123,7 @@ for (const count of [300, 3000]) test(`${count} large image references keep boun
     await page.mouse.move(pane.x + 400, pane.y + 200, { steps: 15 });
     await page.mouse.up(); await page.keyboard.up('Space');
     await page.waitForTimeout(700);
-    const sample = await page.evaluate(count => {
+    const sample = await page.evaluate(({ count, firstId }) => {
       cancelAnimationFrame((window as any).__imageScaleFrameId);
       const surfaces = [...document.querySelectorAll<HTMLCanvasElement>('.canvas-image canvas[data-image-preview]')];
       const gaps = (window as any).__imageScaleFrames as number[];
@@ -109,9 +131,11 @@ for (const count of [300, 3000]) test(`${count} large image references keep boun
         surfacePixels: surfaces.reduce((sum, canvas) => sum + canvas.width * canvas.height, 0),
         releasedSurfaces: count - surfaces.length + surfaces.filter(canvas => canvas.width === 1).length,
         mountedHeaders: document.querySelectorAll('.canvas-image .node-header').length,
+        retainedHandle: Boolean((window as any).__imageScaleHandle)
+          && (window as any).__imageScaleHandle === document.querySelector(`[data-id="${firstId}"] .node-handle`),
         ready: surfaces.filter(canvas => canvas.classList.contains('ready')).length,
         fetchPeak: (window as any).__imageScaleFetch.peak };
-    }, count);
+    }, { count, firstId: nodes[0].id });
     console.info(JSON.stringify({ count, mountedMs, reads, maximumConcurrentFetches: maximum, ...sample }));
     expect(sample.fetchPeak).toBeLessThanOrEqual(2);
     expect(sample.surfacePixels).toBeLessThanOrEqual(16 * 1024 * 1024 + count);
@@ -119,6 +143,7 @@ for (const count of [300, 3000]) test(`${count} large image references keep boun
     expect(sample.maxFrameGapMs).toBeLessThan(500);
     expect(sample.releasedSurfaces).toBeGreaterThan(count / 2);
     expect(sample.mountedHeaders).toBeLessThan(200);
+    expect(sample.retainedHandle).toBe(true);
     expect(errors).toEqual([]);
     await page.screenshot({ path: test.info().outputPath(`image-scale-${count}.png`) });
   } catch (error) {

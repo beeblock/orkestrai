@@ -69,3 +69,13 @@
 </script>
 
 <span hidden aria-hidden="true" bind:this={marker}></span>
+
+<style>
+  /* A zoomed-out node is a small, stable display surface. Keeping those
+     surfaces composited avoids Chromium repeatedly layerizing every header,
+     note and preview during camera transforms. Release the hint at readable
+     zoom; no extra full-resolution bitmap or workspace file is retained. */
+  :global(.svelte-flow[data-canvas-overview='true'] .svelte-flow__node) {
+    will-change: transform;
+  }
+</style>

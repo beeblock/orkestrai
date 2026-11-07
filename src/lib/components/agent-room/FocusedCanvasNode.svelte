@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { SvelteFlow, SvelteFlowProvider, type Node } from '@xyflow/svelte';
@@ -28,6 +29,7 @@
   import ComputerCanvasNode from './canvas/ComputerCanvasNode.svelte';
   import ToolWorkshopCanvasNode from './canvas/ToolWorkshopCanvasNode.svelte';
   import WorkbenchFileView from './WorkbenchFileView.svelte';
+  import { retainCanvasEdgeRuntime } from './canvas/edge-performance-runtime.svelte.js';
   import type { TerminalThemeName } from './terminal-themes.js';
   import type {
     AgentProviderInfo,
@@ -94,6 +96,7 @@
   };
 
   let host: HTMLDivElement;
+  onMount(retainCanvasEdgeRuntime);
   let hostWidth = $state(0);
   let hostHeight = $state(0);
   const providersReady = Promise.resolve();
@@ -243,6 +246,7 @@
       selectable: false,
       connectable: false,
       data: {
+        focusedView: true,
         title: node.title ?? '',
         workspaceId: workspace.id,
         workspaceName: workspace.name,

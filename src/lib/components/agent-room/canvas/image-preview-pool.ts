@@ -54,7 +54,8 @@ async function loadPreview(url: string, edge: number, signal: AbortSignal): Prom
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     const sourceWidth = vector ? vector.naturalWidth : original.width;
     const sourceHeight = vector ? vector.naturalHeight : original.height;
-    const ratio = Math.min(1, edge / Math.max(sourceWidth, sourceHeight));
+    const fit = edge / Math.max(sourceWidth, sourceHeight);
+    const ratio = vector ? fit : Math.min(1, fit);
     const width = Math.max(1, Math.round(sourceWidth * ratio)), height = Math.max(1, Math.round(sourceHeight * ratio));
     const surface = new OffscreenCanvas(width, height);
     const context = surface.getContext('2d', { willReadFrequently: true });

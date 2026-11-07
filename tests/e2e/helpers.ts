@@ -1,5 +1,14 @@
 import { expect, type Page } from '@playwright/test';
 
+/** Optional diagnosis on a slower renderer without relaxing performance gates. */
+export async function emulateSlowCpu(page: Page) {
+  if (!process.env.ORKESTRAI_CANVAS_CPU_RATE) return;
+  const rate = Number(process.env.ORKESTRAI_CANVAS_CPU_RATE);
+  if (!Number.isFinite(rate) || rate < 1 || rate > 6) throw new Error('Canvas CPU rate must be between 1 and 6');
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setCPUThrottlingRate', { rate });
+}
+
 /**
  * Makes provider-dependent canvas scenarios deterministic on clean CI hosts.
  * Provider detection itself is covered separately; these tests exercise the

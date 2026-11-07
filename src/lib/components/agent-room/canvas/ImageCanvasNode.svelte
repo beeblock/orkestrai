@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Handle, Position, type NodeProps } from '@xyflow/svelte';
+  import { Handle, Position, useNodes, useEdges, type NodeProps } from '@xyflow/svelte';
   import { Image as ImageIcon, ImagePlus, Columns2, LoaderCircle, WandSparkles, X } from '@lucide/svelte';
   import CreativeAssetActionDialog from '../CreativeAssetActionDialog.svelte';
   import CreativeAssetReviewDialog from '../CreativeAssetReviewDialog.svelte';
@@ -11,8 +11,10 @@
   import CanvasImagePreview from './CanvasImagePreview.svelte';
   import { canvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
   import { edgeIntersectsViewport } from './edge-performance.js';
+  import { floatingAnchorForSnapshot, nodeIndexFor } from './floating-anchor.js';
 
   export type ImageNodeData = {
+    focusedView?: boolean;
     title: string;
     workspaceId: string;
     payload: { path?: string; characterId?: string; characterDigest?: string };
@@ -32,14 +34,25 @@
   let editing = $state(false);
   let dragActive = $state(false);
   let uploading = $state(false);
+  let hovered = $state(false);
+  const nodesStore = useNodes(), edgesStore = useEdges();
+  const handleStyle = $derived.by(() => {
+    if (!data.connections?.length) return undefined;
+    const anchor = floatingAnchorForSnapshot(id, nodesStore.current, edgesStore.current);
+    const self = nodeIndexFor(nodesStore.current).get(id);
+    return anchor && self ? `left: ${anchor.x - self.position.x}px; top: ${anchor.y - self.position.y}px; right: auto; transform: translate(-50%, -50%);` : undefined;
+  });
   const inViewport = $derived.by(() => {
     const runtime = canvasEdgeRuntime.current, viewport = runtime.viewport;
     return Boolean(viewport && edgeIntersectsViewport({ ax: positionAbsoluteX, ay: positionAbsoluteY,
       bx: positionAbsoluteX + (width ?? 320), by: positionAbsoluteY + (height ?? 240) },
       viewport, runtime.width, runtime.height));
   });
-  const details = $derived(Boolean(selected || reviewing || editing || uploading)
-    || (inViewport && (width ?? 320) * (canvasEdgeRuntime.current.viewport?.zoom ?? 0.05) >= 140));
+  const readable = $derived(inViewport && (width ?? 320) * (canvasEdgeRuntime.current.viewport?.zoom ?? 0.05) >= 140);
+  // Full toolbar/tooltip trees are interaction controls, not zoom decoration.
+  // Creating dozens together caused long Svelte flushes on slower renderers.
+  const details = $derived(Boolean(data.focusedView || selected || reviewing || editing || uploading)
+    || (hovered && readable));
   const imageUrl = $derived(
     data.payload.path
       ? `/api/agent-room/workspaces/${data.workspaceId}/fs/raw?path=${encodeURIComponent(data.payload.path)}`
@@ -118,10 +131,16 @@
   }
 </script>
 
+<!-- Retain the handle across overview/detail changes. Remounting it schedules
+     XYFlow geometry updates for the whole graph on every viewport settlement. -->
+<div class="image-node-frame" style="--accent: var(--app-secondary)" role="presentation"
+  onpointerenter={() => hovered = true} onpointerleave={() => hovered = false}>
+<Handle type="source" position={Position.Right} class="node-handle" style={handleStyle} />
 {#if details}
 <NodeShell
   {id}
   {selected}
+  showHandle={false}
   class="canvas-image"
   deferOffscreen
   accent="var(--app-secondary)"
@@ -148,8 +167,8 @@
   {/snippet}
 
   {#if imageUrl}
-    <div class="image-body nodrag" onpaste={handlePaste} tabindex="-1" role="presentation">
-      <CanvasImagePreview src={imageUrl} alt={data.title || m['img.alt_fallback']()} selected={Boolean(selected)}
+    <div class="image-body nodrag" onpaste={handlePaste} tabindex="-1" role="img" aria-label={data.title || m['img.alt_fallback']()}>
+      <CanvasImagePreview src={imageUrl} alt={data.title || m['img.alt_fallback']()} selected={Boolean(selected || data.focusedView)} focused={data.focusedView}
         layoutWidth={width ?? 320} layoutHeight={Math.max(1, (height ?? 240) - 32)}
         animated={/\.(?:gif|apng|webp|svg)$/i.test(data.payload.path ?? '')} />
       {#if uploading}
@@ -181,21 +200,35 @@
   <!-- Keep graph handles/data, but no thousands of headers, tooltips, forms or
        offscreen canvases. Selected/editing/uploading images retain full controls. -->
   <div class="canvas-image image-tile" role="img" aria-label={data.title || m['img.alt_fallback']()}>
-    <Handle type="source" position={Position.Right} class="node-handle" />
+    {#if readable}<header class="image-caption"><ImageIcon size={13} /><span>{data.title || m['node.image']()}</span></header>{/if}
+    <div class="image-body image-tile-body">
     {#if inViewport && imageUrl}
       <CanvasImagePreview src={imageUrl} alt={data.title || m['img.alt_fallback']()}
-        layoutWidth={width ?? 320} layoutHeight={height ?? 240} />
+        layoutWidth={width ?? 320} layoutHeight={Math.max(1, (height ?? 240) - (readable ? 32 : 0))} />
     {/if}
+    </div>
   </div>
 {/if}
 <input bind:this={fileInput} type="file" accept="image/*" class="hidden-input" onchange={onFilePicked} />
+</div>
 
 {#if reviewing}<CreativeAssetReviewDialog bind:open={reviewing} workspaceId={data.workspaceId} initialNodeId={id} onOpenNode={data.onJumpToNode} />{/if}
 {#if editing}<CreativeAssetActionDialog bind:open={editing} workspaceId={data.workspaceId} nodeId={id} onOpenNode={data.onJumpToNode} />{/if}
 
 <style>
-  .image-tile { position: relative; width: 100%; height: 100%; border: 1px solid var(--app-border);
+  .image-node-frame { position: relative; width: 100%; height: 100%; }
+  .image-node-frame :global(.node-handle) { width: 12px; height: 12px; z-index: 20;
+    background: var(--accent); border: 2px solid var(--app-surface);
+    box-shadow: 0 0 0 2px var(--app-canvas), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    opacity: 0.95; transition: scale var(--duration-quick) var(--ease-smooth-out); }
+  .image-node-frame :global(.node-handle:hover) { scale: 1.25; }
+  .image-node-frame :global(.node-handle::after) { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
+  .image-tile { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; border: 1px solid var(--app-border);
     border-radius: 8px; background: var(--app-canvas); }
+  .image-caption { display: flex; align-items: center; gap: 8px; height: 32px; flex-shrink: 0;
+    padding: 0 10px; color: var(--app-text); background: var(--app-surface);
+    border-bottom: 1px solid var(--app-border); font-size: 12.5px; font-weight: 600; }
+  .image-caption span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .hidden-input {
     display: none;
   }

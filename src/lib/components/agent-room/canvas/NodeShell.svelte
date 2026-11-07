@@ -17,6 +17,8 @@
   type Props = {
     id: NodeProps['id'];
     selected: NodeProps['selected'];
+    /** A virtualized node can retain its connection handle outside this frame. */
+    showHandle?: boolean;
     /** Cor de destaque do tipo de no (borda selecionada / dot). */
     accent?: string;
     /** Thin outline color for the node's live state (a working agent glows gold). */
@@ -48,6 +50,7 @@
   let {
     id,
     selected,
+    showHandle = true,
     accent = 'var(--app-accent)',
     edge = null,
     minWidth = 320,
@@ -93,6 +96,7 @@
   // proximo do vizinho conectado mais perto — a mesma matematica da ancora
   // da corda (OrkestraiEdge), entao a ponta da corda sempre toca a bolinha.
   const floatingAnchor = $derived.by(() => {
+    if (!showHandle) return null;
     const absolute = floatingAnchorForSnapshot(id, nodesStore.current, edgesStore.current);
     if (!absolute) return null;
     const self = nodeIndexFor(nodesStore.current).get(id);
@@ -119,7 +123,7 @@
   <!-- Handle unico bidirecional (connectionMode Loose), estilo Maestri: sem
        conexoes fica na lateral direita; com conexoes flutua pela borda ate a
        ancora da corda (ver floatingAnchor acima). -->
-  <Handle type="source" position={Position.Right} class="node-handle" style={handleStyle} />
+  {#if showHandle}<Handle type="source" position={Position.Right} class="node-handle" style={handleStyle} />{/if}
 
   <header class="node-header">
     <span class="node-icon">{@render icon()}</span>

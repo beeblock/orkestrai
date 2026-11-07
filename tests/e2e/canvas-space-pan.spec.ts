@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 async function fixture(page: Page, request: APIRequestContext) {
   const directory = await mkdtemp(join(tmpdir(), 'orkestrai-space-pan-'));
-  await writeFile(join(directory, 'image.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=', 'base64'));
+  await writeFile(join(directory, 'image.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAAElFTkSuQmCC', 'base64'));
   const created = await request.post('/api/agent-room/workspaces', {
     data: { name: 'E2E large image group', workingDir: directory, codeIntelligenceMode: 'disabled' },
   });
@@ -127,6 +127,7 @@ test('Space preserves editing and modified shortcuts, resets on blur, and tempor
     await expect(field).toHaveValue('one two');
     await expect(area).not.toHaveClass(/hand-panning/);
 
+    await page.locator(`[data-id="${f.first.id}"]`).hover();
     await page.locator(`[data-id="${f.first.id}"] .node-title`).dblclick();
     const rename = page.locator(`[data-id="${f.first.id}"] input`).filter({ visible: true });
     await expect(rename).toBeVisible();

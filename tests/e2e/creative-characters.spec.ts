@@ -74,7 +74,7 @@ test('approves a character and drags its complete version into another workspace
     const nodes = (await (await request.get(`/api/agent-room/workspaces/${destination}/nodes`)).json()).data;
     expect(nodes.map((node: { type: string }) => node.type).sort()).toEqual(['group', 'image', 'note']);
     await library.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.locator('.canvas-image img')).toBeVisible();
+    await expect(page.locator('.canvas-image canvas.ready')).toBeVisible();
     await page.screenshot({ path: '/tmp/orkestrai-character-drop-light.png' });
     await request.put('/api/agent-room/settings', { data: { ...settings, uiLanguage: 'en', appTheme: 'orkestrai-dark' } });
     await page.setViewportSize({ width: 1024, height: 640 });

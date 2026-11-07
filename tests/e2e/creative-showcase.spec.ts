@@ -38,9 +38,9 @@ test('keeps a reference-led video draft readable in the Canvas in both themes', 
       await expect(page.locator('.canvas-note').getByRole('textbox')).toHaveValue(/Meet Nodo/);
       await page.locator('.canvas-note').getByRole('button', { name: 'View formatted', exact: true }).click();
       await expect(page.locator('.canvas-note')).toContainText('Meet Nodo');
-      const reference = page.locator('.svelte-flow__node').filter({ hasText: 'Nodo - opening reference' }).locator('img').first();
+      const reference = page.locator('.svelte-flow__node').filter({ hasText: 'Nodo - opening reference' }).locator('canvas.ready').first();
       await expect(reference).toBeVisible();
-      await expect.poll(() => reference.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+      await expect.poll(() => reference.evaluate((image: HTMLCanvasElement) => image.width)).toBeGreaterThan(1);
       await page.evaluate(() => document.fonts.ready);
       if (process.env.ORKESTRAI_SHOWCASE_DIR) {
         await mkdir(process.env.ORKESTRAI_SHOWCASE_DIR, { recursive: true });

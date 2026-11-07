@@ -1,18 +1,23 @@
 <script lang="ts">
   import { imagePreviewPool, observeImageVisibility, previewEdge } from './image-preview-pool.js';
   import { canvasEdgeRuntime } from './edge-performance-runtime.svelte.js';
-  let { src, alt, selected = false, animated = false, layoutWidth = 320, layoutHeight = 240 }: {
-    src: string; alt: string; selected?: boolean; animated?: boolean; layoutWidth?: number; layoutHeight?: number;
+  let { src, alt, selected = false, animated = false, focused = false, layoutWidth = 320, layoutHeight = 240 }: {
+    src: string; alt: string; selected?: boolean; animated?: boolean; focused?: boolean; layoutWidth?: number; layoutHeight?: number;
   } = $props();
   let surface = $state<HTMLCanvasElement>();
   let visible = $state(false);
   let ready = $state(false);
   let playing = $state(false);
   const animationOwner = {};
+  const active = $derived(visible && canvasEdgeRuntime.current.documentVisible);
+  const desiredEdge = $derived.by(() => {
+    const runtime = canvasEdgeRuntime.current;
+    return previewEdge(Math.max(layoutWidth, layoutHeight) * (focused ? 1 : runtime.viewport?.zoom ?? 1),
+      typeof window === 'undefined' ? 1 : window.devicePixelRatio, selected);
+  });
   $effect(() => { if (surface) return observeImageVisibility(surface, value => { visible = value; }); });
   $effect(() => {
-    const canvas = surface, zoom = canvasEdgeRuntime.current.viewport?.zoom ?? 1;
-    const active = visible && canvasEdgeRuntime.current.documentVisible;
+    const canvas = surface, edge = desiredEdge;
     const animate = selected && animated;
     if (!canvas) return;
     const discard = () => { if (canvas.width !== 1) canvas.width = 1; if (canvas.height !== 1) canvas.height = 1; ready = false; };
@@ -20,7 +25,6 @@
     if (!active) return;
     // XYFlow already owns the layout dimensions. Reading clientWidth after
     // clearing each canvas caused thousands of synchronous layout flushes.
-    const edge = previewEdge(Math.max(layoutWidth, layoutHeight) * zoom, window.devicePixelRatio, selected);
     if (!edge) return;
     const lease = imagePreviewPool.acquire(src, edge);
     let current = true;

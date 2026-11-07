@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createCanvas } from '@napi-rs/canvas';
 import WebSocket from 'ws';
+import { emulateSlowCpu } from './helpers';
 
 test('elastic edges settle without restarting from their own render updates', async ({ page, request }) => {
   test.setTimeout(60000);
@@ -158,6 +159,7 @@ test('overview defers terminal paint without stopping its PTY or losing its rend
 
 test('pans and zooms 399 loaded image, long-note and Portal nodes without losing their state', async ({ page, request }) => {
   test.setTimeout(150000);
+  await emulateSlowCpu(page);
   const settings = (await (await request.get('/api/agent-room/settings')).json()).data;
   const dir = await mkdtemp(join(tmpdir(), 'orkestrai-dense-canvas-'));
   const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'E2E dense creative canvas', workingDir: dir } })).json()).data;
@@ -265,6 +267,7 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     // Originals are decoded two at a time and closed; only visible display
     // rasters remain. Do not force all full-size originals into memory.
     await expect.poll(() => page.locator('.canvas-image canvas.ready').count(), { timeout: 30000 }).toBeGreaterThan(150);
+    await expect(hub).toHaveCSS('will-change', 'transform');
     await expect(page.locator('.canvas-image .image-body img')).toHaveCount(0);
     await expect(page.locator('.canvas-image canvas[data-image-preview]')).toHaveCount(208);
     expect(await page.locator('.canvas-image canvas[data-image-preview]').evaluateAll(canvases =>
@@ -275,6 +278,18 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       const note = (window as any).__retainedNote as HTMLTextAreaElement;
       note.value = 'Unsaved review draft';
       note.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // Find an actually empty hit target. At fit-view scale a fixed "margin"
+    // coordinate can land on a loaded image or an interactive node control.
+    const panStart = await page.locator('.svelte-flow__pane').evaluate(pane => {
+      const box = pane.getBoundingClientRect();
+      for (let y = box.top + 60; y < box.bottom - 100; y += 20) {
+        for (let x = box.left + 10; x < box.right - 10; x += 20) {
+          const hit = document.elementFromPoint(x, y);
+          if (hit && pane.contains(hit) && !hit.closest('.svelte-flow__node, .svelte-flow__panel, .svelte-flow__edge, button, input, textarea')) return { x, y };
+        }
+      }
+      throw new Error('Dense fixture has no empty canvas pan target');
     });
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(start => {
@@ -324,18 +339,6 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
     });
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-moving');
     const transform = await viewport.getAttribute('style');
-    // Find an actually empty hit target. At fit-view scale a fixed "margin"
-    // coordinate can land on a loaded image or an interactive node control.
-    const panStart = await page.locator('.svelte-flow__pane').evaluate(pane => {
-      const box = pane.getBoundingClientRect();
-      for (let y = box.top + 60; y < box.bottom - 100; y += 20) {
-        for (let x = box.left + 10; x < box.right - 10; x += 20) {
-          const hit = document.elementFromPoint(x, y);
-          if (hit && pane.contains(hit) && !hit.closest('.svelte-flow__node, .svelte-flow__panel, .svelte-flow__edge, button, input, textarea')) return { x, y };
-        }
-      }
-      throw new Error('Dense fixture has no empty canvas pan target');
-    });
     await page.mouse.move(panStart.x, panStart.y);
     await page.mouse.down();
     await page.mouse.move(panStart.x + 70, panStart.y + 120, { steps: 20 });
@@ -387,9 +390,10 @@ test('pans and zooms 399 loaded image, long-note and Portal nodes without losing
       await page.waitForTimeout(200);
     }
     await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-overview');
+    await expect(hub).toHaveCSS('will-change', 'auto');
     await expect(page.locator('.canvas-image .image-body img')).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).__retainedImage === document.querySelector('.canvas-image canvas[data-image-preview]'))).toBe(true);
-    await page.screenshot({ path: '/tmp/orkestrai-dense-canvas.png' });
+    await page.screenshot({ path: test.info().outputPath('dense-canvas.png') });
   } finally {
     await page.evaluate(() => { (window as any).__denseMotionObserver?.disconnect(); (window as any).__denseStopFrames?.(); }).catch(() => {});
     await request.put('/api/agent-room/settings', { data: settings });

@@ -78,7 +78,11 @@ skip decode entirely. Selected animated images can use their original renderer
 within the same pixel budget (at most two animations); comparison/review keeps
 the original asset. Creative dialogs mount only when opened. Workspace files,
 reference paths, alpha and aspect ratio are preserved; no thumbnails are written
-to disk. The regression fixtures exercise 300 and 3,000 large image references.
+to disk. The regression fixtures exercise 300 and 3,000 large image references. Image
+handles remain mounted; editing controls appear on hover/selection, while
+readable unselected images keep a lightweight title. Focus uses its own
+full-size image view, independent of the Canvas camera. Overview nodes reuse
+composited display surfaces during pan/zoom; readable zoom releases that hint.
 
 Connections remain solid while panning/zooming and in overview, avoiding native
 dash subdivision; readable idle zoom restores their decorative pattern.

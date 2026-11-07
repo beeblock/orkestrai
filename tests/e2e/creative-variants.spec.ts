@@ -20,6 +20,7 @@ test('reviews actual variants, invalidates changed evidence and shares video tra
     await add('image', 'Image B', 'image.png');
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(`/terminal?workspace=${workspaceId}&node=${image.id}`);
+    await expect(page.locator('.canvas-image canvas.ready')).toBeVisible();
     await page.getByRole('button', { name: 'Compare and review', exact: true }).click();
     const dialog = page.getByTestId('creative-asset-review');
     const left = dialog.getByRole('region', { name: 'A', exact: true });
