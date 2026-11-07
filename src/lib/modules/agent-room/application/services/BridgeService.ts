@@ -1,5 +1,6 @@
 import { Connection } from '@beeblock/svelar/database';
 import { randomBytes } from 'node:crypto';
+import { externalReplyCorrelation, externalReplyTarget, verifiesExternalReply, type ExternalReplyCredentials } from '../../infrastructure/ExternalReplyReceipt.js';
 import { constants as fsConstants } from 'node:fs';
 import { Event } from '@beeblock/svelar/events';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -89,6 +90,7 @@ export type BridgePortal = {
 };
 
 type BridgeAskInput = {
+  external?: ExternalReplyCredentials;
   to: string;
   message: string;
   from?: string | null;
@@ -103,7 +105,7 @@ type BridgeAskInput = {
   busyGraceMs?: number;
 };
 
-type BridgeAskResult = {
+export type BridgeAskResult = {
   to: string;
   reply: string;
   delivered: boolean;
@@ -111,6 +113,8 @@ type BridgeAskResult = {
   timedOut: boolean;
   messageId: string;
   deliveryState: 'replied' | 'delivered' | 'failed' | 'queued';
+  externalReply?: boolean;
+  error?: string;
   /** True when the agent inbox owns delivery and will route a late answer to the caller's inbox. */
   inbox?: boolean;
   /** Set when this message answered an ask whose caller was blocked; it is not typed again. */
@@ -341,8 +345,49 @@ export class BridgeService {
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.to);
     const origin = input.from ? this.findAgent(agents, input.from) : null;
+    if (input.external && !origin && this.isAgentTarget(target)) return this.askExternal(workspaceId, input, target);
     if (this.isAgentTarget(target)) return this.askAgent(workspaceId, input, target, origin);
     return this.askTerminal(workspaceId, input);
+  }
+
+  /** External MCP clients have a private return address, not a Canvas identity. */
+  private async askExternal(workspaceId: string, input: BridgeAskInput, target: BridgeAgent): Promise<BridgeAskResult> {
+    const external = input.external!;
+    if (input.from) throw new Error('An external caller cannot claim a Canvas sender.');
+    const correlationId = externalReplyCorrelation(external);
+    let envelope = await controlCenterRepository.findExternalAsk(workspaceId, correlationId);
+    const validateExisting = (saved: NonNullable<typeof envelope>) => {
+      if (!verifiesExternalReply(saved.metadata, external) || saved.toNodeId !== target.nodeId
+        || saved.content !== input.message.trim() || (saved.metadata.taskId ?? null) !== (input.taskId ?? null)) {
+        throw new Error('External request identity is already in use.');
+      }
+    };
+    if (envelope) validateExisting(envelope);
+    else {
+      await this.assertTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, null);
+      await this.messageTarget(workspaceId, target);
+      let release = () => {};
+      // Resolve the PTY before, and wait for replies after, this short transaction.
+      envelope = await Connection.transaction(async () => {
+        const existing = await controlCenterRepository.findExternalAsk(workspaceId, correlationId);
+        if (existing) { validateExisting(existing); return existing; }
+        const queued = await agentInboxService.enqueueDeferred({ workspaceId, fromNodeId: null, toNodeId: target.nodeId,
+          kind: 'ask', content: input.message, metadata: { correlationId,
+            ...(input.taskId ? { taskId: input.taskId } : {}), externalReply: externalReplyTarget(external) } });
+        release = queued.release;
+        return queued.envelope;
+      });
+      release();
+    }
+    if (envelope.state === 'queued') agentInboxService.kick(workspaceId, target.nodeId);
+    await agentInboxService.watchSavedReply(envelope.id);
+    const result = await agentInboxService.awaitReply(envelope.id, { timeoutMs: input.timeoutMs ?? DEFAULT_AGENT_ASK_WAIT_MS,
+      busyGraceMs: input.busyGraceMs, signal: input.signal, cancelQueuedOnAbort: false });
+    return { to: target.title, messageId: envelope.id, externalReply: true,
+      reply: result.state === 'replied' ? result.text : '', replyConfirmed: result.state === 'replied',
+      delivered: ['delivered', 'replied'].includes(result.state), timedOut: result.state === 'delivered',
+      deliveryState: result.state === 'sent' ? 'queued' : result.state,
+      ...(result.state === 'failed' ? { error: result.error } : {}) };
   }
 
   /**
@@ -408,7 +453,7 @@ export class BridgeService {
   }
 
   /** Explicit answer to one received message; routed to the blocked caller or the sender's inbox. */
-  async reply(workspaceId: string, input: { from: string; messageId: string; message: string }): Promise<{ messageId: string; to: string | null; via: 'waiter' | 'inbox' | 'none'; alreadyAnswered: boolean }> {
+  async reply(workspaceId: string, input: { from: string; messageId: string; message: string }): Promise<{ messageId: string; to: string | null; via: 'waiter' | 'inbox' | 'external' | 'none'; alreadyAnswered: boolean }> {
     const agents = await this.listAgents(workspaceId);
     const responder = this.findAgent(agents, input.from);
     const envelope = await controlCenterRepository.findEnvelope(input.messageId);
@@ -1688,6 +1733,7 @@ O time só rende quando cada agente trabalha em paralelo, sem esperar autorizaç
 - Uma tarefa direta do dono autoriza trabalhar até finalizar a entrega. Isso vale para todos os workspaces e agentes: não peça aprovação para cada etapa normal. Respeite restrições explícitas nas instruções/notas/Markdown do dono, pausas, gates configurados e consentimento real do sistema. Um blocker é daquele card: execute os demais cards independentes; não pare o time nem invente uma nova permissão.
 - Canvas nativo: use \`canvas_list\`, \`canvas_update_layout\`, \`shell_create\`, \`shell_update\`, \`shell_restart\`, \`note_archive\` e \`note_restore\` (CLI: \`orkestrai canvas list|layout|shell|shell-update|shell-restart|archive|restore --task <id> --input '<json>'\`). Corrija comando/cwd/título com shell_update e shell.revision; editar não digita no processo vivo. Para aplicar agora, shell_restart exige revisão e expectedSessionId de shell.sessionId (null só se parado); retry antigo não mata o substituto. Não recrie Shell para corrigir configuração. Verifique saúde antes de concluir. Não use Computer nem exija Accessibility/Screen Recording para operar o próprio Orkestrai. Portais usam suas próprias tools. Se seu MCP é antigo, use a CLI; reavalie bloqueio por tool ausente depois de atualizar o app.
 - Mensagens são assíncronas. \`ask\` entrega na hora a quem está livre; quem está no meio de um turno recebe pela caixa de entrada no próximo intervalo. Se o resultado vier \`queued\` ou sem resposta no prazo, NÃO reenvie e não fique esperando: continue o trabalho. A resposta chega à sua caixa de entrada (anexada às próximas respostas da ponte e das tools, ou via \`orkestrai inbox\`).
+- External MCP/CLI callers outside the Canvas have no agent inbox. An agent ask returns a private receiptId. Use MCP message_wait/message_read (messageId = receiptId) or orkestrai message wait/read <receiptId> to read the saved answer, including after reconnect. Retry an uncertain ask only with its original receiptId and unchanged content; never create another ask. Native agents may also read their own sent messageId. reply always answers the original sender, including external callers.
 - Mensagens recebidas trazem \`[orkestrai:message:<id>]\`. Responda perguntas com \`orkestrai reply <id> "<resposta>"\` (tool MCP \`reply\`), uma única vez. Nunca use \`ask\` para responder.
 - Especialista: feche o ciclo da sua tarefa — implemente, valide e conclua com \`orkestrai task done <id>\`. Em um andar, o trabalho pendente é commitado automaticamente ao concluir. Não peça "GO" ao líder a cada etapa; peça decisão só para o que é irreversível, arriscado ou fora do escopo.
 - Builds, suítes E2E, empacotamento e outras cargas pesadas: rode com \`orkestrai heavy -- <comando>\`. A fila da máquina libera a vez sozinha, por CPU, memória e disco. Nunca negocie "janelas exclusivas", "slots", "freezes" ou hashes por mensagem.

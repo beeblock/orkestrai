@@ -1,3 +1,6 @@
+import { ReadBridgeMessageAction } from '$lib/modules/agent-room/application/actions/ReadBridgeMessageAction.js';
+import { ReadBridgeMessageDTO } from '$lib/modules/agent-room/application/dto/ReadBridgeMessageDTO.js';
+import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -78,6 +81,98 @@ describe('Agent inbox', () => {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
     agentInboxService.reset();
     vi.restoreAllMocks();
+  });
+
+  function externalReceipt() { return { clientId: randomBytes(16).toString('hex'), requestId: randomBytes(16).toString('hex'), receipt: randomBytes(32).toString('hex') }; }
+  const readExternal = (workspaceId: string, external: ReturnType<typeof externalReceipt>, waitMs = 0, signal?: AbortSignal) =>
+    new ReadBridgeMessageAction().execute(new ReadBridgeMessageDTO(workspaceId, null, { external, waitMs }, signal));
+
+  it('keeps a private external return address and a late answer without a Canvas sender', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false;
+    const external = externalReceipt();
+    const asked = await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'External question', external, timeoutMs: 25, busyGraceMs: 15 });
+    expect(asked).toMatchObject({ externalReply: true, delivered: false, replyConfirmed: false });
+    const saved = await controlCenterRepository.findEnvelope(asked.messageId);
+    expect(saved?.fromNodeId).toBeNull();
+    expect(JSON.stringify(saved)).not.toContain(external.receipt);
+    expect(await readExternal(workspace.id, external)).toMatchObject({ deliveryState: 'queued', replyConfirmed: false });
+    await bridgeService.reply(workspace.id, { from: nodes.Web, messageId: asked.messageId, message: 'Actual answer' });
+    expect(await readExternal(workspace.id, external)).toMatchObject({ reply: 'Actual answer', replyConfirmed: true });
+    expect(await controlCenterRepository.inboxEnvelopes(nodes.Lider, ['queued', 'sent', 'delivered'])).toEqual([]);
+  });
+
+  it('deduplicates simultaneous external retries without holding the transaction while waiting', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false;
+    const external = externalReceipt();
+    const input = { to: nodes.Web, message: 'One question', external, timeoutMs: 25, busyGraceMs: 15 };
+    const results = await Promise.all([bridgeService.ask(workspace.id, input), bridgeService.ask(workspace.id, input)]);
+    expect(results[0].messageId).toBe(results[1].messageId);
+    expect(await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued', 'sent', 'delivered'])).toHaveLength(1);
+    await expect(bridgeService.ask(workspace.id, { ...input, message: 'Changed question' })).rejects.toThrow('already in use');
+    await expect(bridgeService.ask(workspace.id, { ...input, external: { ...external, receipt: '0'.repeat(64) } })).rejects.toThrow('already in use');
+  });
+
+  it('isolates external callers, workspaces and native senders', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false;
+    const external = externalReceipt();
+    const asked = await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Private question', external, timeoutMs: 25 });
+    const other = await workspaceRepository.createWorkspace({ name: 'other', workingDir: '/tmp' });
+    for (const [workspaceId, credential] of [[workspace.id, externalReceipt()], [workspace.id, { ...external, receipt: '0'.repeat(64) }], [other.id, external]] as const) {
+      await expect(readExternal(workspaceId, credential)).rejects.toThrow('not found');
+    }
+    await expect(new ReadBridgeMessageAction().execute(new ReadBridgeMessageDTO(workspace.id, nodes.Lider,
+      { messageId: asked.messageId, waitMs: 0 }))).rejects.toThrow('not found');
+  });
+
+  it('does not copy a combined structured answer between external callers', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false;
+    const a = externalReceipt(), b = externalReceipt();
+    const first = await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Question A', external: a, timeoutMs: 25 });
+    const second = await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Question B', external: b, timeoutMs: 25 });
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementation(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message }); session(input.nodeId).ready = false;
+    });
+    session(nodes.Web).ready = true; await agentInboxService.sweepNow();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].message).toContain(first.messageId);
+    expect(prompts[0].message).not.toContain(second.messageId);
+    replies.set(session(nodes.Web).agentSessionId!, 'Only the answer to A');
+    await agentInboxService.sweepNow();
+    expect(await readExternal(workspace.id, a)).toMatchObject({ replyConfirmed: true, reply: 'Only the answer to A' });
+    expect(await readExternal(workspace.id, b)).toMatchObject({ replyConfirmed: false, deliveryState: 'queued' });
+  });
+
+  it('does not withdraw an external queued message when its HTTP caller disconnects', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false;
+    const external = externalReceipt(); const abort = new AbortController();
+    const waiting = bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Keep queued', external, timeoutMs: 25_000, busyGraceMs: 25_000, signal: abort.signal });
+    await vi.waitFor(async () => expect((await controlCenterRepository.inboxEnvelopes(nodes.Web, ['queued']))).toHaveLength(1));
+    abort.abort(); await expect(waiting).rejects.toThrow('cancelled');
+    expect(await readExternal(workspace.id, external)).toMatchObject({ deliveryState: 'queued', replyConfirmed: false });
+    const abortRead = new AbortController(); const reading = readExternal(workspace.id, external, 25_000, abortRead.signal);
+    abortRead.abort(); await expect(reading).rejects.toThrow('cancelled');
+    expect(await readExternal(workspace.id, external)).toMatchObject({ deliveryState: 'queued' });
+  });
+
+  it('reactivates an external queued request when its result is read after a Core restart', async () => {
+    const { workspace, nodes } = await team(); session(nodes.Web).ready = false; const external = externalReceipt();
+    await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Resume this saved ask', external, timeoutMs: 25 });
+    agentInboxService.reset(); session(nodes.Web).ready = true;
+    await readExternal(workspace.id, external);
+    await vi.waitFor(() => expect(prompts.filter(prompt => prompt.nodeId === nodes.Web)).toHaveLength(1));
+    expect(await readExternal(workspace.id, external)).toMatchObject({ deliveryState: 'delivered' });
+  });
+
+  it('captures an external structured answer after the Core watcher is recreated', async () => {
+    const { workspace, nodes } = await team(); const external = externalReceipt();
+    const asked = await bridgeService.ask(workspace.id, { to: nodes.Web, message: 'Answer outside Canvas', external, timeoutMs: 100 });
+    await agentInboxService.sweepNow();
+    expect(prompts.some(prompt => prompt.message.includes(`orkestrai reply ${asked.messageId}`))).toBe(true);
+    expect(await controlCenterRepository.findEnvelope(asked.messageId)).toMatchObject({ state: 'delivered' });
+    agentInboxService.reset();
+    replies.set(session(nodes.Web).agentSessionId!, 'Saved structured response');
+    expect(await readExternal(workspace.id, external)).toMatchObject({ replyConfirmed: true, reply: 'Saved structured response' });
+    expect(prompts.filter(prompt => prompt.nodeId === nodes.Web)).toHaveLength(1);
   });
 
   it('finds owner input beyond fifty older non-task messages before applying the claim limit', async () => {

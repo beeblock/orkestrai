@@ -22,17 +22,39 @@ export const bridgeDesignApplySchema = applyDesignOperationsSchema.omit({ actor:
 
 export type BridgeDesignApplyInput = z.infer<typeof bridgeDesignApplySchema>;
 
+export const externalReplyCredentialsSchema = z.object({
+  clientId: z.string().regex(/^[a-f0-9]{32}$/),
+  requestId: z.string().regex(/^[a-f0-9]{32}$/),
+  receipt: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+export const bridgeMessageResultSchema = z.object({
+  messageId: z.string().uuid().optional(),
+  external: externalReplyCredentialsSchema.optional(),
+  waitMs: z.number().int().min(0).max(25_000).default(0),
+}).strict().superRefine((input, ctx) => {
+  if (Boolean(input.messageId) === Boolean(input.external)) {
+    ctx.addIssue({ code: 'custom', message: 'Provide a message id or an external return receipt.' });
+  }
+});
+export type BridgeMessageResultInput = z.infer<typeof bridgeMessageResultSchema>;
+
 export const bridgeAskSchema = z.object({
   token: z.string().trim().min(1).nullish(),
   to: z.string().trim().min(1, 'Informe o agente de destino (titulo ou id do no).'),
   message: z.string().min(1, 'Informe a mensagem.'),
   from: z.string().trim().nullish(),
+  external: externalReplyCredentialsSchema.optional(),
   /** Vincula a mensagem a uma tarefa para cancelar handoffs obsoletos antes do envio. */
   taskId: z.string().uuid().nullish(),
   /** Espera máxima pela resposta; agentes ocupados liberam o chamador antes e a resposta chega à caixa de entrada. */
   timeoutMs: z.coerce.number().int().min(1_000).max(600_000).optional(),
   /** Envia bytes brutos ao TUI (sem espera de resposta, sem CR extra). */
   raw: z.boolean().default(false),
+}).superRefine((input, ctx) => {
+  if (input.external && (input.from || input.raw)) {
+    ctx.addIssue({ code: 'custom', message: 'An external return receipt requires a structured ask without a Canvas sender.' });
+  }
 });
 
 export const bridgeReplySchema = z.object({

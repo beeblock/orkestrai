@@ -359,6 +359,13 @@ export class ControlCenterRepository {
     return model ? mapEnvelope(model) : null;
   }
 
+  /** Exact indexed lookup; never scan message bodies or all workspace metadata. */
+  async findExternalAsk(workspaceId: string, correlationId: string): Promise<AgentMessageEnvelopeData | null> {
+    const model = await AgentMessageEnvelope.query().where('workspace_id', workspaceId)
+      .where('correlation_id', correlationId).where('kind', 'ask').whereNull('from_node_id').first();
+    return model ? mapEnvelope(model) : null;
+  }
+
   /** Inbox items addressed to one agent, oldest first. */
   async inboxEnvelopes(toNodeId: string, states: AgentMessageDeliveryState[], limit = 50): Promise<AgentMessageEnvelopeData[]> {
     const rows = await AgentMessageEnvelope.query()
@@ -440,16 +447,12 @@ export class ControlCenterRepository {
 
   /** Questions from agents delivered since a time and still unanswered (reply capture survives restarts). */
   async awaitingReplies(sinceIso: string): Promise<AgentMessageEnvelopeData[]> {
-    const rows = await AgentMessageEnvelope.query()
-      .where('state', 'delivered')
-      .whereNotNull('from_node_id')
-      .where('delivered_at', '>=', sinceIso)
-      .where('metadata_json', 'like', '%"inbox":true%')
-      .where('metadata_json', 'like', '%"kind":"ask"%')
-      .orderBy('delivered_at', 'asc')
-      .limit(500)
-      .get();
-    return rows.map(mapEnvelope);
+    const base = () => AgentMessageEnvelope.query().where('state', 'delivered').where('delivered_at', '>=', sinceIso)
+      .where('metadata_json', 'like', '%"inbox":true%').where('metadata_json', 'like', '%"kind":"ask"%')
+      .orderBy('delivered_at', 'asc').limit(500);
+    const [agents, external] = await Promise.all([base().whereNotNull('from_node_id').get(),
+      base().whereNull('from_node_id').where('correlation_id', 'like', 'external:%').get()]);
+    return [...agents, ...external].map(mapEnvelope);
   }
 
   /** Inbox items for one agent carrying an exact dedup key, newest first. */

@@ -5,11 +5,13 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.52.4 - 2026-11-07
 
 ### Fixed
 
 - Keep requested terminal cursor-position reports out of the owner-edit guard so Codex can recover an unsent automatic paste on Windows/WSL. Preserve real owner edits, expired or unsolicited reports, working turns and exact delivery receipts.
+
+- Give external MCP/CLI asks a private, durable return receipt rather than promising delivery to a nonexistent Canvas inbox. Capture late structured replies, restore capture after Core restart, expose scoped message_read/message_wait operations, and make uncertain retries idempotent. Store only the receipt verifier on the server, and keep bounded private return keys outside the project. Native agents can read only their own sent messages.
 
 ## 0.52.3 - 2026-11-07
 

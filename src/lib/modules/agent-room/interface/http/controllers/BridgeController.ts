@@ -1,3 +1,6 @@
+import { ReadBridgeMessageDTO } from '../../../application/dto/ReadBridgeMessageDTO.js';
+import { ReadBridgeMessageAction } from '../../../application/actions/ReadBridgeMessageAction.js';
+import { ReadBridgeMessageRequest } from '../requests/ReadBridgeMessageRequest.js';
 import { MarkAttentionReadRequest } from '../requests/MarkAttentionReadRequest.js';
 import { MarkAttentionReadDto } from '../../../application/dto/MarkAttentionReadDto.js';
 import { markAttentionReadAction } from '../../../application/actions/MarkAttentionReadAction.js';
@@ -1467,12 +1470,22 @@ export class BridgeController extends Controller {
             from: input.from,
             taskId: input.taskId,
             timeoutMs: input.timeoutMs,
+            external: input.external,
             signal: event.request.signal,
           });
       return this.json({ data: result });
     } catch (error) {
       return this.errorResponse(error, 'Falha no ask.');
     }
+  }
+
+  async messageResult(event: any) {
+    try {
+      const input = await ReadBridgeMessageRequest.validate(event);
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = ptySessionManager.resolveBridgeAgent(workspace.id, String(event.request.headers.get('x-orkestrai-agent-token') ?? ''));
+      return this.json({ data: await new ReadBridgeMessageAction().execute(new ReadBridgeMessageDTO(workspace.id, actor, input, event.request.signal)) });
+    } catch (error) { return this.errorResponse(error, 'Message result unavailable.', 404); }
   }
 
   /** Explicit answer to a received message (orkestrai reply <messageId>). */

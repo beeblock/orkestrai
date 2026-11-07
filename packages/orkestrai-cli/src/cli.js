@@ -1,3 +1,4 @@
+import { externalMessages } from './external-messages.js';
 import { leadershipCliInput } from './leadership-reference.js';
 /**
  * CLI `orkestrai` — ponte entre agentes e o canvas do Orkestrai.
@@ -102,6 +103,7 @@ Uso:
   orkestrai ask <agente> <mensagem> [--from <agente>] [--task <id>] [--timeout <ms>] [--raw] [--json]
     Agentes ocupados recebem a mensagem pela caixa de entrada; a resposta chega a sua caixa sem reenvio.
   orkestrai inbox [--limit <n>] [--json]
+  orkestrai message read|wait <messageId-or-receiptId>
   orkestrai reply <messageId> <resposta>
   orkestrai heavy [--label <texto>] [--task <id>] -- <comando...>
     Builds, E2E e empacotamento aguardam vaga na fila da maquina (sem negociar janelas por mensagem).
@@ -471,12 +473,29 @@ async function runCommand(argv, options, sink) {
   // o handshake nunca morre por falta de .orkestrai/workspace.json.
   if (command === 'mcp') {
     const { runMcpServer } = await import('./mcp.js');
-    const mcpSink = { items: [], remaining: 0, graph: /** @type {GraphSnapshot | null} */ (null) };
+    const mcpSink = { items: /** @type {any[]} */ ([]), remaining: 0, graph: /** @type {GraphSnapshot | null} */ (null) };
+    const externalClients = new Map();
+    /** @type {(method: string, path: string, body?: any) => Promise<any>} */
+    const mcpBridge = async (method, path, body) => {
+      const resolved = resolveConfig(env, cwd);
+      /** @type {(method: string, path: string, body?: any) => Promise<any>} */
+      const call = (verb, url, payload) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, verb, url, payload,
+        { includeMeta: verb === 'GET' && /^\/api\/agent-room\/bridge\/tasks(?:\/history)?(?:\?|$)/.test(url) });
+      if (selfAgent) return call(method, path, body);
+      let client = externalClients.get(resolved.token);
+      if (!client) { client = externalMessages({ home: env.HOME || env.USERPROFILE || homedir(), token: resolved.token, call }); externalClients.set(resolved.token, client); }
+      if (method === 'POST' && path === '/api/agent-room/bridge/ask' && !body.raw) return client.ask(body);
+      if (method === 'POST' && path === '/api/agent-room/bridge/messages/result') return client.result(body.messageId, body.waitMs);
+      if (method === 'GET' && path.startsWith('/api/agent-room/bridge/inbox')) return client.inbox(Number(new URL(path, 'http://localhost').searchParams.get('limit')) || 10);
+      const value = await call(method, path, body);
+      const inbox = await client.inbox().catch(() => ({ items: [] }));
+      mcpSink.items.push(...inbox.items); client.acknowledge(inbox.items);
+      return value;
+    };
     await runMcpServer({
       input: options.input ?? process.stdin,
       write: options.write ?? ((chunk) => process.stdout.write(chunk)),
-      bridge: (method, path, body) => bridge({ ...resolveConfig(env, cwd), [INBOX_SINK]: mcpSink }, method, path, body,
-        { includeMeta: method === 'GET' && /^\/api\/agent-room\/bridge\/tasks(?:\/history)?(?:\?|$)/.test(path) }),
+      bridge: mcpBridge,
       drainInbox: () => {
         const digest = [formatInbox(mcpSink.items, mcpSink.remaining), formatGraphSnapshot(mcpSink.graph)].filter(Boolean).join('\n');
         mcpSink.graph = null;
@@ -491,6 +510,7 @@ async function runCommand(argv, options, sink) {
   }
 
   const config = { ...resolveConfig(env, cwd), [INBOX_SINK]: sink };
+  const externalClient = !selfAgent ? externalMessages({ home: env.HOME || env.USERPROFILE || homedir(), token: config.token, call: (method, path, body) => bridge(config, method, path, body) }) : null;
 
   if (command === 'guide') {
     const data = await bridge(config, 'GET', `/api/agent-room/bridge/guide${rest[0] ? `?topic=${encodeURIComponent(rest.join(' '))}` : ''}`);
@@ -568,11 +588,14 @@ async function runCommand(argv, options, sink) {
       const [to, ...messageParts] = rest;
       const message = messageParts.join(' ').trim();
       if (!to || !message) throw new Error('Uso: orkestrai ask <agente> <mensagem> [--from <agente>] [--task <id>] [--timeout ms]');
-      const data = await bridge(config, 'POST', '/api/agent-room/bridge/ask', {
+      /** @type {(body: Record<string, any>) => Promise<any>} */
+      const send = externalClient && !flags.from && !flags.raw ? body => externalClient.ask(body) : body => bridge(config, 'POST', '/api/agent-room/bridge/ask', body);
+      const data = await send({
         to,
         message,
         from: flags.from,
         taskId: flags.task,
+        receiptId: /** @type {any} */ (flags).receipt,
         timeoutMs: flags.timeout,
         raw: flags.raw || undefined,
       });
@@ -581,6 +604,10 @@ async function runCommand(argv, options, sink) {
       else if (data.replyConfirmed ?? (!data.timedOut && Boolean(data.reply))) {
         out(`Resposta confirmada de ${data.to} (mensagem ${data.messageId}):`);
         out(data.reply);
+      } else if (data.deliveryState === 'failed') {
+        out(`Mensagem ${data.messageId} falhou: ${data.error ?? 'consulte o resultado gravado'}`);
+      } else if (data.receiptId) {
+        out(`Mensagem ${data.messageId} registrada; resposta ainda pendente. Consulte orkestrai message wait ${data.receiptId}. Nao reenvie.`);
       } else if (data.answeredMessageId) {
         out(`Mensagem ${data.messageId} entregue a ${data.to} como resposta a pergunta ${data.answeredMessageId} que ele aguardava.`);
       } else if (data.inbox && data.deliveryState === 'queued') {
@@ -593,15 +620,25 @@ async function runCommand(argv, options, sink) {
         out(`Resposta nao confirmada de ${data.to}: timeout ou interrupcao. Nao trate esta tentativa como uma conversa concluida.`);
       }
       if (flags.raw) return data.sent ? 0 : 2;
+      if (data.receiptId) return data.deliveryState === 'failed' ? 2 : 0;
       // The inbox owns delivery and the eventual answer: not a failure.
       if (data.inbox || data.answeredMessageId) return 0;
       return (data.replyConfirmed ?? (!data.timedOut && Boolean(data.reply))) ? 0 : 2;
     }
     case 'inbox': {
+      if (externalClient) throw new Error('Outside Canvas use orkestrai message read|wait <receiptId> from your ask; an external terminal has no Canvas inbox.');
       const data = await bridge(config, 'GET', `/api/agent-room/bridge/inbox${flags.limit ? `?limit=${encodeURIComponent(flags.limit)}` : ''}`);
       if (flags.json) out(JSON.stringify(data, null, 2));
       else out(formatInbox(data.items, data.remaining) || '(caixa de entrada vazia)');
       return 0;
+    }
+    case 'message': {
+      const [operation, id] = rest;
+      if (!['read', 'wait'].includes(operation) || !id) throw new Error('Usage: orkestrai message read|wait <messageId-or-receiptId>');
+      const waitMs = operation === 'wait' ? 25_000 : 0;
+      const data = externalClient ? await externalClient.result(id, waitMs)
+        : await bridge(config, 'POST', '/api/agent-room/bridge/messages/result', { messageId: id, waitMs });
+      out(JSON.stringify(data, null, 2)); return 0;
     }
     case 'reply': {
       const [messageId, ...messageParts] = rest;
@@ -611,7 +648,7 @@ async function runCommand(argv, options, sink) {
       if (flags.json) out(JSON.stringify(data, null, 2));
       else if (data.alreadyAnswered) out(`A mensagem ${messageId} ja tinha resposta registrada; nada foi reenviado.`);
       else if (data.via === 'none') out(`Resposta registrada, mas a mensagem ${messageId} nao veio de um agente: nada foi encaminhado. Use orkestrai ask para falar com alguem.`);
-      else out(`Resposta registrada para ${data.to ?? 'o remetente'} (${data.via === 'waiter' ? 'entregue agora' : 'na caixa de entrada dele'}).`);
+      else out(`Resposta registrada para ${data.to ?? 'o remetente'} (${data.via === 'external' ? 'disponivel no recibo privado do remetente externo' : data.via === 'waiter' ? 'entregue agora' : 'na caixa de entrada dele'}).`);
       return 0;
     }
     case 'heavy': {

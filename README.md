@@ -295,6 +295,14 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   busy assignee. Builds, E2E suites and packaging wait in a machine-wide queue
   with `orkestrai heavy -- <command>`, and `orkestrai stats` reports delivery
   and reply latency, inbox depth and throughput.
+- **External terminals:** MCP/CLI callers outside the Canvas receive a private
+  `receiptId` for an agent ask. Use MCP `message_wait` / `message_read` (put that
+  value in `messageId`), or `orkestrai message wait|read <receiptId>`, to retrieve
+  a saved answer after the initial call or reconnect. An uncertain ask can be
+  retried with its original `receiptId` (CLI `--receipt`) and unchanged content;
+  it is never sent twice. Only claim a reply when `replyConfirmed` is true.
+  Return keys stay outside the project under the user's home. Native agents use
+  their own sent `messageId`; plain Shells retain synchronous output capture.
 - **Floors that land:** a Floor starts from the current main checkout,
   including uncommitted work, and shares installed dependencies. Finishing a
   task commits its Floor work; `floor land` merges on a clean checkout or, with

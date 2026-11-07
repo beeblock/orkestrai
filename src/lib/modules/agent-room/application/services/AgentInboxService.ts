@@ -24,6 +24,7 @@ import { providerProfileService } from './ProviderProfileService.js';
 import { agentStorageRoots } from '../../infrastructure/transcript/AgentStorageRoots.js';
 import { resolveWslTrackingContext, terminalExecutionRuntime, wslHostPath } from '../../infrastructure/WslRuntime.js';
 import type { TerminalNodePayload } from '../../domain/types.js';
+import { hasReplyRecipient, savedExternalReply } from '../../infrastructure/ExternalReplyReceipt.js';
 
 /**
  * Asynchronous per-agent inbox.
@@ -331,7 +332,7 @@ export class AgentInboxService {
    * `busyGraceMs` returns `queued`: the caller keeps working and the answer is
    * routed to its inbox later. A timeout never discards the eventual answer.
    */
-  async awaitReply(messageId: string, options: { timeoutMs: number; busyGraceMs?: number; signal?: AbortSignal }): Promise<InboxReplyResult> {
+  async awaitReply(messageId: string, options: { timeoutMs: number; busyGraceMs?: number; signal?: AbortSignal; cancelQueuedOnAbort?: boolean }): Promise<InboxReplyResult> {
     const current = await controlCenterRepository.findEnvelope(messageId);
     if (current?.state === 'replied') return { state: 'replied', text: current.reply ?? '', source: String(current.metadata.replySource ?? 'inbox') };
     if (current?.state === 'failed') return { state: 'failed', error: current.error ?? 'Falha na entrega.', cancelled: current.metadata.cancelled === true };
@@ -361,7 +362,7 @@ export class AgentInboxService {
         void (async () => {
           const envelope = await controlCenterRepository.findEnvelope(messageId).catch(() => null);
           // An undelivered message is withdrawn with its caller; a delivered one cannot be unsent.
-          if (envelope?.state === 'queued') await this.cancel(envelope, 'caller_cancelled').catch(() => undefined);
+          if (options.cancelQueuedOnAbort !== false && envelope?.state === 'queued') await this.cancel(envelope, 'caller_cancelled').catch(() => undefined);
           finish(new Error('Agent request cancelled.'));
         })();
       };
@@ -384,6 +385,26 @@ export class AgentInboxService {
     return Boolean(this.waiters.get(messageId)?.size);
   }
 
+  /** Reattach a saved ask on demand, including after a long Core restart. */
+  async watchSavedReply(messageId: string): Promise<void> {
+    const envelope = await controlCenterRepository.findEnvelope(messageId);
+    if (!envelope || envelope.kind !== 'ask' || !hasReplyRecipient(envelope) || envelope.state !== 'delivered') return;
+    if ([...this.replyWatches.values()].some(watch => watch.deadline > Date.now() && watch.messageIds.includes(messageId))) return;
+    const batchId = asString(envelope.metadata.batchId) ?? envelope.id;
+    const lead = typeof envelope.metadata.batchPrompt === 'string' ? envelope : await controlCenterRepository.batchLead(batchId);
+    if (!lead || typeof lead.metadata.batchPrompt !== 'string') return;
+    const deliveredAt = Date.parse(lead.deliveredAt ?? envelope.deliveredAt ?? '');
+    if (!Number.isFinite(deliveredAt)) return;
+    const key = `result:${messageId}`;
+    const watch: BatchTracking = { workspaceId: envelope.workspaceId, nodeId: envelope.toNodeId,
+      sessionId: asString(lead.metadata.sessionId) ?? '', prompt: lead.metadata.batchPrompt,
+      since: typeof lead.metadata.batchSince === 'number' ? lead.metadata.batchSince : deliveredAt - CONFIRMATION_WINDOW_MS,
+      messageIds: [messageId], deadline: Date.now() + REPLY_WATCH_MS };
+    this.replyWatches.set(key, watch);
+    await this.checkReply(key, watch);
+    if (this.replyWatches.has(key)) this.ensureTimer();
+  }
+
   /** Open asks from `askerNodeId` to `responderNodeId` whose caller is still blocked. */
   async waitingAsk(askerNodeId: string, responderNodeId: string): Promise<AgentMessageEnvelope | null> {
     const since = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
@@ -395,13 +416,13 @@ export class AgentInboxService {
    * Records the answer to an ask exactly once and delivers it to the blocked
    * caller, or to the asker's inbox when nobody is waiting anymore.
    */
-  async routeReply(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'none'; envelope: AgentMessageEnvelope | null }> {
+  async routeReply(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'external' | 'none'; envelope: AgentMessageEnvelope | null }> {
     // Concurrent answers (an explicit reply racing the transcript capture, two
     // reply calls) are serialized per message: exactly one is recorded and forwarded.
     return this.withLock(`reply:${messageId}`, () => this.routeReplyOnce(messageId, text, input));
   }
 
-  private async routeReplyOnce(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'none'; envelope: AgentMessageEnvelope | null }> {
+  private async routeReplyOnce(messageId: string, text: string, input: { source: string; responderNodeId?: string | null; metadata?: Record<string, unknown> }): Promise<{ routed: boolean; via: 'waiter' | 'inbox' | 'external' | 'none'; envelope: AgentMessageEnvelope | null }> {
     const envelope = await controlCenterRepository.findEnvelope(messageId);
     if (!envelope) throw new Error('Mensagem não encontrada.');
     if (input.responderNodeId && envelope.toNodeId !== input.responderNodeId) {
@@ -470,6 +491,7 @@ export class AgentInboxService {
         throw error;
       }
     }
+    if (savedExternalReply(updated.metadata)) return { routed: true, via: 'external', envelope: updated };
     return { routed: false, via: 'none', envelope: updated };
   }
 
@@ -746,6 +768,9 @@ export class AgentInboxService {
     const batch: AgentMessageEnvelope[] = [];
     let chars = 0;
     for (const envelope of live) {
+      // One external return address per structured prompt. A combined final
+      // answer must never be copied into another external caller's receipt.
+      if (batch.length && (savedExternalReply(batch[0].metadata) || savedExternalReply(envelope.metadata))) break;
       if (batch.length >= MAX_BATCH_ITEMS) break;
       if (batch.length && chars + envelope.content.length > MAX_BATCH_CHARS) break;
       if (!await taskExecutionService.admit(envelope, session.id)) continue;
@@ -889,7 +914,7 @@ export class AgentInboxService {
     }
     // Only questions from agents expect an automatic answer. Replies,
     // handoffs and notices never do, which rules out reply ping-pong.
-    if (envelopes.some((envelope) => envelope.kind === 'ask' && envelope.fromNodeId)) {
+    if (envelopes.some((envelope) => envelope.kind === 'ask' && hasReplyRecipient(envelope))) {
       this.replyWatches.set(batchId, { ...batch, deadline: Date.now() + REPLY_WATCH_MS });
       this.ensureTimer();
     }
@@ -954,7 +979,7 @@ export class AgentInboxService {
     this.replyWatches.delete(batchId);
     for (const messageId of tracking.messageIds) {
       const envelope = await controlCenterRepository.findEnvelope(messageId);
-      if (!envelope || envelope.kind !== 'ask' || !envelope.fromNodeId || envelope.state === 'replied') continue;
+      if (!envelope || envelope.kind !== 'ask' || !hasReplyRecipient(envelope) || envelope.state === 'replied') continue;
       await this.routeReply(messageId, match.text, {
         source: 'transcript',
         metadata: tracking.messageIds.length > 1 ? { batchReply: true } : {},
@@ -1144,14 +1169,17 @@ export class AgentInboxService {
   private itemPrompt(envelope: AgentMessageEnvelope, titles: Map<string, string>): string {
     const marker = `[orkestrai:message:${envelope.id}]`;
     if (envelope.kind !== 'ask') return `${marker} ${envelope.content}`;
-    if (!envelope.fromNodeId) return `${marker} ${envelope.content}`;
+    if (!envelope.fromNodeId) {
+      const external = savedExternalReply(envelope.metadata);
+      return external ? `${marker} Mensagem de external:${external.clientId.slice(0, 8)}: ${envelope.content}` : `${marker} ${envelope.content}`;
+    }
     const from = titles.get(envelope.fromNodeId) ?? 'agente';
     const taskId = asString(envelope.metadata.taskId);
     return `${marker} Mensagem de ${from}${taskId ? ` (tarefa ${taskId})` : ''}: ${envelope.content}`;
   }
 
   private compose(batch: AgentMessageEnvelope[], titles: Map<string, string>): string {
-    const asks = batch.filter((envelope) => envelope.kind === 'ask' && envelope.fromNodeId);
+    const asks = batch.filter((envelope) => envelope.kind === 'ask' && hasReplyRecipient(envelope));
     let footer = asks.length
       ? ` -- Para responder a uma pergunta: orkestrai reply ${asks.length === 1 ? asks[0].id : '<messageId>'} "<resposta>" (tool MCP reply). Sua resposta final neste turno também é encaminhada. Não peça reenvio.`
       : '';
