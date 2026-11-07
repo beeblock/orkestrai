@@ -39,7 +39,12 @@ test('reveals the exact source from image and editor headers without navigating 
     await page.screenshot({ path: testInfo.outputPath('source-buttons.png'), fullPage: true });
     await request.put('/api/agent-room/settings', { data: { ...original, uiLanguage: 'en', appTheme: 'orkestrai-light' } });
     await page.reload();
+    const lightImage = page.locator(`[data-id="${image.id}"]`);
+    // Image controls mount on hover/selection; the editor keeps its header.
+    await lightImage.hover();
     await expect(page.getByRole('button', { name: 'Show file in folder', exact: true })).toHaveCount(2);
+    await lightImage.getByRole('button', { name: 'Show file in folder', exact: true }).click();
+    await expect.poll(() => calls.filter(call => call.path === 'reference.svg' && call.select === true).length).toBe(2);
     await page.screenshot({ path: testInfo.outputPath('source-buttons-light.png'), fullPage: true });
   } finally {
     if (workspaceId) await request.delete(`/api/agent-room/workspaces/${workspaceId}`);
