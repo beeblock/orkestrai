@@ -30,10 +30,10 @@ env:
 
 jobs:
   windows-codex-soak:
-    if: github.event_name == 'workflow_dispatch' && inputs.windows_codex_soak
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.windows_codex_soak
     uses: ./.github/workflows/windows-codex-soak.yml
     with:
-      soak_seconds: ${{ inputs.windows_codex_soak_seconds || '3900' }}
+      soak_seconds: ${{ github.event_name == 'workflow_dispatch' && inputs.windows_codex_soak && inputs.windows_codex_soak_seconds || '0' }}
   relay-container:
     name: Verify production relay container
     runs-on: ubuntu-latest
@@ -251,7 +251,7 @@ jobs:
 
   production-bundle:
     name: Publish tested production bundle
-    needs: [verify, browser-tests, windows-native, relay-container, secrets]
+    needs: [verify, browser-tests, windows-native, windows-codex-soak, relay-container, secrets]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

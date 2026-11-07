@@ -328,6 +328,20 @@ describe('packaged updater', () => {
     expect(shim).toContain('ORKESTRAI_CLI_RUNTIME = launcherRuntime');
   });
 
+  it('requires a real Windows Codex delivery before a production candidate can ship', () => {
+    const ci = parse(readFileSync(path.resolve('.github/workflows/ci.yml'), 'utf8'));
+    const native = ci.jobs['windows-codex-soak'];
+    expect(native.if).toContain("github.event_name == 'push'");
+    expect(native.if).toContain("github.event_name == 'pull_request'");
+    expect(native.uses).toBe('./.github/workflows/windows-codex-soak.yml');
+    expect(native.with.soak_seconds).toContain("|| '0'");
+    expect(ci.jobs['production-bundle'].needs).toContain('windows-codex-soak');
+    const runner = readFileSync(path.resolve('.github/workflows/windows-codex-soak.yml'), 'utf8');
+    expect(runner).toContain("ORKESTRAI_REAL_CODEX_TEST: '1'");
+    expect(runner).toContain('tests/feature/codex-tui-delivery.test.ts');
+    expect(runner).toContain('Codex archive digest mismatch');
+  });
+
   it('requires trusted signing for releases while preserving the local ad-hoc fallback', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
     const packageScript = readFileSync(path.resolve('scripts/package-macos.sh'), 'utf8');

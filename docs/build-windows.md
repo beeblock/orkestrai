@@ -103,6 +103,11 @@ Artefatos em `release/`:
 
 ## Testes (opcional mas recomendado)
 
+O CI de cada push e PR executa o Codex oficial no ConPTY nativo, com respostas
+de modelo locais e sem credenciais. A publicação exige esse teste de entrega.
+O workflow manual do CI também permite 3.900 segundos para testar além de uma
+hora, em paralelo às outras verificações.
+
 ```powershell
 npm test          # vitest (unit + feature)
 npx playwright test   # e2e contra build de producao (PORT=5199)
