@@ -91,7 +91,7 @@ describe('tested portable production bundle', () => {
     expect(browserDownload.with['digest-mismatch']).toBe('error');
     expect(browsers.steps.some((step: { run?: string }) => step.run?.includes('production-bundle.mjs verify'))).toBe(true);
     const promotion = ci.jobs['production-bundle'];
-    expect([...promotion.needs].sort()).toEqual(['verify', 'browser-tests', 'windows-native', 'relay-container', 'secrets'].sort());
+    expect([...promotion.needs].sort()).toEqual(['verify', 'browser-tests', 'windows-native', 'windows-codex-soak', 'relay-container', 'secrets'].sort());
     expect(promotion.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
     expect(promotion.if).not.toMatch(/always|cancelled/);
     const steps = promotion.steps;
