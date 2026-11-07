@@ -1,6 +1,6 @@
 import { mkdir, open, opendir, readdir, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
-import { Readable } from 'node:stream';
+import { addAbortSignal, Readable } from 'node:stream';
 import { promisify } from 'node:util';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
@@ -386,19 +386,28 @@ export class FilesystemService {
 
   /** HTTP previews/downloads do not buffer the entire asset on the Core heap. */
   async streamBinary(workspaceId: string, path: string, signal?: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; size: number; contentType: string; name: string }> {
+    signal?.throwIfAborted();
     const file = await this.resolveSafe(workspaceId, path);
     if (!(await stat(file)).isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
     const handle = await open(file, 'r');
     try {
       const info = await handle.stat();
+      signal?.throwIfAborted();
       if (!info.isFile()) throw new Error(`Arquivo nao encontrado: ${path}`);
       if (!info.size) {
         await handle.close();
         return { body: new ReadableStream({ start: controller => controller.close() }), size: 0, ...this.binaryMetadata(file) };
       }
       // Backpressure is measured in bytes, rather than 64K chunks of 64K bytes.
-      const stream = handle.createReadStream({ highWaterMark: 64 * 1024, end: info.size - 1, signal });
+      // Install the Web adapter before cancellation can destroy the source.
+      // A pre-aborted constructor otherwise emits an error after toWeb has
+      // already treated the source as closed, terminating Core unhandled.
+      const stream = handle.createReadStream({ highWaterMark: 64 * 1024, end: info.size - 1 });
+      // toWeb forwards read errors while active, but can detach its listener
+      // on consumer cancellation. Keep that stream-local late error observed.
+      stream.on('error', () => {});
       const body = Readable.toWeb(stream, { strategy: { highWaterMark: 64 * 1024, size: chunk => chunk.byteLength } }) as ReadableStream<Uint8Array>;
+      if (signal) addAbortSignal(signal, stream);
       return { body, size: info.size, ...this.binaryMetadata(file) };
     } catch (error) { await handle.close(); throw error; }
   }

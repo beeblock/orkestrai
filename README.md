@@ -83,6 +83,8 @@ handles remain mounted; editing controls appear on hover/selection, while
 readable unselected images keep a lightweight title. Focus uses its own
 full-size image view, independent of the Canvas camera. Overview nodes reuse
 composited display surfaces during pan/zoom; readable zoom releases that hint.
+Cancelling a preview closes its file stream without terminating Core; read
+failures still reach active consumers.
 
 Connections remain solid while panning/zooming and in overview, avoiding native
 dash subdivision; readable idle zoom restores their decorative pattern.

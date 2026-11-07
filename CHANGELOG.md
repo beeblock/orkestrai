@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Keep cancelled asset streams from crashing Core. Reject already-aborted requests before opening files, install Web-stream error handling before wiring cancellation, close file handles, and preserve read failures for active consumers.
+
 - Preserve pending bridge status until delivery is confirmed, keep Codex submissions serialized through working turns, and match the exact saved conversation even when Windows delays its file timestamp. Treat native done/error composer states as input-ready while preserving explicit blocked states.
 
 - Observe native Codex idle reports and wait for an owned paste echo on ConPTY before submitting. Recover first-turn pastes without requiring a prior transcript, tolerate only the extra newlines from Orkestrai's own Enter attempts, and keep working turns protected from repaint-driven idle detection.

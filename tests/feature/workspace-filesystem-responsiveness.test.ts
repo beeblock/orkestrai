@@ -186,6 +186,63 @@ describe('workspace I/O without Code Intelligence', () => {
     } finally { release(); await pending; vi.unstubAllEnvs(); }
   });
 
+  it('rejects an already-aborted asset request before opening a file', async () => {
+    const { root, workspace } = await fixture();
+    await fsp.writeFile(join(root, 'cancelled.bin'), Buffer.alloc(64 * 1024));
+    const abort = new AbortController(); abort.abort();
+    const opening = vi.spyOn(fsp, 'open'); syncBuiltinESMExports();
+    await expect(new FilesystemService().streamBinary(workspace.id, 'cancelled.bin', abort.signal))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(opening).not.toHaveBeenCalled();
+  });
+
+  it('keeps Core alive when a request aborts while its asset stream is being constructed', async () => {
+    const { root, workspace } = await fixture();
+    const path = join(root, 'cancelled.bin');
+    await fsp.writeFile(path, Buffer.alloc(64 * 1024));
+    const abort = new AbortController();
+    const originalOpen = fsp.open;
+    let stream: fs.ReadStream | undefined;
+    vi.spyOn(fsp, 'open').mockImplementation(async (file, flags, mode) => {
+      const handle = await originalOpen(file, flags, mode);
+      if (String(file) === path) {
+        const create = handle.createReadStream.bind(handle);
+        handle.createReadStream = options => {
+          abort.abort();
+          stream = create(options);
+          return stream;
+        };
+      }
+      return handle;
+    });
+    syncBuiltinESMExports();
+    const file = await new FilesystemService().streamBinary(workspace.id, 'cancelled.bin', abort.signal);
+    await expect(file.body.getReader().read()).rejects.toMatchObject({ name: 'AbortError' });
+    await expect.poll(() => stream?.closed).toBe(true);
+  });
+
+  it('preserves file read errors for an active asset consumer', async () => {
+    const { root, workspace } = await fixture();
+    const path = join(root, 'failed.bin');
+    await fsp.writeFile(path, Buffer.alloc(64 * 1024));
+    const originalOpen = fsp.open;
+    let stream: fs.ReadStream | undefined;
+    vi.spyOn(fsp, 'open').mockImplementation(async (file, flags, mode) => {
+      const handle = await originalOpen(file, flags, mode);
+      if (String(file) === path) {
+        const create = handle.createReadStream.bind(handle);
+        handle.createReadStream = options => { stream = create(options); return stream; };
+      }
+      return handle;
+    });
+    syncBuiltinESMExports();
+    const file = await new FilesystemService().streamBinary(workspace.id, 'failed.bin');
+    const failure = new Error('Fixture read failure');
+    stream!.destroy(failure);
+    await expect(file.body.getReader().read()).rejects.toThrow('Fixture read failure');
+    await expect.poll(() => stream?.closed).toBe(true);
+  });
+
   it('streams a large asset with bounded chunks, preserving bytes and closing on cancellation', async () => {
     const { root, workspace } = await fixture();
     const path = join(root, 'large-asset.bin');

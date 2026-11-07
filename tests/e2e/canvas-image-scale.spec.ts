@@ -44,6 +44,43 @@ test('bounded previews preserve SVG pixels, transparency and aspect ratio', asyn
   }
 });
 
+test('cancelled asset responses leave Core responsive for the next Canvas request', async ({ page, request }) => {
+  const directory = await mkdtemp(join(tmpdir(), 'orkestrai-asset-cancellation-'));
+  await writeFile(join(directory, 'asset.bin'), Buffer.alloc(8 * 1024 * 1024, 0x5a));
+  const response = await request.post('/api/agent-room/workspaces', { data: {
+    name: 'Asset cancellation QA', workingDir: directory, codeIntelligenceMode: 'disabled',
+  } });
+  const workspace = (await response.json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  try {
+    await page.goto(`/canvas?workspace=${workspace.id}`);
+    for (let round = 0; round < 4; round++) {
+      await page.evaluate(async ({ url, round }) => {
+        await Promise.all(Array.from({ length: 8 }, async (_, index) => {
+          const abort = new AbortController();
+          const timer = setTimeout(() => abort.abort(), (index + round) % 8);
+          try {
+            const response = await fetch(url, { signal: abort.signal, cache: 'no-store' });
+            if (!response.ok) throw new Error(`Asset response ${response.status}`);
+            const reader = response.body?.getReader();
+            if (reader) { await reader.read(); await reader.cancel(); }
+          } catch (error) {
+            if (!(error instanceof DOMException) || error.name !== 'AbortError') throw error;
+          } finally { clearTimeout(timer); }
+        }));
+      }, { url: `${base}/fs/raw?path=asset.bin`, round });
+      // This server has no restart supervisor: a fatal stream error cannot be
+      // hidden by reconnecting to a fresh Core between cancellation rounds.
+      expect((await request.get('/api/agent-room/settings')).ok()).toBe(true);
+    }
+    expect((await request.get(`${base}/nodes`)).ok()).toBe(true);
+  } finally {
+    await page.goto('about:blank').catch(() => {});
+    await request.delete(base);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 for (const count of [300, 3000]) test(`${count} large image references keep bounded decodes and responsive Canvas input`, async ({ page, request }) => {
   test.setTimeout(150000);
   await emulateSlowCpu(page);
