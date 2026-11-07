@@ -19,6 +19,10 @@ permissions:
 jobs:
   codex-conpty:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        codex_version: ['0.166.0', '0.167.0']
     timeout-minutes: 85
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
@@ -39,26 +43,28 @@ jobs:
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'codex-fixture.zip'
           $destination = Join-Path $env:RUNNER_TEMP 'codex-fixture'
-          Invoke-WebRequest 'https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-pc-windows-msvc.exe.zip' -OutFile $archive
+          $expectedVersion = '${{ matrix.codex_version }}'
+          Invoke-WebRequest "https://github.com/openai/codex/releases/download/rust-v$expectedVersion/codex-x86_64-pc-windows-msvc.exe.zip" -OutFile $archive
           $digest = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($digest -ne '94b51ca84648a6923784ef71f06e2feb1e10796ddb3f5d033ccb0fbe8daa2f16') { throw 'Codex archive digest mismatch' }
+          $expectedDigest = if ($expectedVersion -eq '0.166.0') { 'bf67d9662ed539f305849b74ad6420cc7b23aa2be07753710ca3db9134a0246d' } else { '94b51ca84648a6923784ef71f06e2feb1e10796ddb3f5d033ccb0fbe8daa2f16' }
+          if ($digest -ne $expectedDigest) { throw 'Codex archive digest mismatch' }
           Expand-Archive $archive -DestinationPath $destination
           $binaries = @(Get-ChildItem $destination -Recurse -File | Where-Object { $_.Name -in @('codex.exe', 'codex-x86_64-pc-windows-msvc.exe') })
           if ($binaries.Count -ne 1) { throw 'Missing or ambiguous official Codex TUI executable' }
           $binary = $binaries[0]
           $version = & $binary.FullName --version
-          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^codex-cli 0\.167\.0') { throw 'Unexpected Codex TUI executable/version' }
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch ('^codex-cli ' + [regex]::Escape($expectedVersion))) { throw 'Unexpected Codex TUI executable/version' }
           "ORKESTRAI_TEST_CODEX_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
       - name: Check Windows recovery guards
         run: npm test -- --run tests/unit/codex-paste-submit.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
       - name: Exercise real Codex over native ConPTY with loopback-only model responses
         shell: pwsh
         run: |
-          npm test -- --run tests/feature/codex-tui-delivery.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
+          npm test -- --run tests/feature/codex-tui-delivery.test.ts tests/feature/codex-tui-canvas-submit.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
           if ($LASTEXITCODE -ne 0) { throw 'Real Codex TUI delivery failed' }
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: windows-codex-soak-log
+          name: windows-codex-soak-log-${{ matrix.codex_version }}
           path: windows-codex-soak.log
           retention-days: 7
