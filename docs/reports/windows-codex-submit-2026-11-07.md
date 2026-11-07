@@ -28,6 +28,12 @@ The fix disregards only the cursor-bounded blank footer cleanup. Unknown
 clears, edits, working turns and real human input still refuse automatic Enter.
 Message text is never retyped by this recovery.
 
+The final review also reproduced a second recovery guard failure: once fresh
+output pushed the paste's write mark outside the 256 KiB retention window,
+recovery stopped even when a new matching badge remained visible. Every
+retained byte is newer than the lost mark, so the fix inspects that fresh
+window instead of rejecting it. Missing current badges still refuse recovery.
+
 Evidence:
 - Before: https://github.com/beeblock/orkestrai/actions/runs/42411176486
 - After: https://github.com/beeblock/orkestrai/actions/runs/42412168517
@@ -91,3 +97,14 @@ the fixture now verifies the actual hit target.
 - Heavy image workspace assignment and automatic dispatcher progression.
 - Archived title lookup and active-Floor scoping.
 - Navigation pause/backlog limits, retained node bodies and terminal output.
+
+## Candidate verification
+
+- Full local suite after task dispatch changes: 3,167 passed, 24 skipped.
+- Subsequent retained-scrollback fix: 44 focused tests passed, including the
+  regression that fails before that fix; exact-source full CI remains required.
+- Production build completed successfully.
+- Six production-browser tests passed, including 36 Conversation/Canvas
+  switches with eight terminals (maximum first paint 945 ms), 150 real nodes
+  without pan reattachment, and a 399-node creative fixture. These are bounded
+  tests, not evidence that a one-day memory leak or every remote stall is gone.

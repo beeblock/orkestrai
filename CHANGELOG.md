@@ -5,9 +5,11 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
-## Unreleased
+## 0.52.5 - 2026-11-07
 
 ### Fixed
+
+- Keep owned-paste recovery active after a noisy terminal rolls its original write mark out of retained scrollback. Inspect only the newer retained output, still requiring a current matching paste badge and preserving human-edit, working-turn and exact-receipt guards.
 
 - Keep task dispatch independent of unrelated Canvas image payloads. Read lightweight agent/note identities for inbox routing and board titles, restrict leader lookups to terminals, and bound optional learning recall to 400 ms with shared, capped background reads so a stalled lookup cannot strand a saved assignment before it reaches the inbox.
 

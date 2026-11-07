@@ -1218,8 +1218,11 @@ export class PtySessionManager {
       || Date.now() - (delivery.pasteRetryAt ?? submittedAt) < 5000
       || (session.nativeComposerState !== 'idle' && Date.now() - session.lastOutputAt < SESSION_IDLE_MS)) return false;
     const retainedFrom = session.outputLength - session.scrollback.length;
-    if (delivery.pasteOutputStart === undefined || delivery.pasteOutputStart < retainedFrom) return false;
-    const freshOutput = session.scrollback.slice(delivery.pasteOutputStart - retainedFrom);
+    if (delivery.pasteOutputStart === undefined) return false;
+    // If retention passed the write mark, every retained byte is newer than
+    // this paste. Trimming old output must not disable recovery of a fresh
+    // current badge; the owned-paste and human-edit guards still apply.
+    const freshOutput = session.scrollback.slice(Math.max(0, delivery.pasteOutputStart - retainedFrom));
     const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard, 1 + (delivery.pasteRetryCount ?? 0));
     if (!pending) return false;
     if (!this.submitIfComposerFree(id)) return false;
@@ -1354,8 +1357,8 @@ export class PtySessionManager {
       const outputQuiet = !sawComposerOutput || now - session.lastOutputAt >= COMPOSER_OUTPUT_QUIET_MS;
       const expectsEcho = expectsPasteEcho(session.provider, delivery.text, session.conptySubmitGuard);
       const retainedFrom = session.outputLength - session.scrollback.length;
-      const echoed = expectsEcho && delivery.pasteOutputStart! >= retainedFrom
-        && hasPendingAutomaticPaste(session.provider, session.scrollback.slice(delivery.pasteOutputStart! - retainedFrom), delivery.text, session.startupGuard);
+      const echoed = expectsEcho && delivery.pasteOutputStart !== undefined
+        && hasPendingAutomaticPaste(session.provider, session.scrollback.slice(Math.max(0, delivery.pasteOutputStart - retainedFrom)), delivery.text, session.startupGuard);
       if (echoed && delivery.pasteEchoAt === undefined) delivery.pasteEchoAt = now;
       const echoReady = echoed && now - (delivery.pasteEchoAt ?? now) >= COMPOSER_OUTPUT_QUIET_MS;
       if (elapsed < submitDelayMs || (elapsed < COMPOSER_SETTLE_LIMIT_MS && (expectsEcho ? !echoReady : !outputQuiet))) {

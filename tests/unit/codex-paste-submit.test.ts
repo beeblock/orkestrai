@@ -91,6 +91,21 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(writes.filter(value => value.includes(text))).toHaveLength(1);
   });
 
+  it('recovers when fresh redraws roll the paste mark out of retained scrollback', async () => {
+    const { manager, session, at, badge, emit, writes, text } = await fixture();
+    emit('redraw output '.repeat(30000)); badge();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+    expect(writes.filter(value => value.includes(text))).toHaveLength(1);
+  });
+
+  it('does not recover after retention loses the current paste evidence', async () => {
+    const { manager, session, at, emit } = await fixture();
+    emit('redraw output '.repeat(30000));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
+  });
+
   it('recovers an aged Windows session using Enter only, retaining the exact receipt identity', async () => {
     const { manager, session, writes, at, badge, text } = await fixture();
     expect(writes).toContain(`\x1b[200~${text}\x1b[201~`);
