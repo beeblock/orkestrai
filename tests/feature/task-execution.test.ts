@@ -102,7 +102,19 @@ describe('durable task execution custody',()=>{
     const f=await fixture();const a=await f.task();const first=(await f.claim(a))!;
     await repository.submitted(first.id);await repository.releaseUnsubmitted(first.id);
     expect(await repository.current(f.workspace.id,a)).toMatchObject({state:'dispatching',acceptedAt:null});
+    await repository.accepted(first.id, false);
+    expect(await repository.current(f.workspace.id,a)).toMatchObject({state:'dispatching',acceptedAt:null});
     await repository.accepted(first.id);expect(await repository.current(f.workspace.id,a)).toMatchObject({state:'running'});
+  });
+  it('repairs legacy running attempts without receipts while retaining their session and custody',async()=>{
+    const f=await fixture();const a=await f.task();const first=(await f.claim(a))!;
+    await repository.submitted(first.id);
+    await AgentTaskExecution.query().where('id',first.id).update({state:'running',accepted_at:null});
+    expect(await repository.current(f.workspace.id,a)).toMatchObject({state:'dispatching',acceptedAt:null,sessionId:f.sessionId,envelopeId:first.envelopeId});
+    expect((await repository.forTasks(f.workspace.id,[a])).get(a)?.state).toBe('dispatching');
+    expect((await repository.activeForNode(f.workspace.id,f.node.id))?.id).toBe(first.id);
+    await repository.accepted(first.id);
+    expect(await repository.current(f.workspace.id,a)).toMatchObject({state:'running',acceptedAt:expect.any(String)});
   });
   it('keeps a later task queued in the durable inbox while questions still arrive',async()=>{
     const f=await fixture();const a=await f.task(),b=await f.task();

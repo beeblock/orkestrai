@@ -28,18 +28,26 @@ export function taskDependencies(task: AgentBoardTask): string[] {
 }
 
 export class TaskExecutionRepository {
+  private async verifiedState(row: AgentTaskExecution): Promise<AgentTaskExecution> {
+    if (row.getAttribute('state') !== 'running' || row.getAttribute('accepted_at') != null) return row;
+    // Older versions promoted a timeout to running without a receipt. Repair
+    // that state without releasing custody or resending an uncertain prompt.
+    await AgentTaskExecution.query().where('id', row.getAttribute('id')).where('state', 'running').whereNull('accepted_at')
+      .update({ state: 'dispatching', updated_at: new Date().toISOString() });
+    return await AgentTaskExecution.find(row.getAttribute('id')) ?? row;
+  }
   async current(workspaceId: string, taskId: string): Promise<TaskExecution | null> {
     const row = await AgentTaskExecution.query().where('workspace_id', workspaceId).where('active_task_id', taskId).first();
-    return row ? map(row) : null;
+    return row ? map(await this.verifiedState(row)) : null;
   }
   async forTasks(workspaceId: string, taskIds: string[]): Promise<Map<string, TaskExecution>> {
     if (!taskIds.length) return new Map();
     const rows = await AgentTaskExecution.query().where('workspace_id', workspaceId).whereIn('active_task_id', taskIds).get();
-    return new Map(rows.map(row => { const execution = map(row); return [execution.taskId, execution]; }));
+    return new Map(await Promise.all(rows.map(async row => { const execution = map(await this.verifiedState(row)); return [execution.taskId, execution] as const; })));
   }
   async activeForNode(workspaceId: string, nodeId: string): Promise<TaskExecution | null> {
     const row = await AgentTaskExecution.query().where('workspace_id', workspaceId).where('active_node_id', nodeId).first();
-    return row ? map(row) : null;
+    return row ? map(await this.verifiedState(row)) : null;
   }
   async schedule(workspaceId: string, taskId: string, nodeId: string): Promise<TaskExecution | null> {
     return Connection.transaction(async () => {
@@ -90,8 +98,9 @@ export class TaskExecutionRepository {
       .update({ submitted_at: at, updated_at: new Date().toISOString() });
   }
   async accepted(executionId: string, verified = true): Promise<void> {
-    await AgentTaskExecution.query().where('id', executionId).where('state', 'dispatching')
-      .update({ state: 'running', accepted_at: verified ? new Date().toISOString() : null, updated_at: new Date().toISOString() });
+    if (!verified) return;
+    await AgentTaskExecution.query().where('id', executionId).whereIn('state', ['dispatching', 'running']).whereNull('accepted_at')
+      .update({ state: 'running', accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
   }
   async park(execution: TaskExecution, state: 'waiting' | 'blocked' | 'stopped' | 'reported', stopKey?: string): Promise<boolean> {
     const changed = await AgentTaskExecution.query().where('id', execution.id).where('state', execution.state)

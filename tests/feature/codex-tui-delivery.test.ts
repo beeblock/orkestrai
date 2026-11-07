@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node-pty';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { findPromptInTranscript, latestTurnBoundary } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.ts';
 
@@ -15,6 +17,7 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
   const home = join(root, 'home'), cwd = join(root, 'project'), codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true }); await mkdir(cwd);
   let requests = 0, primaryRequests = 0, dropEnter = false, dropped = 0, output = '';
+  const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const server = createServer(async (request, response) => {
     if (request.url !== '/v1/responses' || request.method !== 'POST') { response.writeHead(404).end(); return; }
     let raw = ''; for await (const chunk of request) { raw += chunk; if (raw.length > 4 * 1024 * 1024) { response.writeHead(413).end(); return; } }
@@ -45,6 +48,8 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
       XDG_CONFIG_HOME: join(home, '.config'), NO_PROXY: '127.0.0.1,localhost',
       HTTP_PROXY: 'http://127.0.0.1:1', HTTPS_PROXY: 'http://127.0.0.1:1', ALL_PROXY: 'http://127.0.0.1:1' });
     const child = spawn(command, args, { ...options, env });
+    const owned = { pid: child.pid, exited: false }; ownedChildren.push(owned);
+    child.onExit(() => { owned.exited = true; });
     child.onData(chunk => {
       output = (output + chunk).slice(-32768);
       // This isolated TUI has no xterm viewer. Supply the terminal cursor/device
@@ -99,9 +104,17 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
     await deliver(true); await deliver();
     expect(dropped).toBe(1); expect(primaryRequests).toBe(serial);
     console.info(JSON.stringify({ platform: process.platform, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped }));
+  } catch (error) {
+    // Cleanup failures must not hide the actual TUI/receipt failure.
+    process.stderr.write(`Codex fixture failed: ${String(error)}\n${output.slice(-8000)}\n`);
+    throw error;
   } finally {
+    if (process.platform === 'win32') for (const child of ownedChildren) if (!child.exited && child.pid > 1) {
+      await promisify(execFile)('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeout: 10000, windowsHide: true }).catch(() => {});
+    }
     manager.killAll(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
     // Allow Windows process handles to close before deleting private transcripts.
-    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 })
+      .catch(error => process.stderr.write(`Private fixture cleanup deferred to runner: ${error.code}\n`));
   }
 }, duration + 150000);

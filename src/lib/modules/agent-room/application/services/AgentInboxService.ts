@@ -575,7 +575,7 @@ export class AgentInboxService {
             nodeId: recipient.nodeId,
             sessionId,
             prompt: String(lead.metadata.batchPrompt),
-            since: Date.parse(lead.updatedAt) - 5_000,
+            since: typeof lead.metadata.batchSince === 'number' ? lead.metadata.batchSince : Date.parse(lead.updatedAt) - 5_000,
             messageIds: envelopes.map((envelope) => envelope.id),
             deadline: Date.now() + CONFIRMATION_WINDOW_MS,
           });
@@ -773,6 +773,7 @@ export class AgentInboxService {
           ...envelope.metadata,
           batchId,
           batchSize: batch.length,
+          batchSince: since,
           sessionId: session.id,
           ...(index === 0 ? { batchPrompt: prompt } : {}),
         },
@@ -907,10 +908,15 @@ export class AgentInboxService {
     const alive = Boolean(session && !session.exited);
     if (alive && Date.now() < tracking.deadline) return;
     if (alive) {
-      // Submitted to a live terminal whose provider may persist the turn late
-      // (or never, for very large resumed conversations). Typing it again
-      // would duplicate the prompt: record it as delivered without proof.
-      await this.markDelivered(batchId, tracking, 'unverified');
+      // Time passing is not a receipt. Retain the same pending delivery so a
+      // late exact transcript match can still confirm it, without retyping.
+      tracking.deadline = Date.now() + CONFIRMATION_WINDOW_MS;
+      for (const messageId of tracking.messageIds) {
+        const current = await controlCenterRepository.findEnvelope(messageId);
+        if (current?.state === 'sent') await controlCenterService.recordInboxTransition(messageId, {
+          state: 'sent', metadata: { ...current.metadata, batchSince: tracking.since, unconfirmed: true, confirmation: 'pending' },
+        });
+      }
       return;
     }
     // The terminal died before the provider recorded the prompt: the next

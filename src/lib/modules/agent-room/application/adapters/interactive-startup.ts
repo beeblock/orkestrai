@@ -81,3 +81,7 @@ export class InteractiveStartupGuard {
 export function interactiveStartupGuard(provider: string | null | undefined): InteractiveStartupGuard | null {
   return provider === 'claude' ? new InteractiveStartupGuard() : null;
 }
+
+export function hasPendingAutomaticPaste(provider: string | null | undefined, output: string, text: string, startup: InteractiveStartupGuard | null): boolean {
+  return provider === 'codex' ? hasOwnedCodexPaste(output, text) : startup?.hasPendingPaste(output) ?? false;
+}

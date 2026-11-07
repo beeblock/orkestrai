@@ -11,6 +11,10 @@ on:
         description: Exercise the real Codex TUI on native Windows for more than one hour
         default: false
         type: boolean
+      windows_codex_soak_seconds:
+        description: Duration for native Codex QA (0 for a smoke test, 3900 for the full soak)
+        default: '3900'
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +32,8 @@ jobs:
   windows-codex-soak:
     if: github.event_name == 'workflow_dispatch' && inputs.windows_codex_soak
     uses: ./.github/workflows/windows-codex-soak.yml
+    with:
+      soak_seconds: ${{ inputs.windows_codex_soak_seconds || '3900' }}
   relay-container:
     name: Verify production relay container
     runs-on: ubuntu-latest

@@ -302,11 +302,12 @@ describe('PtySessionManager', () => {
       const second = manager.writeWithSubmit(session.id, 'second prompt');
       const spinner = setInterval(() => emitData('working...'), 100);
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(writes).toContain('second prompt');
+      const framed = runtime === 'wsl' || process.platform === 'win32';
+      expect(writes).toContain(framed ? '\x1b[200~second prompt\x1b[201~' : 'second prompt');
       clearInterval(spinner);
       await vi.advanceTimersByTimeAsync(1_000);
       await second;
-      expect(writes).toEqual(['first prompt', '\r', 'second prompt', '\r']);
+      expect(writes).toEqual([framed ? '\x1b[200~first prompt\x1b[201~' : 'first prompt', '\r', framed ? '\x1b[200~second prompt\x1b[201~' : 'second prompt', '\r']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -347,7 +348,7 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(3_000);
       await rejected;
       manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['one prompt', '\r', 'human input']);
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r', 'human input']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -782,7 +783,7 @@ describe('PtySessionManager', () => {
     manager.kill(session.id);
   });
 
-  it('repete Enter quando um TUI WSL não confirma o primeiro submit', async () => {
+  it('never retries Enter from a WSL redraw without exact receipt or owned paste evidence', async () => {
     const writes: string[] = [];
     let emitData: ((data: string) => void) | null = null;
     let enterCount = 0;
@@ -813,14 +814,14 @@ describe('PtySessionManager', () => {
       runtime: { kind: 'wsl', distribution: 'Ubuntu-24.04', linuxWorkingDir: '/workspace' },
     });
 
-    await manager.writeWithConfirmedSubmit(session.id, 'execute a tarefa', {
+    await expect(manager.writeWithConfirmedSubmit(session.id, 'execute a tarefa', {
       submitDelayMs: 5,
       confirmationWindowMs: 20,
       maxAttempts: 3,
       isAccepted: async () => accepted,
-    });
+    })).rejects.toThrow('não confirmou');
 
-    expect(writes).toEqual(['execute a tarefa', '\r', '\r']);
+    expect(writes).toEqual(['\x1b[200~execute a tarefa\x1b[201~', '\r']);
     manager.kill(session.id);
   });
 

@@ -9,7 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
-import { frameAutomaticPaste, hasOwnedCodexPaste, interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
@@ -1185,8 +1185,7 @@ export class PtySessionManager {
     const retainedFrom = session.outputLength - session.scrollback.length;
     if (delivery.pasteOutputStart === undefined || delivery.pasteOutputStart < retainedFrom) return false;
     const freshOutput = session.scrollback.slice(delivery.pasteOutputStart - retainedFrom);
-    const pending = session.provider === 'codex' ? hasOwnedCodexPaste(freshOutput, delivery.text)
-      : session.startupGuard?.hasPendingPaste(freshOutput);
+    const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard);
     if (!pending) return false;
     if (!this.submitIfComposerFree(id)) return false;
     delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;

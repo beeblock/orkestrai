@@ -16,6 +16,7 @@ import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repo
 import { ptySessionManager, type PtySessionInfo } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import * as transcript from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
+import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
 
 type FakeSession = PtySessionInfo & { ready: boolean };
 
@@ -477,9 +478,40 @@ describe('Agent inbox', () => {
     } finally {
       clock.mockRestore();
     }
-    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'delivered', metadata: expect.objectContaining({ confirmation: 'unverified' }) });
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'sent', metadata: expect.objectContaining({ confirmation: 'pending', unconfirmed: true }) });
+    vi.mocked(transcript.findPromptInTranscript).mockResolvedValue({ sessionId: 'conversation-Lider' });
+    await agentInboxService.sweepNow();
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'delivered', metadata: expect.objectContaining({ confirmation: 'transcript' }) });
     await agentInboxService.drain(workspace.id, nodes.Lider);
     expect(prompts).toHaveLength(1);
+  });
+
+  it('keeps seven unconfirmed dispatches pending after 41 minutes and accepts their late receipts once', async () => {
+    const { workspace, nodes } = await team(7);
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementation(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message }); input.onSubmitted?.({ sessionId: session(input.nodeId).id, length: 1 });
+      throw new Error('Transcript confirmation timed out. Delivery is uncertain; inspect the terminal before retrying.');
+    });
+    const tasks: string[] = [], messages: string[] = [];
+    for (const nodeId of Object.values(nodes)) {
+      const taskId = uuidv7(), at = new Date().toISOString(); tasks.push(taskId);
+      await AgentBoardTask.create({ id: taskId, workspace_id: workspace.id, title: 'Independent delivery', status: 'doing',
+        assignee_node_id: nodeId, dependencies_json: '[]', created_by: 'user', created_at: at, updated_at: at });
+      const queued = await agentInboxService.enqueueDeferred({ workspaceId: workspace.id, toNodeId: nodeId, kind: 'task', taskId, content: `Implement ${taskId}` });
+      messages.push(queued.envelope.id);
+      await agentInboxService.drain(workspace.id, nodeId);
+    }
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 41 * 60_000);
+    try { await agentInboxService.sweepNow(); } finally { clock.mockRestore(); }
+    for (let index = 0; index < tasks.length; index++) {
+      expect(await taskExecutionRepository.current(workspace.id, tasks[index])).toMatchObject({ state: 'dispatching', acceptedAt: null });
+      expect(await controlCenterRepository.findEnvelope(messages[index])).toMatchObject({ state: 'sent', metadata: expect.objectContaining({ unconfirmed: true }) });
+    }
+    expect(prompts).toHaveLength(7);
+    vi.mocked(transcript.findPromptInTranscript).mockImplementation(async (_provider, _cwd, id) => ({ sessionId: String(id) }));
+    await agentInboxService.sweepNow();
+    for (const taskId of tasks) expect(await taskExecutionRepository.current(workspace.id, taskId)).toMatchObject({ state: 'running', acceptedAt: expect.any(String) });
+    expect(prompts).toHaveLength(7);
   });
 
   it('contains a failed submission receipt while confirmation is pending without resending', async () => {
