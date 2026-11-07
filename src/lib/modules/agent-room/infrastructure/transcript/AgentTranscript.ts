@@ -1577,8 +1577,10 @@ async function findFileTurn(
     ? join(options.claudeConfigDir ?? join(home, '.claude'), 'projects', actualCwd.replace(/[^a-zA-Z0-9]/g, '-'))
     : storage === 'codex-rollout-jsonl' ? join(options.codexHome ?? join(home, '.codex'), 'sessions')
       : join(home, '.kimi-code', 'sessions', `wd_${actualCwd.split(/[/\\]/).filter(Boolean).at(-1) ?? ''}_${createHash('sha256').update(actualCwd).digest('hex').slice(0, 12)}`);
-  const read = async (path: string, sessionId: string) => {
-    const revision = await transcriptRevision(path, since);
+  const read = async (path: string, sessionId: string, knownSession = false) => {
+    // Windows/UNC can expose appended bytes before updating the write time.
+    // An exact conversation is selected by identity and prompt, not its mtime.
+    const revision = await transcriptRevision(path, knownSession ? 0 : since);
     if (!revision) return null;
     const occurrence = promptOnly ? undefined : promptBound(options);
     const key = JSON.stringify([storage, path, sessionId, promptOnly, occurrence ?? null, createHash('sha256').update(expectedPrompt).digest('hex')]);
@@ -1595,7 +1597,7 @@ async function findFileTurn(
         : join(root, preferredSessionId, 'agents', 'main', 'wire.jsonl')
     : null;
   if (preferred && preferredSessionId) {
-    const match = await read(preferred, preferredSessionId);
+    const match = await read(preferred, preferredSessionId, true);
     // The prompt is already here. Waiting for its reply is not a reason to
     // search every other conversation, or to select a different agent's turn.
     if (match) return match;

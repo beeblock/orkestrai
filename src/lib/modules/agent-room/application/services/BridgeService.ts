@@ -401,7 +401,7 @@ export class BridgeService {
       if (result.cancelled) throw new ObsoletePtyDeliveryError();
       throw new Error(result.error);
     }
-    if (result.state === 'queued') {
+    if (result.state === 'queued' || result.state === 'sent') {
       return { to: target.title, reply: '', delivered: false, replyConfirmed: false, timedOut: false, messageId, deliveryState: 'queued', inbox: true };
     }
     return { to: target.title, reply: '', delivered: result.state === 'delivered', replyConfirmed: false, timedOut: true, messageId, deliveryState: 'delivered', inbox: true };

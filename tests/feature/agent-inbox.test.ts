@@ -457,7 +457,7 @@ describe('Agent inbox', () => {
       throw new Error('Transcript confirmation timed out. Delivery is uncertain; inspect the terminal before retrying.');
     });
     const result = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Status do build?', timeoutMs: 1_000 });
-    expect(result.deliveryState).toBe('delivered');
+    expect(result).toMatchObject({ deliveryState: 'queued', delivered: false, timedOut: false });
     expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'sent', metadata: expect.objectContaining({ unconfirmed: true }) });
     vi.mocked(transcript.findPromptInTranscript).mockResolvedValue({ sessionId: 'conversation-Lider' });
     await agentInboxService.sweepNow();

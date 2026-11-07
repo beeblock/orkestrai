@@ -32,6 +32,10 @@ describe('Codex automatic paste on ConPTY', () => {
   it('recognizes native idle reports and conservatively blocks other states', () => {
     expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex\x1b\\')).toBe('idle');
     expect(nativeComposerState('codex', '\x1b]7501;state=working:app=codex\x07')).toBe('working');
+    expect(nativeComposerState('codex', '\x1b]7501;state=done:app=codex\x07')).toBe('idle');
+    expect(nativeComposerState('codex', '\x1b]7501;state=error:app=codex\x07')).toBe('idle');
+    expect(nativeComposerState('codex', '\x1b]7501;state=blocked:app=codex:kind=permission\x07')).toBe('working');
+    expect(nativeComposerState('codex', '\x1b]7501;state=clear\x1b\\')).toBe('working');
     expect(nativeComposerState('codex', '\x1b]7501;state=approval:app=codex\x07')).toBe('working');
     expect(nativeComposerState('other', '\x1b]7501;state=idle:app=codex\x07')).toBeUndefined();
     expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex')).toBeUndefined();
@@ -56,7 +60,7 @@ describe('Codex automatic paste on ConPTY', () => {
     const at = manager.automaticDeliverySubmittedAt(session.id)!;
     const badge = () => emit(`\x1b[28;3H[Pasted Content ${text.length} chars]\x1b[28;30H`);
     badge(); await vi.advanceTimersByTimeAsync(6000);
-    return { manager, session, writes, at, emit, badge, text };
+    return { manager, session, writes, at, emit, badge, text, delivery };
   }
 
   it('recovers an aged Windows session using Enter only, retaining the exact receipt identity', async () => {
@@ -93,5 +97,16 @@ describe('Codex automatic paste on ConPTY', () => {
     emit('\x1b]7501;state=working:app=codex\x1b\\'); await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
     expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
+  });
+
+  it('holds a queued prompt during native working and releases it on an unfocused done report', async () => {
+    const { manager, session, writes, emit, delivery } = await fixture();
+    delivery.acknowledge(); emit('\x1b]7501;state=working:app=codex\x1b\\');
+    const second = manager.queueWithSubmit(session.id, 'Next prompt', 10);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(writes.some(value => value.includes('Next prompt'))).toBe(false);
+    expect(manager.get(session.id)?.waiting).toBe(false);
+    emit('\x1b]7501;state=done:app=codex\x1b\\'); await vi.advanceTimersByTimeAsync(6000); await second.submitted;
+    expect(writes.filter(value => value.includes('Next prompt'))).toHaveLength(1);
   });
 });

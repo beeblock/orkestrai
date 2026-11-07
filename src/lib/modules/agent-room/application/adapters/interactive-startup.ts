@@ -92,8 +92,11 @@ export function hasPendingAutomaticPaste(provider: string | null | undefined, ou
 export function nativeComposerState(provider: string | null | undefined, output: string): 'idle' | 'working' | undefined {
   if (provider !== 'codex') return undefined;
   let state: 'idle' | 'working' | undefined;
-  for (const match of output.matchAll(/\x1b\]7501;state=([a-z_-]+):app=codex(?:\x07|\x1b\\)/g)) {
-    state = match[1] === 'idle' ? 'idle' : 'working';
+  for (const match of output.matchAll(/\x1b\]7501;state=([a-z_-]+)(?::app=(codex)(?::kind=(?:permission|question|auth))?)?(?:\x07|\x1b\\)/g)) {
+    if (!match[2] && match[1] !== 'clear') continue;
+    // Upstream reports Done/Error as idle as well. Done may persist while the
+    // terminal is unfocused; treating it as working deadlocks the next prompt.
+    state = ['idle', 'done', 'error'].includes(match[1]) ? 'idle' : 'working';
   }
   return state;
 }

@@ -538,6 +538,10 @@ export class PtySessionManager {
       }
       session.startupGuard?.observe(data);
       if (composerState !== undefined && !session.deliveryInProgress) this.setWaiting(session, composerState === 'idle');
+      if (composerState === 'idle') {
+        this.releaseDeliveryBarrierWhenReady(session);
+        this.drainDeliveryQueue(session);
+      }
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
@@ -1270,6 +1274,7 @@ export class PtySessionManager {
     if (
       session.exited ||
       session.managedTurn ||
+      session.nativeComposerState === 'working' ||
       (session.startupGuard && !session.startupGuard.canAcceptMessages) ||
       session.deliveryInProgress ||
       session.awaitingDeliveryIdle ||

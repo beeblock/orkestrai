@@ -84,7 +84,7 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
         isAccepted: async () => {
           const match = await findPromptInTranscript('codex', cwd, exactId, message.trim(), since, { codexHome });
           if (match) { exactId = match.sessionId; manager.bindAgentSession(session.id, exactId); return true; }
-          if (submittedAt !== null) manager.retryPendingAutomaticPaste(session.id, submittedAt, Number.NaN);
+          if (!exactId && submittedAt !== null) manager.retryPendingAutomaticPaste(session.id, submittedAt, Number.NaN);
           if (exactId && submittedAt !== null) {
             const boundary = await latestTurnBoundary('codex', cwd, exactId, { codexHome });
             if (boundary.ready && boundary.finishedAt !== null) manager.retryPendingAutomaticPaste(session.id, submittedAt, boundary.finishedAt);
