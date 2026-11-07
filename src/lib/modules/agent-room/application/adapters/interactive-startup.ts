@@ -12,6 +12,17 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   let fresh = output.slice(-32_768);
   const clear = [...fresh.matchAll(/\x1b\[[23]J/g)].at(-1);
   if (clear) fresh = fresh.slice(clear.index! + clear[0].length);
+  // ConPTY may repaint a blank footer with ECH (CSI X), then restore the
+  // cursor to the paste. node:util does not strip ECH: it leaves a literal X,
+  // making a still-pending badge look like an edited draft. Only disregard this
+  // bounded blank cleanup when an absolute cursor move proves it is BELOW the
+  // composer and the cursor returns above it. Erases in/above the composer,
+  // printable footer content, unpaired moves and screen clears remain unsafe.
+  fresh = fresh.replace(
+    /\x1b\[(\d+);\d+[Hf]((?:[\t ]|\x1b\[\d*[CG])*)\x1b\[\d*[KX]((?:[\t ]|\x1b\[\d*[CG])*)\x1b\[(\d+);(\d+)[Hf]/g,
+    (sequence, footerRow, before, after, composerRow, composerColumn) => Number(footerRow) > Number(composerRow)
+      ? `\x1b[${footerRow};1H${before}${after}\x1b[${composerRow};${composerColumn}H` : sequence,
+  );
   const tail = stripVTControlCharacters(fresh
     .replace(/\x1b\[[\d;]*[BHEFfd]/g, '\n').replace(/\x1b\[\d*[CG]/g, ' '));
   const prompt = tail.lastIndexOf('›');
@@ -24,7 +35,7 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   const length = Array.from(text.replace(/\r\n?/g, '\n')).length;
   if (!badge || Number(badge[1]) < length || Number(badge[1]) > length + extraEnters) return false;
   const rawBadgeAt = fresh.lastIndexOf('[Pasted Content ');
-  return rawBadgeAt >= 0 && !/\x1b\[[\d;]*[JK]/.test(fresh.slice(rawBadgeAt));
+  return rawBadgeAt >= 0 && !/\x1b\[[\d;]*[JKX]/.test(fresh.slice(rawBadgeAt));
 }
 
 /** Bootstrap dialogs are not agent composers, even when their output is idle. */

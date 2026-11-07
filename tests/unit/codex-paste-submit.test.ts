@@ -29,6 +29,26 @@ describe('Codex automatic paste on ConPTY', () => {
     }
   });
 
+  // Captured from the native Windows 0.166 TUI in the Canvas-sized fixture.
+  // ConPTY paints the badge, erases the footer, then returns to the composer.
+  const windowsFooter = '\x1b[m\x1b[12;3H \x1b[1C   \x1b[1C\x1b[9X\x1b[9;30H\x1b[?25h';
+
+  it('recognizes a pending paste when ConPTY clears the footer after painting the badge', () => {
+    expect(hasOwnedCodexPaste(`\x1b[38;5;6m[Pasted Content 9018 chars]${windowsFooter}`, 'x'.repeat(9018))).toBe(true);
+  });
+
+  it('refuses an erased composer or unproven erase instead of trusting an old badge', () => {
+    for (const suffix of [
+      '\x1b[9X',
+      '\x1b[9;3H\x1b[30X\x1b[9;30H',
+      '\x1b[12;3H\x1b[9X',
+      '\x1b[8;3H\x1b[9X\x1b[9;30H',
+      '\x1b[12;3Hconfirm action\x1b[9X\x1b[9;30H',
+      `${windowsFooter}human draft`,
+      `${windowsFooter}\x1b[2J`,
+    ]) expect(hasOwnedCodexPaste(`[Pasted Content 9018 chars]${suffix}`, 'x'.repeat(9018)), suffix).toBe(false);
+  });
+
   it('recognizes native idle reports and conservatively blocks other states', () => {
     expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex\x1b\\')).toBe('idle');
     expect(nativeComposerState('codex', '\x1b]7501;state=working:app=codex\x07')).toBe('working');
@@ -62,6 +82,14 @@ describe('Codex automatic paste on ConPTY', () => {
     badge(); await vi.advanceTimersByTimeAsync(6000);
     return { manager, session, writes, at, emit, badge, text, delivery };
   }
+
+  it('recovers the captured Windows footer redraw without retyping the paste', async () => {
+    const { manager, session, writes, at, text, emit } = await fixture();
+    emit(`\x1b[38;5;6m[Pasted Content ${text.length} chars]${windowsFooter}`);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+    expect(writes.filter(value => value.includes(text))).toHaveLength(1);
+  });
 
   it('recovers an aged Windows session using Enter only, retaining the exact receipt identity', async () => {
     const { manager, session, writes, at, badge, text } = await fixture();

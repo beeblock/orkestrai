@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Recover an unsent Codex paste when native Windows ConPTY clears a blank footer after painting the paste badge. Recognize cursor-proven footer erases without treating them as draft text, keep unknown/composer erases and owner edits protected, and verify the normal alternate-screen TUI with first-turn Enter loss and shell tool execution.
+
 ## 0.52.4 - 2026-11-07
 
 ### Fixed
