@@ -13,7 +13,7 @@ import { findPromptInTranscript, latestTurnBoundary } from '$lib/modules/agent-r
 const enabled = process.env.ORKESTRAI_REAL_CODEX_TEST === '1';
 const duration = Math.max(0, Number(process.env.ORKESTRAI_CODEX_SOAK_SECONDS ?? 0)) * 1000;
 
-it.skipIf(!enabled)('submits in the real Codex alternate-screen composer at narrow Canvas dimensions', async () => {
+it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real Codex TUI with the %s view open', async view => {
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-codex-tui-'));
   const home = join(root, 'home'), cwd = join(root, 'project'), codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true }); await mkdir(cwd);
@@ -66,7 +66,8 @@ it.skipIf(!enabled)('submits in the real Codex alternate-screen composer at narr
     child.onExit(() => { owned.exited = true; });
     child.onData(chunk => {
       output = (output + chunk).slice(-32768);
-      terminal.write(chunk);
+      // Conversation has no mounted xterm and sends no terminal-query replies.
+      if (view === 'canvas') terminal.write(chunk);
     });
     const write = child.write.bind(child);
     child.write = text => { if (dropEnter && text === '\r') { dropEnter = false; dropped++; } else write(text); };
