@@ -83,8 +83,14 @@ so this separate fix is not presented as the cause of that native failure.
 - The first complete local suite passes 3,184 tests, with 24 skipped, before
   the final right-clear and relative-redraw regression additions. Subsequent
   focused checks cover those additions.
-- The native 0.167.0 short run passes as detailed above; the final native
-  compatibility and sustained runs remain required before release.
+- Final compatibility: both 0.166.0 and 0.167.0 pass the short native run
+  https://github.com/beeblock/orkestrai/actions/runs/42452047661 on `d3404544`.
+  Sustained verification is recorded separately in
+  https://github.com/beeblock/orkestrai/actions/runs/42452049682 and must pass
+  before tagging. A short pass alone does not establish long-session behavior.
+- The production build passes. Eleven production-browser tests pass, including
+  Canvas/Conversation lifecycle, dense-Canvas performance, delivery, managed
+  Shells and persisted provider model/effort.
 
 ## Sustained-test design
 
@@ -94,5 +100,7 @@ one Canvas session for the full duration and still runs Conversation and the
 backend scenario as short checks. During the sustained Canvas session it
 alternates geometry, restores viewer history and deliberately loses periodic
 Enters. It checks exact prompt receipts and rejects duplicate primary requests.
+The short fixture also schedules twelve rapid geometry changes during a paste
+without deliberately dropping Enter, then checks its exact receipt as usual.
 
 The owner's active Mac app and agents are not restarted by this investigation.

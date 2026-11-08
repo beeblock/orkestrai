@@ -21,6 +21,7 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
   let requests = 0, primaryRequests = 0, dropEnter = false, dropped = 0, output = '';
   let duringPaste: (() => void) | null = null;
   let plannedDrops = 0, resizes = 0, replays = 0;
+  const viewerTimers: Array<ReturnType<typeof setTimeout>> = [];
   const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const server = createServer(async (request, response) => {
     if (request.url !== '/v1/responses' || request.method !== 'POST') { response.writeHead(404).end(); return; }
@@ -78,7 +79,7 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       else write(text);
       if (duringPaste && text.includes('\x1b[200~')) {
         const change = duringPaste; duringPaste = null;
-        setTimeout(change, 100);
+        viewerTimers.push(setTimeout(change, 100));
       }
     };
     return child;
@@ -97,16 +98,20 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       .catch(error => { throw new Error(`${error.message}\n${output.slice(-8000)}`); });
     await new Promise(resolve => setTimeout(resolve, 3000));
     let exactId: string | null = null, serial = 0;
-    async function deliver(missEnter = false, viewerChange?: 'resize' | 'replay') {
+    async function deliver(missEnter = false, viewerChange?: 'resize' | 'resize-burst' | 'replay') {
       const message = `Fixture delivery ${++serial}\n` + 'A bounded local-only paste, no tools or external inference. '.repeat(150);
       const since = Date.now(); let submittedAt: number | null = null;
       dropEnter = missEnter;
       if (missEnter) plannedDrops++;
       duringPaste = viewerChange ? () => {
-        if (viewerChange === 'resize') {
-          const [cols, rows] = resizes++ % 2 ? [40, 12] : [72, 20];
-          terminal.resize(cols, rows);
-          manager.resize(session.id, cols, rows);
+        if (viewerChange === 'resize' || viewerChange === 'resize-burst') {
+          const resize = () => {
+            const [cols, rows] = resizes++ % 2 ? [40, 12] : [72, 20];
+            terminal.resize(cols, rows);
+            manager.resize(session.id, cols, rows);
+          };
+          if (viewerChange === 'resize-burst') for (let tick = 0; tick < 12; tick++) viewerTimers.push(setTimeout(resize, tick * 180));
+          else resize();
         } else if (view === 'canvas') { replays++; terminal.write(`\x1bc${manager.replay(session.id)}`); }
       } : null;
       await manager.writeWithConfirmedSubmit(session.id, message.trim(), {
@@ -131,10 +136,12 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
           retries: pending?.pasteRetryCount, awaitingDeliveryIdle: state?.awaitingDeliveryIdle });
         throw new Error(`${error.message}\n${output.slice(-12000)}`);
       });
+      if (viewerChange === 'resize-burst') await new Promise(resolve => setTimeout(resolve, 2500));
       await expect.poll(async () => exactId && (await latestTurnBoundary('codex', cwd, exactId, { codexHome })).ready,
         { timeout: 15000 }).toBe(true);
     }
     await deliver(true);
+    await deliver(false, 'resize-burst');
     const started = Date.now();
     while (Date.now() - started < viewDuration) {
       await new Promise(resolve => setTimeout(resolve, Math.min(30000, viewDuration - (Date.now() - started))));
@@ -153,6 +160,7 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
     process.stderr.write(`Codex fixture failed: ${String(error)}\n${output.slice(-8000)}\n`);
     throw error;
   } finally {
+    for (const timer of viewerTimers) clearTimeout(timer);
     if (process.platform === 'win32') for (const child of ownedChildren) if (!child.exited && child.pid > 1) {
       await promisify(execFile)('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeout: 10000, windowsHide: true }).catch(() => {});
     }
