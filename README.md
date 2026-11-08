@@ -289,9 +289,11 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   Core to supervise a persistent process. Each agent has idle, concurrency,
   and provider-usage safeguards plus explicit wake and sleep controls.
 - **Continuous team delivery:** agent messages go through a persistent inbox.
-  A recipient in the middle of a model turn gets everything pending as one
-  prompt at its next turn boundary, or attached to the response of any bridge
-  call, while the sender is released at once; answers are routed exactly once
+  Busy Codex and Claude recipients can receive messages during their turn,
+  without waiting for it to finish. Open questions and approvals pause delivery;
+  other CLIs and idle recovery notices keep the turn boundary. Exact prompt
+  receipts and separate owner drafts remain required. Messages also arrive in
+  bridge responses, while the sender is released at once; answers are routed exactly once
   to the waiting caller or to the asker's inbox (`orkestrai inbox`,
   `orkestrai reply <messageId>`). Task briefings never block the leader on a
   busy assignee. Builds, E2E suites and packaging wait in a machine-wide queue

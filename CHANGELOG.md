@@ -7,11 +7,23 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Changed
+## 0.53.0 - 2026-11-08
 
-- Deliver inbox messages to busy Codex and Claude agents during their turn, as a person types into a working CLI: Codex steers the running turn and Claude absorbs the queued prompt at its next step. Agents no longer wait for a 20–60 minute turn to end before reading a teammate's reply or the owner's message. Exact transcript receipts, owner-draft custody and one automatic message at a time per terminal still apply. Messages wait for the turn boundary when Codex reports a question or approval, when a Claude question is unanswered, for other CLIs, and for the idle notices that only restart a stopped agent. If a Codex question opens after the paste, Enter is not pressed; the text stays as a visible draft for the owner and is never retyped.
+### Added
 
-## 0.52.8 - 2026-11-08
+- Deliver inbox messages to busy Codex and Claude agents during their turn, as a person types into a working CLI: Codex steers the running turn and Claude absorbs the queued prompt at its next step. Agents no longer wait for a 20–60 minute turn to end before reading a teammate's reply or the owner's message. Exact transcript receipts, owner-draft custody and one automatic message at a time per terminal still apply. Messages wait while a question or approval is open. Other CLIs and idle notices that only restart a stopped agent continue to wait for the turn boundary. If a Codex question opens after the paste, Enter is not pressed; the text stays as a visible draft for the owner and is never retyped.
+
+### Fixed
+
+- Keep terminal mouse reports and late or duplicate cursor replies out of the owner draft. Preserve real key provenance, including modified F3, through reconnects; only validated terminal report bytes bypass input custody. Do not show a typing warning or block manual Enter for automatic reports.
+- Preserve evidence-based recovery after a manual Enter is also lost, without retyping the automatic message or mixing in owner text. Keep the exact prompt receipt and working-turn guards.
+- Check the saved exact prompt receipt after a PTY disappears before requeuing its original message. Preserve persisted leader-to-specialist and specialist-to-leader handoffs across interrupted terminals without duplicating already accepted prompts.
+- Recover a disappeared PTY from input and resize errors with a session-scoped error, including freshly created Canvas terminals. Ignore stale session failures, avoid repeated respawns, and do not replay old buffered input into a replacement. Remove the blanket Ctrl+C recovery instruction from the held-text notice.
+- Submit automatic Codex messages on native Windows and WSL when a loaded machine makes the TUI read input late. ConPTY delivers a paste as keys, and Codex kept an Enter read inside that key burst as a newline, leaving `[Pasted Content N chars]` unsent and the agent's queue blocked behind it. Each automatic Enter now follows an End key, which only moves the cursor and makes Codex close the paste first, so input order rather than read timing decides. macOS bracketed paste is unchanged.
+
+## 0.52.8 - Unreleased
+
+This version was not published. Its fixes are included in 0.53.0.
 
 ### Fixed
 

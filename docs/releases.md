@@ -139,7 +139,16 @@ continuam exigindo testes específicos.
 
 ## Recuperação da fila de mensagens
 
-A 0.52.8 diferencia teclas reais dos relatórios automáticos enviados pelo
+Codex e Claude ocupados podem receber mensagens durante o turno. O Codex
+precisa confirmar que a entrada está disponível; perguntas ou aprovações
+abertas mantêm a entrega aguardando. As outras CLIs e os avisos de supervisão
+ou recuperação de agente ocioso continuam esperando o fim do turno. Recibos
+exatos e a separação da digitação do dono continuam obrigatórios. No Windows
+nativo e WSL, uma tecla End antes do Enter automático encerra a rajada de
+colagem do Codex mesmo quando a máquina lê as teclas com atraso.
+
+A 0.53.0 reúne os fixes preparados para a 0.52.8, que não foi publicada.
+Ela diferencia teclas reais dos relatórios automáticos enviados pelo
 xterm no mesmo canal de entrada. Mouse e respostas atrasadas ou duplicadas
 do cursor não criam um rascunho falso nem prendem o Enter. O Enter manual de
 uma mensagem automática ainda pendente mantém sua identidade e a recuperação

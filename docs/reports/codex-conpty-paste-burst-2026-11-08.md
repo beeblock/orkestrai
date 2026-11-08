@@ -1,7 +1,8 @@
 # Codex `[Pasted Content]` on Windows: root cause and fix — 2026-11-08
 
 Branch `fix/codex-conpty-ordered-submit`, from `fix/terminal-delivery-review-20261108`
-(`eebd0918`). Not pushed, released, tagged or installed.
+(`eebd0918`). The owner subsequently authorized release preparation as 0.53.0.
+The original investigation below records what was and was not verified at each step.
 
 ## Root cause
 
@@ -180,3 +181,20 @@ Not verified: a real Claude binary was not driven against a fixture model. A loc
 run could reach the owner's Keychain credentials, so the Claude evidence is the
 owner's existing transcripts. Claude has no submit-time question signal, so a
 question that opens in the second between the check and Enter is not caught.
+
+
+## Release preparation verification
+
+The owner authorized 0.53.0 on 2026-11-08. The unshipped 0.52.8 fixes are included
+in this minor release, together with mid-turn delivery.
+
+- CI [42516468966](https://github.com/beeblock/orkestrai/actions/runs/42516468966)
+  passed for `b1bac9ade602b3adce8b038b18e6d76b72d5f6c7`, including full build,
+  browser shards and native Windows Codex 0.166.0 / 0.167.0 smoke scenarios.
+- The earlier run [42514449209](https://github.com/beeblock/orkestrai/actions/runs/42514449209)
+  also passed on the preceding report commit.
+- Real Windows Codex mid-turn input was confirmed within the same running turn.
+- The 65-minute soak, the owner's heavy Windows workspace and real Claude driven
+  against a fixture model remain unverified. Smoke evidence is not a claim about
+  long-running workspace behavior or model response latency.
+- The final release metadata commit must pass its own main-push CI before tagging.
