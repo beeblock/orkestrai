@@ -18,7 +18,7 @@
     | { status: 'idle' }
     | { status: 'checking' }
     | { status: 'available'; version: string }
-    | { status: 'manual'; version: string }
+    | { status: 'manual'; version: string; reason?: 'unsigned' | 'network' }
     | { status: 'downloading'; percent: number }
     | { status: 'downloaded'; version: string }
     | { status: 'none' }
@@ -38,6 +38,7 @@
   let dialogOpen = $state(false);
   let failed = $state(false);
   let plannedManualUpdate = $state(false);
+  let manualCheckFallback = $state(false);
 
   onMount(() => {
     const desktop = (window as unknown as { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
@@ -57,6 +58,7 @@
         version = payload.version;
         failed = false;
         plannedManualUpdate = true;
+        manualCheckFallback = payload.reason === 'network';
         dialogOpen = true;
       }
       if (payload.status === 'error') {
@@ -105,7 +107,9 @@
     <AlertDialog.Header>
       <AlertDialog.Title>{failed || plannedManualUpdate ? m['update.manual_title']() : m['update.ready_title']()}</AlertDialog.Title>
       <AlertDialog.Description>
-        {#if plannedManualUpdate}
+        {#if plannedManualUpdate && manualCheckFallback}
+          {m['update.manual_check_fallback_desc']({ version })}
+        {:else if plannedManualUpdate}
           {m['update.manual_unsigned_desc']({ version })}
         {:else if failed}
           {m['update.manual_desc']()}

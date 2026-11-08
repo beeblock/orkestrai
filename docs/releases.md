@@ -5,6 +5,10 @@ atualização ficam em `beeblock/orkestrai`. O repositório público legado
 `beeblock/orkestrai-releases` é preservado somente como ponte para instalações
 que ainda consultam o feed antigo.
 
+## Indisponibilidade temporária do feed
+
+A checagem repete uma falha temporária do feed uma vez e pode consultar a API pública oficial de releases do GitHub para descobrir a versão mais recente. A resposta é limitada e validada (versão estável, origem e instalador compatível). Se o feed estiver indisponível e houver uma versão nova, o app oferece a página oficial de download. Essa consulta não baixa nem instala arquivos, não substitui manifests ou SHA-512 e não contorna assinatura ou política de instalação. Se ambas as fontes falharem, a checagem continua informando erro.
+
 ## Falha na inicialização e migrações interrompidas
 
 Desde a 0.39.1, as três migrações históricas de pastas de workspaces podem

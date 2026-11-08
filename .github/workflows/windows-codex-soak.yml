@@ -47,7 +47,7 @@ jobs:
           $archive = Join-Path $env:RUNNER_TEMP 'codex-fixture.zip'
           $destination = Join-Path $env:RUNNER_TEMP 'codex-fixture'
           $expectedVersion = '${{ matrix.codex_version }}'
-          Invoke-WebRequest "https://github.com/openai/codex/releases/download/rust-v$expectedVersion/codex-x86_64-pc-windows-msvc.exe.zip" -OutFile $archive
+          Invoke-WebRequest "https://github.com/openai/codex/releases/download/rust-v$expectedVersion/codex-x86_64-pc-windows-msvc.exe.zip" -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 2 -TimeoutSec 120
           $digest = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           $expectedDigest = if ($expectedVersion -eq '0.166.0') { 'bf67d9662ed539f305849b74ad6420cc7b23aa2be07753710ca3db9134a0246d' } else { '94b51ca84648a6923784ef71f06e2feb1e10796ddb3f5d033ccb0fbe8daa2f16' }
           if ($digest -ne $expectedDigest) { throw 'Codex archive digest mismatch' }

@@ -14,7 +14,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
-const { canInstallUpdatesAutomaticallyAsync, isNewerVersion, applyUpdateInstallPolicy, createUpdaterLogger } = require('./update-policy.cjs');
+const { canInstallUpdatesAutomaticallyAsync, applyUpdateInstallPolicy, createUpdaterLogger } = require('./update-policy.cjs');
+const { latestPublicRelease, checkWithFallback } = require('./update-discovery.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
@@ -1053,7 +1054,6 @@ if (app.isPackaged) {
 let latestUpdateState = { status: 'idle' };
 let updateCheckPromise = null;
 let automaticUpdateInstallSupported = process.platform !== 'darwin';
-const MAC_LATEST_RELEASE_API = 'https://api.github.com/repos/beeblock/orkestrai/releases/latest';
 
 function sendUpdate(payload) {
   latestUpdateState = payload;
@@ -1067,14 +1067,7 @@ function updateErrorPayload(error) {
 }
 
 async function checkManualMacUpdate() {
-  const response = await fetch(MAC_LATEST_RELEASE_API, {
-    headers: { accept: 'application/vnd.github+json', 'user-agent': 'Orkestrai updater' },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) throw new Error(`GitHub releases respondeu HTTP ${response.status}.`);
-  const release = await response.json();
-  const version = String(release?.tag_name ?? '').replace(/^v/, '');
-  return isNewerVersion(version, app.getVersion()) ? { status: 'manual', version } : { status: 'none' };
+  return latestPublicRelease({ currentVersion: app.getVersion(), platform: 'darwin', reason: 'unsigned' });
 }
 
 async function checkForUpdates() {
@@ -1093,14 +1086,14 @@ async function checkForUpdates() {
         sendUpdate(payload);
         return payload;
       }
-      const result = await autoUpdater.checkForUpdates();
-      if (result?.isUpdateAvailable) {
-        return {
-          status: automaticUpdateInstallSupported ? 'available' : 'manual',
-          version: result.updateInfo.version,
-        };
-      }
-      return { status: 'none' };
+      const payload = await checkWithFallback(async () => {
+        const result = await autoUpdater.checkForUpdates();
+        return result?.isUpdateAvailable
+          ? { status: automaticUpdateInstallSupported ? 'available' : 'manual', version: result.updateInfo.version }
+          : { status: 'none' };
+      }, () => latestPublicRelease({ currentVersion: app.getVersion() }));
+      if (!['downloading', 'downloaded'].includes(latestUpdateState.status)) sendUpdate(payload);
+      return payload;
     } catch (error) {
       const payload = updateErrorPayload(error);
       if (latestUpdateState.status !== payload.status) sendUpdate(payload);
@@ -1122,7 +1115,12 @@ async function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.logger = createUpdaterLogger((...values) => diagnostics?.write(...values));
-  autoUpdater.on('error', (error) => sendUpdate(updateErrorPayload(error)));
+  autoUpdater.on('error', (error) => {
+    // Let the explicit check finish its bounded retry/API fallback first.
+    // Download/install errors still reach the existing recovery UI immediately.
+    if (updateCheckPromise && !['available', 'downloading', 'downloaded'].includes(latestUpdateState.status)) return;
+    sendUpdate(updateErrorPayload(error));
+  });
   automaticUpdateInstallSupported = await canInstallUpdatesAutomaticallyAsync();
   if (isQuitting) return;
   applyUpdateInstallPolicy(autoUpdater, { supported: automaticUpdateInstallSupported });
