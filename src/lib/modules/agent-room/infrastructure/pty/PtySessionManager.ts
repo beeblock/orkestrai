@@ -9,7 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
-import { expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { automaticSubmitPrefix, expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { isTerminalReport, type TerminalInputSource } from '../../domain/terminal-input.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
@@ -1305,8 +1305,15 @@ export class PtySessionManager {
   submitIfComposerFree(id: string): boolean {
     const session = this.requireSession(id);
     if (session.exited || session.deliveryInProgress || session.humanComposerLength > 0 || (session.startupGuard && !session.startupGuard.canAcceptMessages)) return false;
-    this.write(id, '\r');
+    this.writeAutomaticSubmit(session);
     return true;
+  }
+
+  /** Every Enter that submits an owned automatic paste, including retries. */
+  private writeAutomaticSubmit(session: PtySession): void {
+    const flush = automaticSubmitPrefix(session.provider, session.conptySubmitGuard);
+    if (flush) this.write(session.id, flush);
+    this.write(session.id, '\r');
   }
 
   /** Mata todas as sessões (shutdown do servidor). */
@@ -1458,7 +1465,7 @@ export class PtySessionManager {
         session.lastSubmitOutputRevision = session.outputRevision;
         const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };
         delivery.submittedAt = Date.now();
-        this.write(session.id, '\r');
+        this.writeAutomaticSubmit(session);
         if (session.provider) {
           // Like a prompt the owner submits: the agent works from here on, and
           // `write` cleared `waiting` without a report, so every screen would
@@ -1628,7 +1635,7 @@ export class PtySessionManager {
         // This submits the still-owned body; it does not edit it or disable
         // later evidence-based recovery if ConPTY consumes this Enter too.
         delivery!.manualEnterCount = (delivery!.manualEnterCount ?? 0) + 1;
-        this.write(session.id, '\r');
+        this.writeAutomaticSubmit(session);
         this.notifyInputState(session);
         return;
       } else { this.notifyInputState(session); return; }

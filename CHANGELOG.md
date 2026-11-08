@@ -15,6 +15,7 @@ pt-BR, English, and Spanish translations.
 - Preserve evidence-based recovery after a manual Enter is also lost, without retyping the automatic message or mixing in owner text. Keep the exact prompt receipt and working-turn guards.
 - Check the saved exact prompt receipt after a PTY disappears before requeuing its original message. Preserve persisted leader-to-specialist and specialist-to-leader handoffs across interrupted terminals without duplicating already accepted prompts.
 - Recover a disappeared PTY from input and resize errors with a session-scoped error, including freshly created Canvas terminals. Ignore stale session failures, avoid repeated respawns, and do not replay old buffered input into a replacement. Remove the blanket Ctrl+C recovery instruction from the held-text notice.
+- Submit automatic Codex messages on native Windows and WSL when a loaded machine makes the TUI read input late. ConPTY delivers a paste as keys, and Codex kept an Enter read inside that key burst as a newline, leaving `[Pasted Content N chars]` unsent and the agent's queue blocked behind it. Each automatic Enter now follows an End key, which only moves the cursor and makes Codex close the paste first, so input order rather than read timing decides. macOS bracketed paste is unchanged.
 
 ## 0.52.7 - 2026-11-08
 

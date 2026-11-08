@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { readFileSync } from 'node:fs';
-import { frameAutomaticPaste, hasOwnedCodexPaste, nativeComposerState } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
+import { automaticSubmitPrefix, frameAutomaticPaste, hasOwnedCodexPaste, nativeComposerState } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
 import { PtySessionManager, sanitizeComposerText } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
 describe('Codex automatic paste on ConPTY', () => {
@@ -14,6 +14,13 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(frameAutomaticPaste('unknown', false, true, 'hello')).toBe('hello');
     expect(frameAutomaticPaste('codex', false, false, 'hello')).toBe('hello');
     expect(frameAutomaticPaste('codex', true, false, 'hello')).toBe('\x1b[200~hello\x1b[201~');
+  });
+
+  it('flushes the Codex key-stream paste with End before Enter only where ConPTY delivers keys', () => {
+    expect(automaticSubmitPrefix('codex', true)).toBe('\x1b[F');
+    expect(automaticSubmitPrefix('codex', false)).toBe('');
+    expect(automaticSubmitPrefix('claude', true)).toBe('');
+    expect(automaticSubmitPrefix(null, true)).toBe('');
   });
 
   it('recognizes the actual Codex placeholder, including Unicode counts and repeated-size suffixes', () => {
@@ -226,6 +233,9 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
     expect(writes.filter(value => value.includes(text))).toHaveLength(1);
     expect(writes.filter(value => value === '\r')).toHaveLength(3);
+    // The first Enter and both retries: End always lands between the paste and Enter.
+    const enters = writes.flatMap((value, index) => value === '\r' ? [index] : []);
+    expect(enters.map(index => writes[index - 1])).toEqual(['\x1b[F', '\x1b[F', '\x1b[F']);
   });
 
   it.each(['human', '\x1b[A', '\t', '\x15'])('preserves owner edits after explicit terminal takeover (%j)', async input => {

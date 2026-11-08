@@ -313,7 +313,9 @@ describe('PtySessionManager', () => {
       clearInterval(spinner);
       await vi.advanceTimersByTimeAsync(1_000);
       await second;
-      expect(writes).toEqual([framed ? '\x1b[200~first prompt\x1b[201~' : 'first prompt', '\r', framed ? '\x1b[200~second prompt\x1b[201~' : 'second prompt', '\r']);
+      // ConPTY delivers Codex pastes as keys: End flushes the burst before each Enter.
+      const submit = framed ? ['\x1b[F', '\r'] : ['\r'];
+      expect(writes).toEqual([framed ? '\x1b[200~first prompt\x1b[201~' : 'first prompt', ...submit, framed ? '\x1b[200~second prompt\x1b[201~' : 'second prompt', ...submit]);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -356,10 +358,10 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(3_000);
       await rejected;
       manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r']);
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\x1b[F', '\r']);
       manager.writeHumanInput(session.id, '\x03');
       manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r', '\x03', 'human input']);
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\x1b[F', '\r', '\x03', 'human input']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -834,7 +836,7 @@ describe('PtySessionManager', () => {
       isAccepted: async () => accepted,
     })).rejects.toThrow('não confirmou');
 
-    expect(writes).toEqual(['\x1b[200~execute a tarefa\x1b[201~', '\r']);
+    expect(writes).toEqual(['\x1b[200~execute a tarefa\x1b[201~', '\x1b[F', '\r']);
     manager.kill(session.id);
   });
 

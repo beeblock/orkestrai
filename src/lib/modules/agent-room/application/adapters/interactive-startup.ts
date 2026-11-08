@@ -231,6 +231,16 @@ export function nativeComposerState(provider: string | null | undefined, output:
   return state;
 }
 
+/** ConPTY hands Codex a paste as key events, and its paste-burst heuristic types
+ * an Enter read within 120 ms of the burst as a newline. That window is timed when
+ * the TUI reads each key, so a loaded machine reads the queued paste and Enter back
+ * to back however long we waited before writing it. Any non-text key flushes the
+ * burst and clears the window first; End only moves the cursor, which is already
+ * at the end of the paste. Input order then decides, not read timing. */
+export function automaticSubmitPrefix(provider: string | null | undefined, conpty: boolean): string {
+  return provider === 'codex' && conpty ? '\x1b[F' : '';
+}
+
 export function expectsPasteEcho(provider: string | null | undefined, text: string, conpty: boolean): boolean {
   return provider === 'codex' && conpty && Array.from(text).length > 1000;
 }
