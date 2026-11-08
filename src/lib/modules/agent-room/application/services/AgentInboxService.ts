@@ -12,6 +12,7 @@ import {
   findPromptInTranscript,
   findReplyToPrompt,
   latestTurnComplete,
+  interactiveRequestPending,
   latestTurnBoundary,
   type TranscriptLookupOptions,
 } from '../../infrastructure/transcript/AgentTranscript.js';
@@ -98,7 +99,12 @@ type BatchTracking = {
   since: number;
   messageIds: string[];
   deadline: number;
+  /** Typed while the agent's turn ran, as a person types into a working CLI. */
+  duringTurn?: boolean;
 };
+
+/** Notices that exist to restart an idle agent; a working one needs neither. */
+const TURN_BOUNDARY_KINDS = new Set(['leader_supervision', 'task_recovery']);
 
 type TranscriptContext = {
   provider: string | null;
@@ -755,13 +761,22 @@ export class AgentInboxService {
     if (!session) return null;
     // The PTY's receipt checker owns release of an unconfirmed composer.
     // Another completed turn is not proof that its paste left the input.
-    if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
+    // A working agent whose CLI takes typed input mid-turn need not wait for
+    // the turn to end: it reads the message at its next step, as from a person.
+    const idle = ptySessionManager.canAcceptAutomaticMessage(session.id);
+    if (!idle && !ptySessionManager.canAcceptAutomaticMessageDuringTurn(session.id)) return null;
     const context = await this.transcriptContext(workspaceId, nodeId, session);
+    let duringTurn = !idle;
     if (context.provider) {
       const boundary = await latestTurnBoundary(context.provider, context.cwd, context.agentSessionId, context.options);
-      if (boundary.ready === false) return null;
+      if (boundary.ready === false) {
+        if (!ptySessionManager.canAcceptAutomaticMessageDuringTurn(session.id)) return null;
+        duringTurn = true;
+      }
+      // An open question to the person has the input focus; typing would answer it.
+      if (duringTurn && await interactiveRequestPending(context.provider, context.cwd, context.agentSessionId, context.options)) return null;
     }
-    if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
+    if (!(duringTurn ? ptySessionManager.canAcceptAutomaticMessageDuringTurn(session.id) : ptySessionManager.canAcceptAutomaticMessage(session.id))) return null;
 
     const batch: AgentMessageEnvelope[] = [];
     let chars = 0;
@@ -769,6 +784,7 @@ export class AgentInboxService {
       // One external return address per structured prompt. A combined final
       // answer must never be copied into another external caller's receipt.
       if (batch.length && (savedExternalReply(batch[0].metadata) || savedExternalReply(envelope.metadata))) break;
+      if (duringTurn && TURN_BOUNDARY_KINDS.has(envelope.kind)) continue;
       if (batch.length >= MAX_BATCH_ITEMS) break;
       if (batch.length && chars + envelope.content.length > MAX_BATCH_CHARS) break;
       if (!await taskExecutionService.admit(envelope, session.id)) continue;
@@ -794,6 +810,7 @@ export class AgentInboxService {
           batchSize: batch.length,
           batchSince: since,
           sessionId: session.id,
+          ...(duringTurn ? { duringTurn: true } : {}),
           ...(index === 0 ? { batchPrompt: prompt } : {}),
         },
       });
@@ -806,6 +823,7 @@ export class AgentInboxService {
       since,
       messageIds: batch.map((envelope) => envelope.id),
       deadline: since + CONFIRMATION_WINDOW_MS,
+      duringTurn,
       envelopes: batch,
       batchId,
       context,
@@ -823,6 +841,7 @@ export class AgentInboxService {
         message: batch.prompt,
         submitDelayMs: 120,
         queueTimeoutMs: 30_000,
+        duringTurn: batch.duringTurn,
         onSubmitted: () => {
           submitted = true;
           const at = new Date().toISOString();

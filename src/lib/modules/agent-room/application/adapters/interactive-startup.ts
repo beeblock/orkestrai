@@ -231,6 +231,26 @@ export function nativeComposerState(provider: string | null | undefined, output:
   return state;
 }
 
+/** Whether the latest OSC 7501 report leaves the Codex composer taking typed
+ * input: between turns, or during a plain working turn, whose Enter steers it.
+ * A blocked report is a question or approval with focus; unknown means no. */
+export function nativeComposerOpen(provider: string | null | undefined, output: string): boolean | undefined {
+  if (provider !== 'codex') return undefined;
+  let open: boolean | undefined;
+  for (const match of output.matchAll(/\x1b\]7501;state=([a-z_-]+)(?::app=(codex)(?::kind=([a-z_-]+))?)?(?:\x07|\x1b\\)/g)) {
+    if (!match[2] && match[1] !== 'clear') continue;
+    open = ['idle', 'done', 'error'].includes(match[1]) || (match[1] === 'working' && !match[3]);
+  }
+  return open;
+}
+
+/** Agent TUIs that take typed input during their own turn, as a person would
+ * type it: Codex steers the running turn once its composer is proven open, and
+ * Claude queues the prompt and absorbs it at its next step. */
+export function acceptsInputDuringTurn(provider: string | null | undefined, composerOpen: boolean | undefined): boolean {
+  return provider === 'codex' ? composerOpen === true : provider === 'claude';
+}
+
 /** ConPTY hands Codex a paste as key events, and its paste-burst heuristic types
  * an Enter read within 120 ms of the burst as a newline. That window is timed when
  * the TUI reads each key, so a loaded machine reads the queued paste and Enter back

@@ -9,7 +9,7 @@ import { executionRuntimeKey } from '../../domain/runtime.ts';
 import { agentEnv, normalizeWindowsPath, resolveCommand } from '../agent-path.ts';
 import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
-import { automaticSubmitPrefix, expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
+import { acceptsInputDuringTurn, automaticSubmitPrefix, expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerOpen, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
 import { isTerminalReport, type TerminalInputSource } from '../../domain/terminal-input.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
@@ -150,6 +150,8 @@ type PtySession = PtySessionInfo & {
   startupGuard: InteractiveStartupGuard | null;
   bracketedPaste: boolean;
   nativeComposerState?: 'idle' | 'working';
+  /** A native report that the composer takes typed input, including mid-turn. */
+  nativeComposerOpen?: boolean;
   cursorReportExpectedUntil?: number;
   cursorReportsPending?: number;
   terminalModeTail: string;
@@ -214,6 +216,8 @@ type ComposerDelivery = {
   requiresAcceptance: boolean;
   confirmAcceptance?: () => Promise<boolean>;
   isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
+  /** May be typed while the provider's turn runs, if its composer takes input. */
+  duringTurn?: boolean;
   confirmationPending?: boolean;
   /** Actual Enter time, rather than when the delivery joined the queue. */
   submittedAt?: number;
@@ -557,6 +561,8 @@ export class PtySessionManager {
       }
       const composerState = nativeComposerState(session.provider, modes);
       if (composerState !== undefined) session.nativeComposerState = composerState;
+      const composerOpen = nativeComposerOpen(session.provider, modes);
+      if (composerOpen !== undefined) session.nativeComposerOpen = composerOpen;
       for (const match of modes.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
         if (match[1].split(';').includes('2004')) session.bracketedPaste = match[2] === 'h';
       }
@@ -580,7 +586,7 @@ export class PtySessionManager {
       if (composerState === 'idle') {
         this.releaseDeliveryBarrierWhenReady(session);
         this.drainDeliveryQueue(session);
-      }
+      } else if (composerOpen) this.drainDeliveryQueue(session);
       if (session.startupGuard && !session.startupGuard.canAcceptMessages) this.setWaiting(session, false);
       for (const listener of session.listeners) listener(data);
       this.scheduleAttentionCheck(session);
@@ -1032,6 +1038,8 @@ export class PtySessionManager {
       isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
       signal?: AbortSignal;
       onSubmitted?: (mark: PtyOutputMark) => void;
+      /** See `canAcceptAutomaticMessageDuringTurn`. */
+      duringTurn?: boolean;
     } = {},
   ): Promise<void> {
     const session = this.requireSession(id);
@@ -1047,7 +1055,7 @@ export class PtySessionManager {
       const relevant = options.isStillRelevant ? await options.isStillRelevant(beforeWrite) : true;
       return relevant && !options.signal?.aborted;
     } : undefined;
-    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted, stillRelevant);
+    const queued = this.queueWithSubmit(id, text, options.submitDelayMs ?? 200, Boolean(confirmAcceptance), confirmAcceptance, options.onSubmitted, stillRelevant, options.duringTurn);
     if (options.signal?.aborted) {
       queued.cancel();
       throw new Error('Agent message delivery cancelled.');
@@ -1166,6 +1174,7 @@ export class PtySessionManager {
     confirmAcceptance?: () => Promise<boolean>,
     onSubmitted?: (mark: PtyOutputMark) => void,
     isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>,
+    duringTurn = false,
   ): ComposerDeliveryHandle {
     const session = this.requireSession(id);
     if (session.exited) {
@@ -1186,7 +1195,7 @@ export class PtySessionManager {
 
     let delivery!: ComposerDelivery;
     const submitted = new Promise<void>((resolve, reject) => {
-      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted, isStillRelevant };
+      delivery = { text: sanitized, submitDelayMs, resolve, reject, requiresAcceptance, confirmAcceptance, onSubmitted, isStillRelevant, duringTurn };
       session.deliveryQueue.push(delivery);
       this.drainDeliveryQueue(session);
     });
@@ -1222,6 +1231,22 @@ export class PtySessionManager {
       && (session.waiting || session.nativeComposerState === 'idle') && session.scrollback.length > 0
       && !session.deliveryInProgress && !session.awaitingDeliveryIdle && !session.deliveryQueue.length
       && session.humanComposerLength === 0
+      && (!session.startupGuard || session.startupGuard.canAcceptMessages));
+  }
+
+  /**
+   * Like `canAcceptAutomaticMessage`, but the provider's turn may be running:
+   * its composer takes typed input as it would from a person. Owner drafts,
+   * startup dialogs, app-owned turns and the one-delivery-at-a-time receipt
+   * barrier still apply; the caller rules out an open question for Claude.
+   */
+  canAcceptAutomaticMessageDuringTurn(id: string): boolean {
+    const session = this.sessions.get(id);
+    return Boolean(session && !session.exited && !session.managedTurn
+      && acceptsInputDuringTurn(session.provider, session.nativeComposerOpen)
+      && session.initialIdleObserved && session.scrollback.length > 0
+      && !session.deliveryInProgress && !session.awaitingDeliveryIdle && !session.deliveryQueue.length
+      && session.humanComposerLength === 0 && !session.deferredHumanSubmitTimer
       && (!session.startupGuard || session.startupGuard.canAcceptMessages));
   }
 
@@ -1370,7 +1395,8 @@ export class PtySessionManager {
     if (
       session.exited ||
       session.managedTurn ||
-      session.nativeComposerState === 'working' ||
+      // A working Codex composer takes a mid-turn message only while it is proven open.
+      (session.nativeComposerState === 'working' && !(session.deliveryQueue[0]?.duringTurn && session.nativeComposerOpen === true)) ||
       (session.startupGuard && !session.startupGuard.canAcceptMessages) ||
       // A visible prompt glyph can belong to the loading screen, before
       // ConPTY has enabled the provider's input/paste modes. Reuse the native
@@ -1421,6 +1447,10 @@ export class PtySessionManager {
       return;
     }
     const textWrittenAt = Date.now();
+    // A running turn keeps painting its own progress, so its output never
+    // settles. Outside ConPTY a bracketed paste reaches the TUI as one event,
+    // so Enter after it is already ordered; keep the settle wait elsewhere.
+    const settleOutput = !(delivery.duringTurn && session.bracketedPaste && !session.conptySubmitGuard);
     delivery.humanInputRevision = session.humanInputRevision;
     delivery.pasteOutputStart = session.outputLength;
     try {
@@ -1453,7 +1483,7 @@ export class PtySessionManager {
         && hasPendingAutomaticPaste(session.provider, session.scrollback.slice(Math.max(0, delivery.pasteOutputStart - retainedFrom)), delivery.text, session.startupGuard);
       if (echoed && delivery.pasteEchoAt === undefined) delivery.pasteEchoAt = now;
       const echoReady = echoed && now - (delivery.pasteEchoAt ?? now) >= COMPOSER_OUTPUT_QUIET_MS;
-      if (elapsed < submitDelayMs || (elapsed < COMPOSER_SETTLE_LIMIT_MS && (expectsEcho ? !echoReady : !outputQuiet))) {
+      if (elapsed < submitDelayMs || (elapsed < COMPOSER_SETTLE_LIMIT_MS && settleOutput && (expectsEcho ? !echoReady : !outputQuiet))) {
         session.deliveryTimer = setTimeout(submit, Math.min(100, Math.max(20, submitDelayMs - elapsed)));
         session.deliveryTimer.unref?.();
         return;
@@ -1461,6 +1491,14 @@ export class PtySessionManager {
       try {
         if (session.startupGuard && !session.startupGuard.canAcceptMessages) {
           throw new Error('Complete the provider workspace trust confirmation in its terminal before sending agent messages.');
+        }
+        if (delivery.duringTurn && session.nativeComposerOpen === false) {
+          // A question or approval took focus after the paste; Enter would answer
+          // it. Leave the paste as a visible owner draft: no Enter, no replay,
+          // and no automatic message typed after it until the owner acts.
+          delivery.ownerTakeover = true;
+          session.humanComposerLength = Math.max(session.humanComposerLength, Array.from(delivery.text).length);
+          throw new Error('An agent question opened before Enter.');
         }
         session.lastSubmitOutputRevision = session.outputRevision;
         const submittedAt: PtyOutputMark = { sessionId: session.id, length: session.outputLength };

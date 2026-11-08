@@ -1563,6 +1563,46 @@ export async function latestTurnStartedAt(
   }
 }
 
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode', 'request_user_input']);
+
+/** Whether the latest turn left a question to the person unanswered. Its dialog
+ * has the input focus, so typed text and Enter would answer it. */
+export function parseInteractiveRequestPending(storage: string, transcript: string): boolean {
+  const answered = new Set<string>();
+  const records = transcript.trim().split('\n');
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    let event: any;
+    try { event = JSON.parse(records[index]); } catch { continue; }
+    if (storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl') {
+      const content = Array.isArray(event?.message?.content) ? event.message.content : [];
+      for (const block of content) {
+        if (event.type === 'user' && block?.type === 'tool_result' && typeof block.tool_use_id === 'string') answered.add(block.tool_use_id);
+        if (event.type === 'assistant' && block?.type === 'tool_use' && INTERACTIVE_TOOLS.has(block.name)) return !answered.has(block.id);
+      }
+      if (isClaudeUserPrompt(event)) return false;
+    } else if (storage === 'codex-rollout-jsonl') {
+      const payload = event?.payload;
+      if (event?.type !== 'response_item') continue;
+      if (payload?.type === 'function_call_output' && typeof payload.call_id === 'string') answered.add(payload.call_id);
+      if (payload?.type === 'function_call' && INTERACTIVE_TOOLS.has(payload.name)) return !answered.has(payload.call_id);
+      if (payload?.type === 'message' && payload.role === 'user') return false;
+    } else return false;
+  }
+  return false;
+}
+
+/** See `parseInteractiveRequestPending`; an unreadable conversation counts as pending. */
+export async function interactiveRequestPending(
+  provider: string, cwd: string, sessionId: string | null, options: TranscriptLookupOptions = {},
+): Promise<boolean> {
+  try {
+    const tail = await conversationTail(provider, cwd, sessionId, options);
+    return tail ? parseInteractiveRequestPending(tail.storage, tail.text) : true;
+  } catch {
+    return true;
+  }
+}
+
 type FileTurn = { sessionId: string; reply: { text: string; complete: boolean } | null };
 const fileTurnCache = new TranscriptResultCache<FileTurn>(value => (value?.reply?.text.length ?? 0) * 2);
 

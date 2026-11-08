@@ -855,7 +855,7 @@ export class TaskBoardService {
       : `SEM responsável. Distribua: orkestrai task assign ${taskId} "<Agente>" (ou coordene como achar melhor)`;
     const content = `[nova tarefa no quadro #${taskId.slice(0, 8)}]\n${await taskBrief(task)}\n${hint}`;
     if (leaderIsAgent) {
-      // A busy leader reads it at its next turn boundary; an offline one on resume.
+      // A busy leader reads it mid-turn or at its next turn boundary; an offline one on resume.
       await agentInboxService.enqueue({
         workspaceId, toNodeId: leader.id, kind: 'task_created', taskId, content,
         dedupKey: `task-created:${taskId}:${leader.id}`, metadata: { wake: true },

@@ -59,11 +59,11 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $version -notmatch ('^codex-cli ' + [regex]::Escape($expectedVersion))) { throw 'Unexpected Codex TUI executable/version' }
           "ORKESTRAI_TEST_CODEX_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
       - name: Check Windows recovery guards
-        run: npm test -- --run tests/unit/pty-input-ownership.test.ts tests/unit/codex-paste-submit.test.ts tests/unit/terminal-replay-queries.test.ts tests/unit/pty-terminal-modes.test.ts tests/unit/learning-delivery-budget.test.ts tests/unit/terminal-output-buffer.test.ts tests/feature/task-dispatch-latency.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
+        run: npm test -- --run tests/unit/pty-input-ownership.test.ts tests/unit/codex-paste-submit.test.ts tests/unit/terminal-replay-queries.test.ts tests/unit/pty-terminal-modes.test.ts tests/unit/learning-delivery-budget.test.ts tests/unit/terminal-output-buffer.test.ts tests/feature/task-dispatch-latency.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts tests/unit/agent-mid-turn-delivery.test.ts --maxWorkers=2 --testTimeout=20000
       - name: Exercise real Codex over native ConPTY with loopback-only model responses
         shell: pwsh
         run: |
-          npm test -- --run tests/feature/codex-tui-delivery.test.ts tests/feature/codex-tui-canvas-submit.test.ts tests/feature/codex-tui-inbox.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
+          npm test -- --run tests/feature/codex-tui-delivery.test.ts tests/feature/codex-tui-canvas-submit.test.ts tests/feature/codex-tui-inbox.test.ts tests/feature/codex-tui-mid-turn.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
           if ($LASTEXITCODE -ne 0) { throw 'Real Codex TUI delivery failed' }
       - name: Install real terminal viewer
         run: npx playwright install chromium

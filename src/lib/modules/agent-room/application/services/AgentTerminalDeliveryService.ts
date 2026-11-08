@@ -17,6 +17,8 @@ type DeliverAgentMessageInput = {
   confirmAcceptance?: () => Promise<boolean>;
   /** Called when Enter submits the message, with where the terminal's output stood. */
   onSubmitted?: (mark: PtyOutputMark) => void;
+  /** Type it while the provider's turn runs (see `canAcceptAutomaticMessageDuringTurn`). */
+  duringTurn?: boolean;
 };
 
 /**
@@ -41,6 +43,7 @@ export class AgentTerminalDeliveryService {
       signal: input.signal,
       isAccepted: confirmAccepted,
       isStillRelevant: input.isStillRelevant,
+      duringTurn: input.duringTurn,
       onSubmitted: mark => {
         submission.at = ptySessionManager.automaticDeliverySubmittedAt(input.sessionId);
         input.onSubmitted?.(mark);

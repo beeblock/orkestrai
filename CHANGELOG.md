@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Changed
+
+- Deliver inbox messages to busy Codex and Claude agents during their turn, as a person types into a working CLI: Codex steers the running turn and Claude absorbs the queued prompt at its next step. Agents no longer wait for a 20–60 minute turn to end before reading a teammate's reply or the owner's message. Exact transcript receipts, owner-draft custody and one automatic message at a time per terminal still apply. Messages wait for the turn boundary when Codex reports a question or approval, when a Claude question is unanswered, for other CLIs, and for the idle notices that only restart a stopped agent. If a Codex question opens after the paste, Enter is not pressed; the text stays as a visible draft for the owner and is never retyped.
+
 ## 0.52.8 - 2026-11-08
 
 ### Fixed
