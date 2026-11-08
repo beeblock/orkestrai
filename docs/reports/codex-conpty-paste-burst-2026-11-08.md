@@ -117,11 +117,66 @@ works, because its composer accepts Enter (submit) and Tab (queue) during a runn
 turn (`handle_key_event_without_popup` at 0.167.0). Orkestrai waits for the end of
 the turn instead.
 
-Changing that is a product decision, not part of this fix: delivering to a working
-Codex changes when agents see messages. Before choosing it, verify how the running
-turn consumes a submitted or queued prompt and how it is persisted for the exact
-receipt. The 12%
+The owner approved delivering during the turn; see the next section. The 12%
 idle-target waits have no inbox trace in the app log and need instrumentation
 before anyone names a cause. The 2026-11-02 throughput audit already listed the
 context amplifiers that lengthen turns: the unbounded `task_list`, supervision
 notices and stale doing cards.
+
+## Mid-turn delivery (owner-approved, same branch)
+
+Inbox messages to a busy Codex or Claude agent are now typed during its turn,
+as a person would type into a working CLI.
+
+Behavior verified with real Codex 0.167 (isolated HOME, loopback model with
+`exec_command`):
+
+- With a 15 s command running, OSC 7501 reports `working:app=codex`. Codex took
+  Enter at once and persisted the message as an ordinary user message in the
+  same turn's next model request, together with the command output. That is the
+  exact receipt the inbox already uses.
+- While the model was still streaming, Codex restarted the request with the
+  message within about 0.5 s.
+
+Real Claude 2.1.311 transcripts on this Mac, read only by record types and counts,
+show the same: 1,537 `queue-operation` enqueues, 648 removals with
+`absorbed_mid_turn` and 864 dequeues. The transcript reader already treats the
+enqueue as the receipt.
+
+How Orkestrai now decides:
+
+- `canAcceptAutomaticMessageDuringTurn` applies every existing guard except the
+  turn itself: owner draft, startup dialog, app-owned turn, and one automatic
+  message at a time behind its exact receipt.
+- Codex additionally needs OSC 7501 `working` with no `kind`. `blocked`
+  (question, approval, auth) and `clear` refuse.
+- The inbox also refuses an unanswered `AskUserQuestion` or `ExitPlanMode`
+  (Claude) or `request_user_input` (Codex) in the transcript tail. An unreadable
+  conversation counts as pending.
+- `leader_supervision` and `task_recovery` notices still wait for the turn
+  boundary, because they exist to restart a stopped agent.
+- If a Codex question opens between the paste and Enter, Enter is not pressed.
+  The paste stays as a visible owner draft, owner keys reach the question, and no
+  automatic message is typed after the draft until the owner submits or clears it.
+- A running turn keeps painting its progress. A bracketed paste outside ConPTY
+  therefore skips the output-settle wait. ConPTY keeps it, plus End before Enter.
+
+Verification:
+
+- Real Codex end to end (`tests/feature/codex-tui-mid-turn.test.ts`): delivered
+  during a 12 s command and confirmed by exact receipt in 11.1 s, inside the same
+  turn (one `task_started`). The test is also added to the native Windows job.
+- PTY plus inbox with a real PTY and rollout (`tests/feature/inbox-mid-turn.test.ts`):
+  - A reply is typed while working.
+  - Nothing is typed while a question is open; the message enters when it closes.
+  - The idle notice waits for the boundary.
+  - Each message arrives once.
+- Unit tests cover the OSC states, the transcript question checks, the
+  mid-turn drain and the question-before-Enter path.
+- Broad local regression: 763 tests passed across 78 inbox, bridge, PTY,
+  transcript, docs and real-Codex files.
+
+Not verified: a real Claude binary was not driven against a fixture model. A local
+run could reach the owner's Keychain credentials, so the Claude evidence is the
+owner's existing transcripts. Claude has no submit-time question signal, so a
+question that opens in the second between the check and Enter is not caught.
