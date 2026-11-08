@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.52.7 - 2026-11-08
+
 ### Fixed
 
 - Keep restored owner text and Enter in separate settled writes on native Windows, rather than turning a buffered owner line into another unsubmitted paste. Preserve input order, cancellation and PTY replacement checks. Reuse cursor-proven footer separation for complete short Codex messages and keep destructive or unknown controls blocked.
