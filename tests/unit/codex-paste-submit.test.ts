@@ -41,6 +41,10 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(hasOwnedCodexPaste(`\x1b[16;1H›\x1b[1C[Pasted Content 9018 chars]${resizedFooter}`, 'x'.repeat(9018))).toBe(false);
   });
 
+  it.each([0, 1, 2, 3, 4, 5, 6])('keeps cursor style %s out of the current draft', style => {
+    expect(hasOwnedCodexPaste(`\x1b[17;3H[Pasted Content 9018 chars]\x1b[${style} q\x1b[?25h`, 'x'.repeat(9018))).toBe(true);
+  });
+
   it.each([
     '\x1b[17;40Hhuman edit\x1b[17;30H',
     '\x1b[16;1HApprove this action\x1b[17;30H',

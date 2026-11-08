@@ -51,6 +51,9 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   let fresh = output.slice(-32_768);
   const clear = [...fresh.matchAll(/\x1b\[[23]J/g)].at(-1);
   if (clear) fresh = fresh.slice(clear.index! + clear[0].length);
+  // DECSCUSR changes only cursor shape/blinking. Node's ANSI stripper leaves
+  // its final " q" behind, falsely making the pending paste look edited.
+  fresh = fresh.replace(/\x1b\[[0-6]? q/g, '');
   // ConPTY footer erases and model/path redraws are separate screen rows,
   // not edits to the paste. Keep clears, unknown controls and composer edits.
   fresh = withoutCodexFooter(fresh);
