@@ -43,7 +43,7 @@ export const PTY_WS_PATH = '/ws/agent-room/pty';
 type ClientMessage =
   | { type: 'create'; command: string; args?: string[]; conversationArgs?: string[]; freshSessionArgs?: string[]; agentSessionId?: string; cwd: string; cols?: number; rows?: number; env?: Record<string, string>; provider?: string; profileId?: string | null; sessionStorage?: string; label?: string; workspace?: string; workspaceId?: string; nodeId?: string; runtime?: WorkspaceExecutionRuntime; workspaceRoot?: string; stream?: boolean }
   | { type: 'attach'; sessionId: string; cols?: number; rows?: number; stream?: boolean }
-  | { type: 'input'; sessionId: string; data: string; imagePaste?: boolean }
+  | { type: 'input'; sessionId: string; data: string; imagePaste?: boolean; source?: 'keyboard' | 'terminal' }
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
   | { type: 'ping' }
@@ -447,7 +447,10 @@ export function handlePtyConnection(socket: WebSocket): void {
           break;
         }
         case 'input': {
-          ptySessionManager.writeHumanInput(message.sessionId, String(message.data ?? ''), { imagePaste: message.imagePaste === true });
+          ptySessionManager.writeHumanInput(message.sessionId, String(message.data ?? ''), {
+            imagePaste: message.imagePaste === true,
+            ...(message.source === 'keyboard' || message.source === 'terminal' ? { source: message.source } : {}),
+          });
           break;
         }
         case 'resize': {
@@ -474,8 +477,13 @@ export function handlePtyConnection(socket: WebSocket): void {
           send({ type: 'error', message: `Tipo de mensagem desconhecido: ${(message as { type?: string }).type}` });
       }
     } catch (error) {
+      // The singleton may come from the SSR module copy. Use the stable code,
+      // not instanceof against this WS layer's separately loaded class.
+      const missing = error instanceof Error && 'code' in error && error.code === 'PTY_SESSION_NOT_FOUND'
+        && 'sessionId' in error && typeof error.sessionId === 'string' ? error.sessionId : undefined;
       send({
         type: 'error',
+        ...(missing ? { code: 'PTY_SESSION_NOT_FOUND', sessionId: missing } : {}),
         ...(error instanceof WslLaunchError ? { code: error.code } : {}),
         message: error instanceof Error ? error.message : 'Erro na sessão PTY.',
       });

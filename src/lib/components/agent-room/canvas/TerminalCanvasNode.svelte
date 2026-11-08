@@ -168,6 +168,7 @@
     await (data.providersReady ?? Promise.resolve());
     ownsCreatedSession = false;
     forceRespawn = true;
+    restartGeneration += 1;
   }
 
   async function persistCreatedSession(sessionId: string) {
@@ -1048,6 +1049,7 @@
           sessionLabel={data.title}
           workspaceName={data.workspaceName}
           onSessionCreated={persistCreatedSession}
+          onRespawn={resolveRespawn}
           onOpenPath={(path) => data.onOpenFile?.(path)}
           themeName={currentTheme}
           paintable={face === 'terminal'}

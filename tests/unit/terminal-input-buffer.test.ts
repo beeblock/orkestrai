@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { TerminalInputBuffer, terminalInputFrame } from '$lib/components/agent-room/terminal-input-buffer.js';
+import { TerminalInputBuffer, TerminalInputProvenance, terminalInputFrame } from '$lib/components/agent-room/terminal-input-buffer.js';
 
 describe('terminal input typed before the terminal attaches', () => {
+  it('distinguishes a modified F3 key from an identical automatic cursor reply', () => {
+    const provenance = new TerminalInputProvenance();
+    provenance.noteKey('\x1b[1;2R');
+    expect(provenance.consume('\x1b[1;2R')).toBe('keyboard');
+    expect(provenance.consume('\x1b[1;2R')).toBe('terminal');
+    expect(provenance.consume('IME or pasted text')).toBe('terminal');
+  });
+
+  it('preserves the key provenance across a reconnect', () => {
+    const buffer = new TerminalInputBuffer();
+    buffer.push('\x1b[1;2R', false, 'keyboard');
+    expect(buffer.drain().map(input => terminalInputFrame('session', input))).toEqual([
+      { type: 'input', sessionId: 'session', data: '\x1b[1;2R', source: 'keyboard' },
+    ]);
+  });
   it('replays an image paste with its mark, in order with the keys around it', () => {
     const buffer = new TerminalInputBuffer();
     buffer.push('veja ');

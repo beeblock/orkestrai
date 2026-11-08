@@ -7,6 +7,12 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+
+- Keep terminal mouse reports and late or duplicate cursor replies out of the owner draft. Preserve real key provenance, including modified F3, through reconnects; only validated terminal report bytes bypass input custody. Do not show a typing warning or block manual Enter for automatic reports.
+- Preserve evidence-based recovery after a manual Enter is also lost, without retyping the automatic message or mixing in owner text. Keep the exact prompt receipt and working-turn guards.
+- Recover a disappeared PTY from input and resize errors with a session-scoped error, including freshly created Canvas terminals. Ignore stale session failures, avoid repeated respawns, and do not replay old buffered input into a replacement. Remove the blanket Ctrl+C recovery instruction from the held-text notice.
+
 ## 0.52.7 - 2026-11-08
 
 ### Fixed

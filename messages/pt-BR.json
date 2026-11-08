@@ -2010,7 +2010,7 @@
   "term.preparing_agent": "Preparando a sessão do agente…",
   "term.send": "Enviar",
   "term.no_session": "Nenhuma sessão informada.",
-  "term.input_deferred": "Há uma entrega em andamento no terminal. Sua digitação fica separada. Pressione Ctrl+C para interromper e assumir o controle.",
+  "term.input_deferred": "Seu texto fica separado enquanto o agente recebe uma mensagem anterior. Ele será restaurado após a confirmação.",
   "term.ws_error": "Falha na conexão WebSocket com o servidor.",
   "term.workspace_suspended": "Este workspace está pausado. Abra-o novamente antes de iniciar um terminal.",
   "term.conversation_in_use": "Esta conversa pertence a outro agente ativo. O terminal dele foi preservado; restaure a conversa própria deste agente antes de tentar novamente.",

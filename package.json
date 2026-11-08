@@ -262,6 +262,7 @@
       "src/lib/modules/agent-room/infrastructure/codex-mcp-config.ts",
       "src/lib/modules/agent-room/infrastructure/WslRuntime.ts",
       "src/lib/modules/agent-room/domain/runtime.ts",
+      "src/lib/modules/agent-room/domain/terminal-input.ts",
       "src/lib/modules/agent-room/domain/terminal-working-directory.ts",
       "packages/orkestrai-cli/**",
       "packages/orkestrai-figma-plugin/**",

@@ -65,9 +65,20 @@ jobs:
         run: |
           npm test -- --run tests/feature/codex-tui-delivery.test.ts tests/feature/codex-tui-canvas-submit.test.ts tests/feature/codex-tui-inbox.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-soak.log
           if ($LASTEXITCODE -ne 0) { throw 'Real Codex TUI delivery failed' }
+      - name: Install real terminal viewer
+        run: npx playwright install chromium
+      - name: Exercise browser mouse and duplicate cursor reports with real Codex
+        shell: pwsh
+        run: |
+          $env:ORKESTRAI_REAL_CODEX_BROWSER_TEST = '1'
+          $env:ORKESTRAI_CODEX_SOAK_SECONDS = '0'
+          npm test -- --run tests/feature/codex-tui-canvas-submit.test.ts --maxWorkers=1 2>&1 | Tee-Object -FilePath windows-codex-browser.log
+          if ($LASTEXITCODE -ne 0) { throw 'Browser-to-ConPTY Codex delivery failed' }
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-codex-soak-log-${{ matrix.codex_version }}
-          path: windows-codex-soak.log
+          path: |
+            windows-codex-soak.log
+            windows-codex-browser.log
           retention-days: 7

@@ -187,6 +187,31 @@ describe('PTY WebSocket protocol', () => {
     socket.emit('close');
   });
 
+  it.each([
+    { type: 'input', data: '\x03' },
+    { type: 'resize', cols: 80, rows: 24 },
+  ])('identifies a missing PTY during $type so the current viewer can recover', input => {
+    const socket = new FakeSocket(); handlePtyConnection(socket as never);
+    try {
+      socket.emit('message', JSON.stringify({ ...input, sessionId: 'removed-session' }));
+      expect(socket.frames).toContainEqual({ type: 'error', code: 'PTY_SESSION_NOT_FOUND',
+        sessionId: 'removed-session', message: 'Sessão PTY não encontrada: removed-session' });
+    } finally { socket.emit('close'); }
+  });
+
+  it('passes terminal provenance through the WebSocket without treating a forged source as text authority', () => {
+    const socket = new FakeSocket(); handlePtyConnection(socket as never);
+    const write = vi.spyOn(ptySessionManager, 'writeHumanInput').mockImplementation(() => {});
+    try {
+      socket.emit('message', JSON.stringify({ type: 'input', sessionId: 'current', data: '\x1b[1;2R', source: 'terminal' }));
+      socket.emit('message', JSON.stringify({ type: 'input', sessionId: 'current', data: 'draft', source: 'arbitrary' }));
+      expect(write.mock.calls).toEqual([
+        ['current', '\x1b[1;2R', { imagePaste: false, source: 'terminal' }],
+        ['current', 'draft', { imagePaste: false }],
+      ]);
+    } finally { socket.emit('close'); }
+  });
+
   it('redimensiona a PTY para o viewport que esta restaurando a sessao', () => {
     const session = ptySessionManager.create({ command: '/bin/cat', cwd: '/tmp', cols: 40, rows: 8 });
     const socket = new FakeSocket();

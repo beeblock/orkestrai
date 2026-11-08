@@ -916,7 +916,9 @@ export class AgentInboxService {
 
   private async checkConfirmation(batchId: string, tracking: BatchTracking): Promise<void> {
     const session = ptySessionManager.get(tracking.sessionId);
-    const context = session ? await this.transcriptContext(tracking.workspaceId, tracking.nodeId, session) : null;
+    // Ctrl+C or replacement can remove the PTY after the provider saved the
+    // prompt. Consult the saved conversation before deciding to send again.
+    const context = await this.transcriptContext(tracking.workspaceId, tracking.nodeId, session);
     const found = context?.provider
       ? await findPromptInTranscript(context.provider, context.cwd, context.agentSessionId, tracking.prompt, tracking.since, context.options).catch(() => null)
       : null;

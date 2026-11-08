@@ -560,6 +560,42 @@ describe('Agent inbox', () => {
     expect(prompts).toHaveLength(1);
   });
 
+  it.each([['Lider', 'Web'], ['Web', 'Lider']])('retains %s → %s after an interrupted terminal and delivers the original envelope to its replacement', async (from, to) => {
+    const { workspace, nodes } = await team();
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementationOnce(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+      throw Object.assign(new Error('Automatic paste interrupted before Enter.'), { code: 'PTY_DELIVERY_UNCONFIRMED' });
+    });
+    const result = await bridgeService.ask(workspace.id, { from: nodes[from], to: nodes[to], message: 'Keep this exact handoff after interruption', timeoutMs: 1000 });
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'sent', content: 'Keep this exact handoff after interruption' });
+    const old = session(nodes[to]); sessions.delete(old.id);
+    await agentInboxService.sweepNow();
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'queued', content: 'Keep this exact handoff after interruption' });
+    const replacement = { ...old, id: uuidv7() }; sessions.set(replacement.id, replacement);
+    await workspaceRepository.updateNode(nodes[to], { payload: { command: 'codex', provider: 'codex', sessionId: replacement.id } });
+    await agentInboxService.drain(workspace.id, nodes[to]);
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'delivered', content: 'Keep this exact handoff after interruption' });
+    expect(prompts).toHaveLength(2);
+    expect(prompts.every(prompt => prompt.message.includes('Keep this exact handoff after interruption'))).toBe(true);
+  });
+
+  it('checks a saved exact receipt after the PTY disappears instead of duplicating an accepted message', async () => {
+    const { workspace, nodes } = await team();
+    const target = session(nodes.Lider);
+    await workspaceRepository.updateNode(nodes.Lider, { payload: { command: 'codex', provider: 'codex', sessionId: target.id, agentSessionId: target.agentSessionId } });
+    vi.mocked(agentTerminalDeliveryService.deliver).mockImplementationOnce(async input => {
+      prompts.push({ nodeId: input.nodeId, message: input.message });
+      throw Object.assign(new Error('PTY exited before confirmation.'), { code: 'PTY_DELIVERY_UNCONFIRMED' });
+    });
+    const result = await bridgeService.ask(workspace.id, { from: nodes.Web, to: nodes.Lider, message: 'Already accepted before exit', timeoutMs: 1000 });
+    sessions.delete(target.id);
+    vi.mocked(transcript.findPromptInTranscript).mockResolvedValue({ sessionId: target.agentSessionId! });
+    await agentInboxService.sweepNow();
+    expect(await controlCenterRepository.findEnvelope(result.messageId)).toMatchObject({ state: 'delivered' });
+    expect(transcript.findPromptInTranscript).toHaveBeenCalledWith('codex', '/tmp', target.agentSessionId, expect.any(String), expect.any(Number), expect.any(Object));
+    expect(prompts).toHaveLength(1);
+  });
+
   it('never types a submitted prompt again when the provider is slow to record it', async () => {
     const { workspace, nodes } = await team();
     vi.mocked(agentTerminalDeliveryService.deliver).mockImplementationOnce(async (input) => {

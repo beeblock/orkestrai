@@ -11,6 +11,7 @@ import { buildWslLaunch, wslHostPath } from '../WslRuntime.ts';
 import { agentStorageRoots, type AgentStorageRoots } from '../transcript/AgentStorageRoots.ts';
 import { expectsPasteEcho, frameAutomaticPaste, hasPendingAutomaticPaste, interactiveStartupGuard, nativeComposerState, type InteractiveStartupGuard } from '../../application/adapters/interactive-startup.ts';
 import { HumanComposerInput } from './HumanComposerInput.ts';
+import { isTerminalReport, type TerminalInputSource } from '../../domain/terminal-input.ts';
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
 import { workingDirectoryFromOsc, workingDirectoryFromWindowsOsc } from '../../domain/terminal-working-directory.ts';
@@ -196,6 +197,15 @@ export class PtyInputBusyError extends Error {
   constructor() { super('Terminal input is busy. No raw control was written; retry after the current draft or delivery finishes.'); }
 }
 
+export class PtySessionNotFoundError extends Error {
+  readonly code = 'PTY_SESSION_NOT_FOUND';
+  readonly sessionId: string;
+  constructor(sessionId: string) {
+    super(`Sessão PTY não encontrada: ${sessionId}`);
+    this.sessionId = sessionId;
+  }
+}
+
 type ComposerDelivery = {
   text: string;
   submitDelayMs: number;
@@ -209,6 +219,7 @@ type ComposerDelivery = {
   submittedAt?: number;
   humanInputRevision?: number;
   pasteRetryCount?: number;
+  manualEnterCount?: number;
   pasteRetryAt?: number;
   pasteOutputStart?: number;
   pasteEchoAt?: number;
@@ -763,21 +774,21 @@ export class PtySessionManager {
    * starts, owner keys stay in memory until its exact receipt, or an explicit
    * Ctrl+C takeover. Emitting Enter alone never makes the composer safe.
    */
-  writeHumanInput(id: string, data: string, options: { imagePaste?: boolean } = {}): void {
+  writeHumanInput(id: string, data: string, options: { imagePaste?: boolean; source?: TerminalInputSource } = {}): void {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
     const imagePaste = options.imagePaste === true;
     // xterm sends focus/device/color reports through onData too. Those are
     // terminal protocol replies, not edits to the owner's draft.
     let possibleProtocol = data;
-    if ((session.cursorReportExpectedUntil ?? 0) >= Date.now()) {
+    if (options.source !== 'keyboard' && (session.cursorReportExpectedUntil ?? 0) >= Date.now()) {
       possibleProtocol = possibleProtocol.replace(/\x1b\[\??\d{1,5};\d{1,5}R/g, reply => {
         if (!session.cursorReportsPending) return reply;
         session.cursorReportsPending--;
         return '';
       });
     }
-    const protocolOnly = data.length > 0 && (possibleProtocol === '' || /^(?:\x1b\[[IO]|\x1b\[[?>]?[\d;:]+c|\x1b\](?:10|11|12);rgba?:[a-fA-F\d/]+(?:\x07|\x1b\\))+$/.test(possibleProtocol));
+    const protocolOnly = data.length > 0 && (possibleProtocol === '' || isTerminalReport(possibleProtocol, options.source === 'terminal'));
     // Terminal responses are not drafts and may be needed for the CLI to
     // accept this very paste. Never park them behind its receipt.
     if (protocolOnly) { this.write(id, data); return; }
@@ -1280,7 +1291,7 @@ export class PtySessionManager {
     // this paste. Trimming old output must not disable recovery of a fresh
     // current badge; the owned-paste and human-edit guards still apply.
     const freshOutput = session.scrollback.slice(Math.max(0, delivery.pasteOutputStart - retainedFrom));
-    const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard, 1 + (delivery.pasteRetryCount ?? 0));
+    const pending = hasPendingAutomaticPaste(session.provider, freshOutput, delivery.text, session.startupGuard, 1 + (delivery.pasteRetryCount ?? 0) + (delivery.manualEnterCount ?? 0));
     if (!pending) return false;
     if (!this.submitIfComposerFree(id)) return false;
     delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
@@ -1614,7 +1625,9 @@ export class PtySessionManager {
         // A standalone Enter can help the visible pending paste. Preserve its
         // automatic receipt identity and never mirror an invented owner line.
         session.deferredHumanInput.length = 0;
-        session.humanInputRevision++;
+        // This submits the still-owned body; it does not edit it or disable
+        // later evidence-based recovery if ConPTY consumes this Enter too.
+        delivery!.manualEnterCount = (delivery!.manualEnterCount ?? 0) + 1;
         this.write(session.id, '\r');
         this.notifyInputState(session);
         return;
@@ -1724,7 +1737,7 @@ export class PtySessionManager {
 
   private requireSession(id: string): PtySession {
     const session = this.sessions.get(id);
-    if (!session) throw new Error(`Sessão PTY não encontrada: ${id}`);
+    if (!session) throw new PtySessionNotFoundError(id);
     return session;
   }
 

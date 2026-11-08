@@ -1,7 +1,8 @@
 <script lang="ts">
   import { TerminalConnectionHealth } from './terminal-connection-health.js';
   import { onMount } from 'svelte';
-  import { TerminalInputBuffer, terminalInputFrame } from './terminal-input-buffer.js';
+  import { TerminalInputBuffer, bindTerminalInput, terminalInputFrame } from './terminal-input-buffer.js';
+  import { isTerminalReport, type TerminalInputSource } from '$lib/modules/agent-room/domain/terminal-input.js';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { createTerminalOutputBuffer } from './terminal-output-buffer.js';
@@ -584,26 +585,28 @@
     };
 
     let createdSessionId: string | undefined;
+    let recoveringSessionId: string | undefined;
     const currentSessionId = () => createdSessionId ?? sessionId;
-    const sendTerminalInput = (data: string, imagePaste = false) => {
+    const sendTerminalInput = (data: string, imagePaste = false, source?: TerminalInputSource) => {
       const id = currentSessionId();
       if (!id || !attached || socket?.readyState !== WebSocket.OPEN) {
-        pendingInput.push(data, imagePaste);
+        // Replies to an old screen/query must not be replayed into a new PTY.
+        if (source !== 'terminal' || !isTerminalReport(data, true)) pendingInput.push(data, imagePaste, source);
         return;
       }
-      send(terminalInputFrame(id, { data, imagePaste }));
+      send(terminalInputFrame(id, { data, imagePaste, source }));
     };
     // Ctrl+V reaches the CLI as a key, and only an image on the clipboard turns
     // it into a draft chip there. The app answers whether one is there (never
     // what); keys typed meanwhile wait behind the answer to keep their order.
     let pasteCheck: Promise<void> | null = null;
-    const forwardInput = (data: string) => {
+    const forwardInput = (data: string, source?: TerminalInputSource) => {
       if (!pasteCheck && !data.includes('\x16')) {
-        sendTerminalInput(data);
+        sendTerminalInput(data, false, source);
         return;
       }
       const run: Promise<void> = (pasteCheck ?? Promise.resolve())
-        .then(async () => sendTerminalInput(data, data.includes('\x16') && await clipboardHasImage()))
+        .then(async () => sendTerminalInput(data, data.includes('\x16') && await clipboardHasImage(), source))
         .catch(() => undefined)
         .finally(() => { if (pasteCheck === run) pasteCheck = null; });
       pasteCheck = run;
@@ -822,9 +825,11 @@
           exited = -1;
           break;
         case 'error':
+          if (message.sessionId && message.sessionId !== currentSessionId()) break;
           if (
-            sessionId
+            currentSessionId()
             && onRespawn
+            && (!message.sessionId || message.sessionId === currentSessionId())
             && (
               message.code === 'PTY_SESSION_NOT_FOUND'
               || /sessao pty nao encontrada/i.test(
@@ -832,8 +837,14 @@
               )
             )
           ) {
-            statusMessage = '';
-            onRespawn();
+            if (recoveringSessionId !== currentSessionId()) {
+              recoveringSessionId = currentSessionId();
+              attached = false;
+              inputDeferred = false;
+              pendingInput.drain();
+              statusMessage = m['term.preparing_agent']();
+              onRespawn();
+            }
           } else {
             statusMessage = terminalErrorMessage(message.code, message.message);
           }
@@ -870,8 +881,8 @@
     }
     void initializeTerminal();
 
-    terminal.onData((data) => {
-      forwardInput(data);
+    const unbindInput = bindTerminalInput(terminal, (data, source) => {
+      forwardInput(data, source);
       // Enter depois de um ditado: agora sim arma a captura da resposta.
       if (pendingDictation && data.includes('\r')) {
         armDictationReplyCapture();
@@ -894,6 +905,7 @@
 
     return () => {
       disposed = true;
+      unbindInput();
       restoreTerminalMouse();
       screen?.removeEventListener('contextmenu', copySelectionFromContextMenu);
       window.removeEventListener('resize', refitForDisplayChange);

@@ -71,6 +71,63 @@ describe('human input while an automatic message owns the composer', () => {
     expect(f.writes).not.toContain('my draft');
   });
 
+  it.each(['\x1b[<0;12;5M', '\x1b[<0;12;5m', '\x1b[<64;12;5M'])('does not turn a mouse report into a draft or block manual Enter (%j)', async report => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.manager.writeHumanInput(f.session.id, report);
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
+    const before = f.writes.filter(data => data === '\r').length;
+    f.manager.writeHumanInput(f.session.id, '\r');
+    expect(f.writes.filter(data => data === '\r')).toHaveLength(before + 1);
+    f.accept();
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
+  });
+
+  it('does not let a duplicate cursor reply from a second viewer disable lost-Enter recovery', async () => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.emit('\x1b[6n');
+    f.manager.writeHumanInput(f.session.id, '\x1b[2;3R');
+    f.manager.writeHumanInput(f.session.id, '\x1b[2;3R', { source: 'terminal' });
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
+    f.emit(`› [Pasted Content ${f.text.length} chars]`);
+    await vi.advanceTimersByTimeAsync(6000);
+    const at = f.manager.automaticDeliverySubmittedAt(f.session.id)!;
+    expect(f.manager.retryPendingAutomaticPaste(f.session.id, at, at - 1)).toBe(true);
+  });
+
+  it('accepts a late cursor report without confusing a modified F3 key with a report', async () => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.emit('\x1b[6n');
+    await vi.advanceTimersByTimeAsync(11000);
+    f.manager.writeHumanInput(f.session.id, '\x1b[1;2R', { source: 'terminal' });
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
+    f.emit('\x1b[6n');
+    f.manager.writeHumanInput(f.session.id, '\x1b[1;2R', { source: 'keyboard' });
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
+  });
+
+  it('keeps evidence-based recovery enabled after a manual Enter is lost as well', async () => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.manager.writeHumanInput(f.session.id, '\r');
+    f.emit(`› [Pasted Content ${f.text.length + 2} chars]`);
+    await vi.advanceTimersByTimeAsync(6000);
+    const at = f.manager.automaticDeliverySubmittedAt(f.session.id)!;
+    expect(f.manager.retryPendingAutomaticPaste(f.session.id, at, at - 1)).toBe(true);
+    expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
+  });
+
+  it('does not trust a terminal source label for printable text or a bracketed paste', async () => {
+    const f = await fixture();
+    for (const data of ['private draft', '\x1b[200~\x1b[2;3R\x1b[201~']) {
+      f.manager.writeHumanInput(f.session.id, data, { source: 'terminal' });
+      expect(f.writes).not.toContain(data);
+    }
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
+  });
+
   it('keeps the owner draft ahead of the next automatic delivery', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'my draft');
