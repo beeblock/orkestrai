@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { frameAutomaticPaste, hasOwnedCodexPaste, nativeComposerState } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
-import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { PtySessionManager, sanitizeComposerText } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
 describe('Codex automatic paste on ConPTY', () => {
   const cleanup: Array<() => void> = [];
@@ -45,6 +45,18 @@ describe('Codex automatic paste on ConPTY', () => {
   it('recognizes the captured native ConPTY redraw that positions the composer with CRLF', () => {
     const fixture = JSON.parse(readFileSync(new URL('../fixtures/codex-conpty-resize-0166.json', import.meta.url), 'utf8'));
     expect(hasOwnedCodexPaste(fixture.output, 'x'.repeat(fixture.promptLength))).toBe(true);
+  });
+
+  const segmentedText = (`Fixture delivery 1\n${'A bounded local-only paste, no tools or external inference. '.repeat(150)}`).trim();
+  const segmentedFrame = '\x1b[6;3Hinference. A bounded local-only\x1b[7;3Hpaste, no tools or external\x1b[K\x1b[8;3Hinference. A\x1b[38;5;6m[Pasted Content 8638      \x1b[9;3Hchars]\x1b[K\x1b[?25h';
+  it('recognizes the captured native split between literal typing and a wrapped paste badge', () => {
+    expect(Array.from(segmentedText).length).toBe(9018);
+    expect(hasOwnedCodexPaste(segmentedFrame, segmentedText)).toBe(true);
+    expect(hasOwnedCodexPaste(segmentedFrame.replace('8638', '8639'), segmentedText)).toBe(false);
+    expect(hasOwnedCodexPaste(segmentedFrame.replace('inference. A\x1b[38', 'owner draft!\x1b[38'), segmentedText)).toBe(false);
+    expect(hasOwnedCodexPaste(segmentedFrame + 'owner draft', segmentedText)).toBe(false);
+    expect(hasOwnedCodexPaste(segmentedFrame + '\x1b[9;1H\x1b[K', segmentedText)).toBe(false);
+    expect(hasOwnedCodexPaste('[Pasted Content 8638 chars]', segmentedText)).toBe(false);
   });
 
   it.each([0, 1, 2, 3, 4, 5, 6])('keeps cursor style %s out of the current draft', style => {
@@ -97,7 +109,7 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(nativeComposerState('codex', '\x1b]7501;state=idle:app=codex')).toBeUndefined();
   });
 
-  async function fixture() {
+  async function fixture(message?: string) {
     vi.useFakeTimers();
     const writes: string[] = []; let emit = (_: string) => {};
     const manager = new PtySessionManager((() => ({ pid: -1, cols: 120, rows: 30,
@@ -110,7 +122,7 @@ describe('Codex automatic paste on ConPTY', () => {
     internal.conptySubmitGuard = true;
     emit('› \r\n100% context left');
     await vi.advanceTimersByTimeAsync(65 * 60_000);
-    const text = 'Owned draft '.repeat(120).trimEnd();
+    const text = message ?? 'Owned draft '.repeat(120).trimEnd();
     const delivery = manager.queueWithSubmit(session.id, text, 10, true, async () => false);
     await vi.advanceTimersByTimeAsync(6000); await delivery.submitted;
     const at = manager.automaticDeliverySubmittedAt(session.id)!;
@@ -140,6 +152,15 @@ describe('Codex automatic paste on ConPTY', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await delivery.submitted;
     expect(writes.filter(data => data.includes('Wait for the real input boundary'))).toHaveLength(1);
+  });
+
+  it.each([false, true])('keeps the owned split-paste recovery subject to actual owner edits (edited=%s)', async edited => {
+    const { manager, session, writes, at, emit, text } = await fixture(segmentedText);
+    if (edited) manager.writeHumanInput(session.id, 'owner edit');
+    emit(segmentedFrame);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(!edited);
+    expect(writes.filter(data => data === frameAutomaticPaste('codex', false, true, sanitizeComposerText(text)))).toHaveLength(1);
   });
 
   it('recovers the captured Windows footer redraw without retyping the paste', async () => {

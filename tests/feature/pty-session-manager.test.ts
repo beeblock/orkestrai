@@ -296,6 +296,7 @@ describe('PtySessionManager', () => {
       ...(runtime === 'wsl' ? { runtime: { kind: 'wsl' as const, distribution: 'Ubuntu', linuxWorkingDir: '/workspace' } } : {}),
     });
     try {
+      emitData('\x1b]7501;state=idle:app=codex\x1b\\');
       const first = manager.writeWithConfirmedSubmit(session.id, 'first prompt', { isAccepted: async () => true });
       await vi.advanceTimersByTimeAsync(600);
       await first;
@@ -336,13 +337,15 @@ describe('PtySessionManager', () => {
   it('bounds stalled WSL transcript IO without sending another Enter', async () => {
     vi.useFakeTimers();
     const writes: string[] = [];
+    let emitData!: (data: string) => void;
     const fakePty = {
       write: (data: string) => { writes.push(data); }, resize() {}, kill() {}, pid: 1,
-      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }),
+      onData: (listener: (data: string) => void) => { emitData = listener; return { dispose() {} }; }, onExit: () => ({ dispose() {} }),
     };
     const manager = new PtySessionManager((() => fakePty) as unknown as typeof spawn);
     const session = manager.create({ command: 'codex', cwd: process.cwd(), provider: 'codex', runtime: { kind: 'wsl', distribution: 'Ubuntu', linuxWorkingDir: '/project' } });
     try {
+      emitData('\x1b]7501;state=idle:app=codex\x1b\\');
       const delivery = manager.writeWithConfirmedSubmit(session.id, 'one prompt', { isAccepted: () => new Promise(() => {}), confirmationWindowMs: 1_000 });
       const rejected = expect(delivery).rejects.toThrow('Delivery is uncertain');
       await vi.advanceTimersByTimeAsync(3_000);
@@ -813,6 +816,8 @@ describe('PtySessionManager', () => {
       cwd: process.cwd(),
       runtime: { kind: 'wsl', distribution: 'Ubuntu-24.04', linuxWorkingDir: '/workspace' },
     });
+
+    emitData?.('\x1b]7501;state=idle:app=codex\x1b\\');
 
     await expect(manager.writeWithConfirmedSubmit(session.id, 'execute a tarefa', {
       submitDelayMs: 5,

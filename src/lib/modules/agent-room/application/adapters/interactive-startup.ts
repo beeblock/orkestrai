@@ -61,6 +61,35 @@ function withoutCodexBlankRight(output: string): string {
   return output.slice(0, end) + controls.replace(/\x1b\[(?:0?K|\d{0,5}X)/g, '') + suffix.slice(controls.length);
 }
 
+/** ConPTY can split one write into literal typing followed by a paste burst.
+ * Verify the painted literal suffix against the exact prefix implied by the
+ * badge count. This still runs under the writer/revision/idle guards; it does
+ * not authorize submission of an arbitrary smaller badge or changed draft. */
+function hasSegmentedCodexPaste(output: string, text: string, extraEnters: number): boolean {
+  const badges = [...output.matchAll(/\[Pasted Content (\d+)(?:[\t \r\n]|\x1b\[\d+;\d+[Hf]){1,100}chars\](?: #\d+)?/g)];
+  const badge = badges.at(-1);
+  if (!badge) return false;
+  const after = output.slice(badge.index! + badge[0].length);
+  // Only formatting, cursor restoration and an immediate blank-right erase.
+  // Composer clears, later text, unknown controls and dialogs remain unsafe.
+  if (!/^(?:(?:\x1b\[[\d;]*m|\x1b\[(?:0?K|\d{1,5}X)))*(?:(?:\x1b\[\d+;\d+[Hf]|\x1b\[\?(?:25|2026)[hl]|\x1b\[[\d;]*m)|[\t \r\n])*$/.test(after)) return false;
+  const before = output.slice(0, badge.index);
+  const painted = /\x1b\[(\d+);(\d+)[Hf]([^\x1b]*(?:\x1b\[[\d;]*m[^\x1b]*)*)$/.exec(before);
+  if (!painted) return false;
+  const literal = stripVTControlCharacters(painted[3]).replace(/\s+/g, ' ').trim();
+  if (!literal || literal.includes('[Pasted Content') || literal.includes('›')) return false;
+  const source = Array.from(text.replace(/\r\n?/g, '\n'));
+  const count = Number(badge[1]);
+  for (let added = 0; added <= extraEnters; added++) {
+    const prefixLength = source.length + added - count;
+    if (prefixLength <= 0 || prefixLength >= source.length) continue;
+    const prefix = source.slice(0, prefixLength).join('').replace(/\s+/g, ' ').trim();
+    // A whole painted row, not merely a coincidental final character.
+    if (literal.length >= Math.min(12, prefix.length) && prefix.endsWith(literal)) return true;
+  }
+  return false;
+}
+
 /** Inspect only output produced for this delivery. A badge in historical output
  * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
 export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0): boolean {
@@ -84,7 +113,7 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   const badge = /(?:^›[\s\u00a0]*|(?:^|\n)[\t ]*)\[Pasted Content (\d+) chars\](?: #\d+)?\s*$/.exec(composer);
   // More than one block or non-whitespace composer text may belong to a human.
   const length = Array.from(text.replace(/\r\n?/g, '\n')).length;
-  if (!badge || Number(badge[1]) < length || Number(badge[1]) > length + extraEnters) return false;
+  if (!badge || Number(badge[1]) < length || Number(badge[1]) > length + extraEnters) return hasSegmentedCodexPaste(fresh, text, extraEnters);
   const rawBadgeAt = fresh.lastIndexOf('[Pasted Content ');
   return rawBadgeAt >= 0 && !/\x1b\[[\d;]*[JKX]/.test(fresh.slice(rawBadgeAt));
 }

@@ -126,3 +126,20 @@ quiet fallback before writing the body, not just before Enter. Native backend
 logs record readiness at each write without exposing message contents.
 This is a confirmed readiness gap; the partial-paste failure remains subject
 to the next native run and is not attributed to it without that evidence.
+
+## Split native paste
+
+Run https://github.com/beeblock/orkestrai/actions/runs/42454343799 confirms
+readiness alone does not solve the split-paste variation. The Canvas first-turn
+missed-Enter case has a 9,018-scalar write rendered as a literal prefix and an
+8,638-scalar badge, itself wrapped over two rows. The unchanged ownership,
+idle and pending-delivery guards hold; the full-badge-only matcher rejects it.
+The captured terminal suffix fails before the correction. Recovery now checks
+the painted literal row against the exact message prefix implied by the badge
+size. A smaller badge alone, wrong count/prefix, subsequent text, composer
+clears and real owner input still refuse recovery. Native receipt validation
+remains required, and no prompt text is retransmitted.
+
+The final local suite also exposes three legacy simulated WSL tests with no
+startup output at all; they now emit native idle before testing post-startup
+acceptance/timeouts. Their existing Enter/receipt assertions remain unchanged.
