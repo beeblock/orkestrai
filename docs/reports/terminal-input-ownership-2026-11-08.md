@@ -94,7 +94,7 @@ It deliberately dropped the first Enter; the next external answer arrived in
 1.96 seconds, all three primary requests were distinct, and the assignment had
 an accepted receipt. Codex also made three separate title-generation requests.
 
-The final combined suite/build and native Windows results remain to be recorded.
+The final combined verification and native Windows results are recorded below.
 This report does not claim a new installation or release.
 
 ## Limits
@@ -125,6 +125,68 @@ also reuses the existing cursor-proven footer parser for a complete literal
 prompt; owner edits, unknown controls and erases reaching the input still
 refuse recovery. The owned-input suite now has 22 cases. Actual Codex 0.166 on
 macOS passed the combined owner typing/lost Enter/resize scenarios with one
-separate owner receipt per view and no mixed model input. Both native Windows
-CLI versions must still pass a new run before the change is considered verified
-on Windows.
+separate owner receipt per view and no mixed model input. The subsequent native
+Windows run passed both CLI versions, as recorded below.
+
+## Confirmed Windows result
+
+[Native Windows run 42473575534](https://github.com/beeblock/orkestrai/actions/runs/42473575534)
+passed both official, SHA-256-pinned Codex versions against source
+`ae0326f2a823e0f80f2c8c81b0d2b09ec78bba1d`.
+
+| Measurement | Codex 0.166.0 | Codex 0.167.0 |
+| --- | ---: | ---: |
+| External answer with a deliberately lost first Enter | 7,607 ms | 7,664 ms |
+| Next external answer | 1,632 ms | 1,665 ms |
+| Kanban assignment accepted by actual CLI | yes | yes |
+| Unrelated image rows in the persisted-inbox fixture | 300 | 300 |
+| Automatic primary inputs across the four scenarios | 17 | 17 |
+| Deliberately missed Enters recovered | 7 | 7 |
+| Separate owner receipts across Canvas / Conversation | 2 | 2 |
+| Mixed owner/automatic model input | no | no |
+| Resizes across Canvas / Conversation | 28 | 28 |
+
+These are loopback model responses through the actual native ConPTY and CLI.
+They do not use an owner account, spend provider tokens, access the remote
+workspace, prove a completed project, or replace a new hour-long soak of the
+combined change. The earlier long-paste baseline and the new fast combined
+checks are different evidence.
+
+## Other owner requests in this branch
+
+- `97e9579f`: Code Intelligence requires a persisted explicit activation. New
+  and imported workspaces are off; legacy defaults do not silently activate it.
+  Retain index data, remember subsequent explicit modes, update shared schema,
+  DTO/repository/UI defaults, agent instructions, README, three manuals and the
+  guided tour. Seven focused activation/import/legacy tests passed.
+- `6e4672f3`: an actual Windows feed request returned HTTP 504 while the official
+  release API returned 200 / v0.52.6. Add one transient retry and bounded official
+  metadata discovery. A compatible newer installer leads to the official manual
+  download page, with Windows network copy distinct from unsigned Mac copy.
+  Signature/checksum/install policy remain on the existing installer path.
+  Fourteen new discovery tests and fourteen existing updater tests passed.
+- `task_list(limit: 100)`: no source change. MCP and backend both document a
+  maximum of 50; the owner accepted normal validation. Use 50 and nextCursor.
+
+## Final combined verification and cleanup
+
+- Complete Vitest suite, two workers: **3,250 passed, 25 skipped, zero failures**
+  across 392 passing files. The run completed in 266.81 seconds.
+- Production build, including Computer host and desktop messages: **passed**.
+- Production browser suite: **13/13 passed**. It covers delivery/input custody,
+  Conversation/Canvas terminal lifecycle, dense Canvas behavior, native Canvas
+  operations and both updater fallback explanations. The updater tests also
+  assert that the download button opens only the fixed official release page.
+- Native Windows: both official CLI versions passed on `ae0326f2`; the later
+  commits only correct test fixtures and record verification.
+- Corrected six Claude test-fixture directory names to match the existing
+  production encoding of non-alphanumeric characters. The isolated temporary
+  directory exposed the fixture assumption; this was not a production fix.
+- Stopped test servers and removed private dependencies, build output, test
+  results, runtime data and caches: **2,007.5 MiB removed** in the final cleanup,
+  in addition to the approximately 350 MB private npm cache removed earlier.
+  The filesystem reported **5.9 GiB available** after cleanup. Source commits,
+  logs and this report remain. The owner's Electron runtime and checkout were
+  not modified.
+
+No new app installation or public release has been performed.
