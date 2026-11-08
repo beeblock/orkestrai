@@ -1919,6 +1919,11 @@ export const TOURS_ES: Tour[] = [
     tagline: 'Indexa repositorios aprobados y sigue relaciones reales desde un único grafo visual limitado.',
     steps: [
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Elige actualización y acceso',
+        body: "Inteligencia de Código empieza desactivada. Los workspaces existentes también requieren reactivación explícita tras esta actualización; se conserva el historial del índice. Abre la configuración del workspace y elige Manual o Asistido antes de indexar. Asistido vigila los repositorios aprobados y actualiza el código modificado en un hilo en segundo plano. Los agentes consultan el último grafo completo sin esperar la próxima indexación; los metadatos de respuesta distinguen un snapshot completo de una actualización en curso e incluyen sus revisiones. La indexación explícita sigue esperando hasta terminar. Manual mantiene el grafo visual para ti, marca cambios estabilizados como desactualizados y bloquea las herramientas de agentes. Desactivado detiene la vigilancia y bloquea el grafo preservando los datos locales. Las evidencias de ejecución siguen vinculadas a la revisión importada.",
+      },
+      {
         id: 'create-code-graph',
         title: 'Agrega el grafo compartido',
         body: 'Agrego un nodo Grafo de Código al Canvas. Foco y todos los agentes conectados usarán este mismo índice persistido.',
@@ -1931,11 +1936,6 @@ export const TOURS_ES: Tour[] = [
         body: 'Analizo fuentes TypeScript, JavaScript, Svelte y PHP del workspace y de los repositorios autorizados explícitamente. Nunca se ejecuta código ni configuración del proyecto.',
         action: { kind: 'indexCodeGraph' },
         check: { kind: 'codeGraphReady' },
-      },
-      {
-        id: 'choose-code-intelligence-mode',
-        title: 'Elige actualización y acceso',
-        body: "Asistido vigila los repositorios aprobados y actualiza el código modificado en un hilo en segundo plano. Los agentes consultan el último grafo completo sin esperar la próxima indexación; los metadatos de respuesta distinguen un snapshot completo de una actualización en curso e incluyen sus revisiones. La indexación explícita sigue esperando hasta terminar. Manual mantiene el grafo visual para ti, marca cambios estabilizados como desactualizados y bloquea las herramientas de agentes. Desactivado detiene la vigilancia y bloquea el grafo preservando los datos locales. Las evidencias de ejecución siguen vinculadas a la revisión importada.",
       },
       {
         id: 'explore-symbol-impact',

@@ -35,7 +35,7 @@ async function fixture() {
     '}',
     '',
   ].join('\n'));
-  const workspace = await workspaceRepository.createWorkspace({ name: 'Operations test', workingDir: directory });
+  const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Operations test', workingDir: directory });
   await codeGraphIndexService.index(workspace.id);
   const symbol = (await codeGraphIndexService.search(workspace.id, { query: 'checkoutTotal' }))[0];
   if (!symbol) throw new Error('Fixture symbol was not indexed.');
@@ -170,7 +170,7 @@ describe('Code graph operational intelligence', () => {
     };
     const saved = await codeGraphInvestigationRepository.create(workspace.id, { name: 'Checkout trace', state, createdBy: 'user' });
     expect(await codeGraphInvestigationRepository.get(workspace.id, saved.id)).toMatchObject({ name: 'Checkout trace', state });
-    const other = await workspaceRepository.createWorkspace({ name: 'Other workspace', workingDir: directory });
+    const other = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Other workspace', workingDir: directory });
     expect(await codeGraphInvestigationRepository.get(other.id, saved.id)).toBeNull();
     expect(await codeGraphInvestigationRepository.update(workspace.id, saved.id, { name: 'Checkout review' })).toMatchObject({ name: 'Checkout review' });
     expect(await codeGraphInvestigationRepository.delete(workspace.id, saved.id)).toBe(true);

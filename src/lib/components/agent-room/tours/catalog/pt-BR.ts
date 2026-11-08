@@ -1923,6 +1923,11 @@ export const TOURS_PT: Tour[] = [
     tagline: 'Indexe repositórios aprovados e siga relações reais em um único grafo visual limitado.',
     steps: [
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Escolha atualização e acesso',
+        body: "A Inteligência de Código começa desativada. Workspaces existentes também precisam de reativação explícita após esta atualização; o histórico do índice é preservado. Abra as configurações do workspace e escolha Manual ou Assistido antes de indexar. Assistido monitora os repositórios aprovados e atualiza o código alterado em uma thread de segundo plano. Os agentes consultam o último grafo concluído sem esperar a próxima indexação; os metadados da resposta distinguem um snapshot concluído de uma atualização em andamento e incluem os ids das revisões. A indexação explícita ainda aguarda a conclusão. Manual mantém o grafo visual disponível para você, marca alterações estabilizadas como desatualizadas e bloqueia ferramentas do grafo para agentes. Desativado encerra o monitoramento e bloqueia o grafo preservando os dados locais. Evidências de execução permanecem vinculadas à revisão importada.",
+      },
+      {
         id: 'create-code-graph',
         title: 'Adicione o grafo compartilhado',
         body: 'Eu adiciono um nó Grafo de Código ao Canvas. O Foco e todos os agentes conectados usarão este mesmo índice persistido.',
@@ -1935,11 +1940,6 @@ export const TOURS_PT: Tour[] = [
         body: 'Eu analiso fontes TypeScript, JavaScript, Svelte e PHP do workspace e dos repositórios autorizados explicitamente. Código e configurações do projeto nunca são executados.',
         action: { kind: 'indexCodeGraph' },
         check: { kind: 'codeGraphReady' },
-      },
-      {
-        id: 'choose-code-intelligence-mode',
-        title: 'Escolha atualização e acesso',
-        body: "Assistido monitora os repositórios aprovados e atualiza o código alterado em uma thread de segundo plano. Os agentes consultam o último grafo concluído sem esperar a próxima indexação; os metadados da resposta distinguem um snapshot concluído de uma atualização em andamento e incluem os ids das revisões. A indexação explícita ainda aguarda a conclusão. Manual mantém o grafo visual disponível para você, marca alterações estabilizadas como desatualizadas e bloqueia ferramentas do grafo para agentes. Desativado encerra o monitoramento e bloqueia o grafo preservando os dados locais. Evidências de execução permanecem vinculadas à revisão importada.",
       },
       {
         id: 'explore-symbol-impact',

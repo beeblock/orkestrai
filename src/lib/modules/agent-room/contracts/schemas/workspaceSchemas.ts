@@ -28,7 +28,7 @@ export const createWorkspaceSchema = z.object({
   wslDistribution: z.string().trim().nullish(),
   wslWorkingDir: z.string().trim().nullish(),
   repositoryRoots: workspaceRepositoryRootsSchema.default([]),
-  codeIntelligenceMode: codeIntelligenceModeSchema.default('assisted'),
+  codeIntelligenceMode: codeIntelligenceModeSchema.default('disabled'),
   groupId: z.string().trim().uuid().nullish(),
 });
 

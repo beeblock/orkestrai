@@ -1919,6 +1919,11 @@ export const TOURS_EN: Tour[] = [
     tagline: 'Index approved repositories and follow real relationships from one bounded visual graph.',
     steps: [
       {
+        id: 'choose-code-intelligence-mode',
+        title: 'Choose freshness and access',
+        body: "Code Intelligence is off by default. Existing workspaces also require explicit reactivation after this update; index history is retained. Open workspace settings and choose Manual or Assisted before indexing. Assisted watches approved repositories and refreshes changed code in a background worker. Agent reads use the last committed graph without waiting for the next index; response metadata distinguishes a committed snapshot from an active refresh and includes its revision ids. Explicit indexing still waits for completion. Manual keeps the visual graph available to you, marks settled file changes as outdated and blocks agent graph tools. Disabled stops watchers and blocks the graph while retaining local data. Runtime evidence remains tied to its imported revision.",
+      },
+      {
         id: 'create-code-graph',
         title: 'Add the shared graph',
         body: 'I add one Code Graph node to the Canvas. Focus and every connected agent will use this same persisted index.',
@@ -1931,11 +1936,6 @@ export const TOURS_EN: Tour[] = [
         body: 'I scan TypeScript, JavaScript, Svelte, and PHP source from the workspace and any explicitly authorized repository roots. Project code and configuration are never executed.',
         action: { kind: 'indexCodeGraph' },
         check: { kind: 'codeGraphReady' },
-      },
-      {
-        id: 'choose-code-intelligence-mode',
-        title: 'Choose freshness and access',
-        body: "Assisted watches approved repositories and refreshes changed code in a background worker. Agent reads use the last committed graph without waiting for the next index; response metadata distinguishes a committed snapshot from an active refresh and includes its revision ids. Explicit indexing still waits for completion. Manual keeps the visual graph available to you, marks settled file changes as outdated and blocks agent graph tools. Disabled stops watchers and blocks the graph while retaining local data. Runtime evidence remains tied to its imported revision.",
       },
       {
         id: 'explore-symbol-impact',

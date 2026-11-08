@@ -95,9 +95,10 @@ function parseRepositoryRoots(value: string | null): WorkspaceRepositoryRoot[] {
 
 function mapWorkspace(model: AgentWorkspace): Workspace {
   const persistedCodeIntelligenceMode = model.getAttribute('code_intelligence_mode');
-  const codeIntelligenceMode: CodeIntelligenceMode = persistedCodeIntelligenceMode === 'manual' || persistedCodeIntelligenceMode === 'disabled'
+  const codeIntelligenceMode: CodeIntelligenceMode = model.getAttribute('code_intelligence_opt_in')
+    && (persistedCodeIntelligenceMode === 'manual' || persistedCodeIntelligenceMode === 'assisted')
     ? persistedCodeIntelligenceMode
-    : 'assisted';
+    : 'disabled';
   return {
     id: model.getAttribute('id'),
     name: model.getAttribute('name'),
@@ -228,7 +229,8 @@ export class WorkspaceRepository {
       instructions: input.instructions ?? null,
       sync_agent_instruction_files: input.syncAgentInstructionFiles ?? false,
       repository_roots_json: JSON.stringify(input.repositoryRoots ?? []),
-      code_intelligence_mode: input.codeIntelligenceMode ?? 'assisted',
+      code_intelligence_mode: input.codeIntelligenceMode ?? 'disabled',
+      code_intelligence_opt_in: input.codeIntelligenceMode === 'manual' || input.codeIntelligenceMode === 'assisted',
       hooks_json: JSON.stringify(input.hooks ?? {}),
       group_id: input.groupId ?? null,
       position: await this.nextWorkspacePosition(input.groupId ?? null),
@@ -284,7 +286,8 @@ export class WorkspaceRepository {
       repository_roots_json: input.repositoryRoots === undefined
         ? JSON.stringify(existing.repositoryRoots)
         : JSON.stringify(input.repositoryRoots),
-      code_intelligence_mode: input.codeIntelligenceMode ?? existing.codeIntelligenceMode,
+      code_intelligence_mode: input.codeIntelligenceMode ?? model.getAttribute('code_intelligence_mode'),
+      ...(input.codeIntelligenceMode !== undefined ? { code_intelligence_opt_in: input.codeIntelligenceMode !== 'disabled' } : {}),
       hooks_json: input.hooks === undefined ? JSON.stringify(existing.hooks) : JSON.stringify(input.hooks),
     });
     return this.getWorkspace(id);

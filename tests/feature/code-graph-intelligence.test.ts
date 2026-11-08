@@ -22,7 +22,7 @@ describe('Code graph semantic and runtime intelligence', () => {
   it('does not hold an agent query behind the first background graph build', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-first-graph-'));
     directories.push(directory);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Preparing graph', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Preparing graph', workingDir: directory });
     let finish!: () => void;
     const active = new Promise<void>(resolve => { finish = resolve; });
     const refresh = vi.spyOn(codeGraphIndexService, 'ensureFresh').mockImplementation(async () => {
@@ -42,7 +42,7 @@ describe('Code graph semantic and runtime intelligence', () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-semantic-backoff-'));
     directories.push(directory);
     await writeFile(join(directory, 'service.ts'), 'export function acceptOrder() { return true; }');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Semantic backoff', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Semantic backoff', workingDir: directory });
     await codeGraphIndexService.index(workspace.id);
     await codeGraphIndexService.pauseWorkspace(workspace.id);
     const page = vi.spyOn(codeGraphIntelligenceRepository, 'semanticSymbolsPage').mockRejectedValue(new Error('Storage pressure'));
@@ -109,7 +109,7 @@ describe('Code graph semantic and runtime intelligence', () => {
       'export function authenticateSession() { return true; }',
       '',
     ].join('\n'));
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Assisted semantic test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Assisted semantic test', workingDir: directory });
 
     await codeGraphIndexService.index(workspace.id);
     await vi.waitFor(async () => {
@@ -174,7 +174,7 @@ describe('Code graph semantic and runtime intelligence', () => {
     const directory = await mkdtemp(join(tmpdir(), 'orkestrai-code-semantic-empty-'));
     directories.push(directory);
     await writeFile(join(directory, 'README.md'), '# Empty repository\n');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Empty semantic test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Empty semantic test', workingDir: directory });
     await codeGraphIndexService.index(workspace.id);
 
     expect(await codeGraphSemanticService.build(workspace.id)).toMatchObject({
@@ -208,7 +208,7 @@ describe('Code graph semantic and runtime intelligence', () => {
       failures: [{ path: 'src/checkout.ts', line: 5 }],
       calls: [{ from: { path: 'src/checkout.ts', line: 6 }, to: { path: 'src/checkout.ts', line: 5 }, count: 2 }],
     }));
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Evidence test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Evidence test', workingDir: directory });
     const indexed = await codeGraphIndexService.index(workspace.id);
     const projectId = indexed.projects[0].id;
 
@@ -248,7 +248,7 @@ describe('Code graph semantic and runtime intelligence', () => {
     await writeFile(join(directory, 'package.json'), '{"name":"evidence-root"}\n');
     await writeFile(join(directory, 'source.ts'), 'export function source() {}\n');
     await writeFile(join(outside, 'trace.log'), '/private/source.ts:1:1\n');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Evidence confinement', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Evidence confinement', workingDir: directory });
     const indexed = await codeGraphIndexService.index(workspace.id);
 
     await expect(codeGraphRuntimeEvidenceService.import(workspace.id, {

@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Disable Code Intelligence by default and require explicit workspace activation before indexing or watching repositories. Legacy stored modes do not count as the new opt-in; retain graph data, preserve subsequent explicit selections, and keep new/imported/native/WSL workspaces off unless selected. Remove the Assisted recommendation and put activation before indexing in the guided tour.
+
 - Keep owner keystrokes separate from confirmed automatic terminal deliveries until the exact prompt receipt arrives, including a missed Enter. Restore held input before the next automatic message, keep terminal protocol replies flowing, and retain receipt identity for a standalone manual Enter. Show held-input status on reconnect; explicit Ctrl+C discards the staged owner draft and takes control without claiming delivery. A redraw, timeout, cancellation or unrelated completed turn does not flush typing into an unconfirmed paste. Raw bridge controls also refuse an occupied input without replaying stale keys or reporting a successful delivery.
 
 - Apply exact receipt protection to supported agent CLIs started manually inside Shell nodes without changing their provider, account or resume configuration. Start reply waiters and deadlines when Enter is written, independently of prompt acceptance, so an explicit bridge reply can return without waiting for a transcript. Report an unconfirmed write as uncertain; retain background receipt checks instead of releasing input after an unrelated completed turn.

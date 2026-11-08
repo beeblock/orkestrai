@@ -46,7 +46,7 @@ describe('CodeGraphIndexService', () => {
         total() { return calculateTotal(new Money()); }
       }
     `);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Graph test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Graph test', workingDir: directory });
 
     const indexed = await codeGraphIndexService.index(workspace.id);
     expect(indexed.stats).toMatchObject({ files: 2 });
@@ -178,7 +178,7 @@ describe('CodeGraphIndexService', () => {
     directories.push(directory);
     const path = join(directory, 'source.ts');
     await writeFile(path, 'export function beforeFailure() {}');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Exhausted watch', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Exhausted watch', workingDir: directory });
     try {
       const indexed = await codeGraphIndexService.index(workspace.id);
       const projectId = indexed.projects[0].id;
@@ -216,7 +216,7 @@ describe('CodeGraphIndexService', () => {
     await writeFile(join(directory, 'package.json'), '{"name":"assisted-watch-test"}\n');
     const sourcePath = join(directory, 'service.ts');
     await writeFile(sourcePath, 'export function firstVersion() {}\n');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Assisted watch test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Assisted watch test', workingDir: directory });
 
     await codeGraphIndexService.index(workspace.id);
     await writeFile(sourcePath, 'export function newestVersion() {}\n');
@@ -259,7 +259,7 @@ describe('CodeGraphIndexService', () => {
     const firstPath = join(directory, 'first.ts');
     await writeFile(firstPath, 'export function obsoleteName() {}\n');
     await writeFile(join(directory, 'second.ts'), 'export function second() {}\n');
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Incremental test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Incremental test', workingDir: directory });
     const parse = vi.spyOn(codeGraphParser, 'parse');
 
     try {
@@ -304,7 +304,7 @@ describe('CodeGraphIndexService', () => {
     await writeFile(join(api, 'User.php'), '<?php class User {}\n');
     await writeFile(join(web, 'package.json'), '{}\n');
     await writeFile(join(web, 'App.ts'), 'export function App() {}\n');
-    const workspace = await workspaceRepository.createWorkspace({
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted',
       name: 'Multi repo',
       workingDir: parent,
       repositoryRoots: [{ alias: 'api', path: api }, { alias: 'web', path: web }],
@@ -349,7 +349,7 @@ describe('CodeGraphIndexService', () => {
         return fetch(\`/api/users/\${id}\`);
       }
     `);
-    const workspace = await workspaceRepository.createWorkspace({
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted',
       name: 'Contract map',
       workingDir: parent,
       repositoryRoots: [{ alias: 'api', path: api }, { alias: 'web', path: web }],
@@ -407,7 +407,7 @@ describe('CodeGraphIndexService', () => {
     `);
     await writeFile(join(web, 'package.json'), '{"name":"gateway-web"}\n');
     await writeFile(join(web, 'client.ts'), 'export const loadUser = (id: string) => api.get(`/api/users/${id}`);\n');
-    const workspace = await workspaceRepository.createWorkspace({
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted',
       name: 'Gateway map',
       workingDir: parent,
       repositoryRoots: [{ alias: 'api', path: api }, { alias: 'web', path: web }],
@@ -481,7 +481,7 @@ describe('CodeGraphIndexService', () => {
       }
       export function riskyExpression(source: string) { return eval(source); }
     `);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Quality map', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Quality map', workingDir: directory });
 
     await codeGraphIndexService.index(workspace.id);
     const quality = await codeGraphQualityService.analyze(workspace.id, { includeGraph: true, limit: 500 });
@@ -518,7 +518,7 @@ describe('CodeGraphIndexService', () => {
     await writeFile(join(sibling, 'api.ts'), 'export function siblingApi() { return 1; }\n');
     initializeGit(primary);
     initializeGit(sibling);
-    const workspace = await workspaceRepository.createWorkspace({
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted',
       name: 'Mixed changes',
       workingDir: primary,
       repositoryRoots: [{ alias: 'sibling', path: sibling }],
@@ -551,7 +551,7 @@ describe('CodeGraphIndexService', () => {
       export function verifiesTotal() { return total(); }
     `);
     initializeGit(directory);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Impact test', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Impact test', workingDir: directory });
 
     await codeGraphIndexService.index(workspace.id);
     await writeFile(join(directory, 'src', 'orders.ts'), 'export function total() { return 2; }\n');
@@ -583,7 +583,7 @@ describe('CodeGraphIndexService', () => {
     await writeFile(join(directory, 'package.json'), '{"name":"floor-impact-test"}\n');
     await writeFile(join(directory, 'src', 'orders.ts'), 'export function total() { return 1; }\n');
     initializeGit(directory);
-    const workspace = await workspaceRepository.createWorkspace({ name: 'Floor impact', workingDir: directory });
+    const workspace = await workspaceRepository.createWorkspace({ codeIntelligenceMode: 'assisted', name: 'Floor impact', workingDir: directory });
     await codeGraphIndexService.index(workspace.id);
     const left = await floorService.create(workspace.id, { name: 'Pricing A' });
     const right = await floorService.create(workspace.id, { name: 'Pricing B' });

@@ -951,7 +951,8 @@ export class WorkspaceService {
       {},
       [],
       null,
-      info.codeIntelligenceMode ?? 'assisted',
+      // An imported legacy default is not a fresh local activation.
+      'disabled',
     ));
     if (info.syncAgentInstructionFiles || info.hooks) {
       await workspaceRepository.updateWorkspace(workspace.id, {

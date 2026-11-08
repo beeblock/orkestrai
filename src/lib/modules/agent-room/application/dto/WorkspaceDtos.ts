@@ -64,7 +64,7 @@ export class CreateWorkspaceDto {
     public readonly hooks: WorkspaceHooks = {},
     public readonly repositoryRoots: WorkspaceRepositoryRoot[] = [],
     public readonly groupId: string | null = null,
-    public readonly codeIntelligenceMode: CodeIntelligenceMode = 'assisted',
+    public readonly codeIntelligenceMode: CodeIntelligenceMode = 'disabled',
   ) {}
 
   static from(input: CreateWorkspaceInput): CreateWorkspaceDto {

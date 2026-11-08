@@ -17,6 +17,7 @@ export class AgentWorkspace extends Model {
     'sync_agent_instruction_files',
     'repository_roots_json',
     'code_intelligence_mode',
+    'code_intelligence_opt_in',
     'bridge_token',
     'hooks_json',
     'suspended_at',
@@ -26,6 +27,7 @@ export class AgentWorkspace extends Model {
 
   static casts = {
     sync_agent_instruction_files: 'boolean' as const,
+    code_intelligence_opt_in: 'boolean' as const,
     position: 'number' as const,
     suspended_at: 'date' as const,
     created_at: 'date' as const,
@@ -43,6 +45,7 @@ export class AgentWorkspace extends Model {
   declare sync_agent_instruction_files: boolean;
   declare repository_roots_json: string | null;
   declare code_intelligence_mode: string;
+  declare code_intelligence_opt_in: boolean;
   declare hooks_json: string | null;
   declare suspended_at: Date | null;
   declare group_id: string | null;

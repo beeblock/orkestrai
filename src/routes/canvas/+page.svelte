@@ -1563,7 +1563,7 @@
         title: node.title ?? '',
         workspaceId: activeWorkspace?.id ?? '',
         workspaceName: activeWorkspace?.name ?? '',
-        codeIntelligenceMode: activeWorkspace?.codeIntelligenceMode ?? 'assisted',
+        codeIntelligenceMode: activeWorkspace?.codeIntelligenceMode ?? 'disabled',
         providersReady,
         providers,
         workingDir: floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.',
