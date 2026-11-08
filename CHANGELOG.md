@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Keep restored owner text and Enter in separate settled writes on native Windows, rather than turning a buffered owner line into another unsubmitted paste. Preserve input order, cancellation and PTY replacement checks. Reuse cursor-proven footer separation for complete short Codex messages and keep destructive or unknown controls blocked.
+
 - Make update checks resilient to transient GitHub release-feed errors: retry once, then discover the latest stable release through bounded, validated official API metadata. Offer the official manual download when newer platform installers exist, preserve active download state and installation verification, and distinguish a network fallback from an unsigned Mac build in the UI.
 
 - Disable Code Intelligence by default and require explicit workspace activation before indexing or watching repositories. Legacy stored modes do not count as the new opt-in; retain graph data, preserve subsequent explicit selections, and keep new/imported/native/WSL workspaces off unless selected. Remove the Assisted recommendation and put activation before indexing in the guided tour.

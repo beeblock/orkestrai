@@ -174,6 +174,7 @@ type PtySession = PtySessionInfo & {
   lastDeliveryAccepted: boolean;
   deliveryReadyAt: number;
   deferredHumanInput: Array<{ data: string; imagePaste: boolean }>;
+  deferredHumanSubmitTimer: ReturnType<typeof setTimeout> | null;
   humanComposerLength: number;
   humanInputRevision: number;
   humanDraft: HumanDraft;
@@ -512,6 +513,7 @@ export class PtySessionManager {
       lastDeliveryAccepted: false,
       deliveryReadyAt: 0,
       deferredHumanInput: [],
+      deferredHumanSubmitTimer: null,
       humanComposerLength: 0,
       humanInputRevision: 0,
       humanDraft: { text: '', paste: false },
@@ -784,6 +786,13 @@ export class PtySessionManager {
       // terminal interrupt. It never silently acknowledges an automatic send.
       if (data === '\x03') {
         session.deferredHumanInput.length = 0;
+        if (session.deferredHumanSubmitTimer) {
+          clearTimeout(session.deferredHumanSubmitTimer);
+          session.deferredHumanSubmitTimer = null;
+          this.writeHumanInputNow(session, data, imagePaste);
+          this.notifyInputState(session);
+          return;
+        }
         const active = session.activeDelivery;
         if (session.deliveryInProgress && active?.pasteOutputStart !== undefined) {
           // Paste bytes already arrived, but Enter has not. Do not submit the
@@ -801,7 +810,10 @@ export class PtySessionManager {
           return;
         }
       }
-      session.deferredHumanInput.push({ data, imagePaste });
+      // xterm sends Enter as a key event. Preserve that boundary even for an
+      // unframed combined input; never split CR inside a bracketed paste.
+      const chunks = !data.includes('\x1b[200~') ? data.split(/(\r)/).filter(Boolean) : [data];
+      for (const part of chunks) session.deferredHumanInput.push({ data: part, imagePaste });
       this.flushDeferredHumanInput(session);
       return;
     }
@@ -1348,6 +1360,7 @@ export class PtySessionManager {
       // automatic write; waiting only before Enter is already too late.
       (session.provider && session.conptySubmitGuard && !session.initialIdleObserved && session.deliveryQueue[0]?.requiresAcceptance) ||
       session.deliveryInProgress ||
+      session.deferredHumanSubmitTimer ||
       session.awaitingDeliveryIdle ||
       session.humanComposerLength > 0
     ) {
@@ -1561,7 +1574,8 @@ export class PtySessionManager {
   }
 
   private holdsHumanInput(session: PtySession): boolean {
-    return Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined)
+    return Boolean(session.deferredHumanSubmitTimer)
+      || Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined)
       || Boolean(session.lastSubmittedDelivery?.requiresAcceptance
       && !session.lastDeliveryAccepted && !session.lastSubmittedDelivery.ownerTakeover);
   }
@@ -1589,7 +1603,7 @@ export class PtySessionManager {
   }
 
   private flushDeferredHumanInput(session: PtySession): void {
-    if (session.deliveryInProgress || session.exited) { this.notifyInputState(session); return; }
+    if (session.deliveryInProgress || session.deferredHumanSubmitTimer || session.exited) { this.notifyInputState(session); return; }
     const delivery = session.lastSubmittedDelivery;
     if (this.holdsHumanInput(session)) {
       if (session.deferredHumanInput[0]?.data === '\x03') {
@@ -1606,9 +1620,34 @@ export class PtySessionManager {
         return;
       } else { this.notifyInputState(session); return; }
     }
-    const chunks = session.deferredHumanInput.splice(0);
+    while (session.deferredHumanInput.length) {
+      const chunk = session.deferredHumanInput[0];
+      if (chunk.data === '\r' && session.humanComposerLength > 0) {
+        // Restoring held keys as one burst can turn the owner's Enter into a
+        // paste newline on ConPTY too. Let the restored body settle first.
+        const delay = session.conptySubmitGuard ? Math.min(2000, 250 + Math.ceil(session.humanComposerLength / 8)) : 120;
+        session.deferredHumanSubmitTimer = setTimeout(() => {
+          session.deferredHumanSubmitTimer = null;
+          if (session.exited || this.sessions.get(session.id) !== session) return;
+          session.deferredHumanInput.shift();
+          try {
+            this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
+            this.flushDeferredHumanInput(session);
+          } catch {
+            // An uncertain owner Enter is never replayed automatically.
+            session.deferredHumanInput.length = 0;
+            this.recordLifecycle(session, 'error', 'PTY owner input write failed.');
+            this.notifyInputState(session);
+          }
+        }, delay);
+        session.deferredHumanSubmitTimer.unref?.();
+        this.notifyInputState(session);
+        return;
+      }
+      session.deferredHumanInput.shift();
+      this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
+    }
     this.notifyInputState(session);
-    for (const chunk of chunks) this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
   }
 
   private writeHumanInputNow(session: PtySession, data: string, imagePaste = false): void {
@@ -1671,6 +1710,9 @@ export class PtySessionManager {
   }
 
   private rejectDeliveries(session: PtySession, error: Error): void {
+    if (session.deferredHumanSubmitTimer) clearTimeout(session.deferredHumanSubmitTimer);
+    session.deferredHumanSubmitTimer = null;
+    session.deferredHumanInput.length = 0;
     session.activeDelivery?.reject(error);
     session.activeDelivery = null;
     for (const delivery of session.deliveryQueue.splice(0)) delivery.reject(error);

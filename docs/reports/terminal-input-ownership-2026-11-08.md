@@ -110,3 +110,21 @@ This report does not claim a new installation or release.
 - The owner's remote Windows workspace is not accessed by these fixtures.
   Passing an official CLI fixture does not establish that every remote failure
   has been reproduced.
+
+## Native Windows follow-up
+
+The first combined Windows run (42471774882) intentionally remains failed.
+Codex 0.167 could not download because GitHub returned HTTP 504; Codex 0.166
+reproduced two remaining cases that direct-write fixtures had not covered:
+restored owner text plus Enter arrived as one burst, and a short literal prompt
+was followed by an erase confined to the footer.
+
+The follow-up separates a restored owner Enter from its body, keeps subsequent
+keys ordered, and cancels the delayed Enter on Ctrl+C or PTY replacement. It
+also reuses the existing cursor-proven footer parser for a complete literal
+prompt; owner edits, unknown controls and erases reaching the input still
+refuse recovery. The owned-input suite now has 22 cases. Actual Codex 0.166 on
+macOS passed the combined owner typing/lost Enter/resize scenarios with one
+separate owner receipt per view and no mixed model input. Both native Windows
+CLI versions must still pass a new run before the change is considered verified
+on Windows.

@@ -22,6 +22,11 @@ function withoutCodexFooter(output: string): string {
   // an explicitly positioned prompt must still match the cursor return row.
   const relativePrompt = /(?:^|\r?\n)(?:[\t ]|\x1b\[[\d;]*m)*›(?:[\t ]|\x1b\[[\d;]*m|\x1b\[\d*C)*$/.test(prefix);
   const locatedComposer = painted ? Number(painted[1]) === composerRow : relativePrompt;
+  return trimCodexFooter(output, end, composerRow, locatedComposer, restored[0]);
+}
+
+function trimCodexFooter(output: string, end: number, composerRow: number, locatedComposer: boolean, restored: string): string {
+  const suffix = output.slice(end);
   let row = composerRow, footer = false;
   for (const token of suffix.matchAll(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|[\s\S]/g)) {
     const value = token[0];
@@ -47,7 +52,7 @@ function withoutCodexFooter(output: string): string {
     // composer. A cursor return alone cannot prove an arbitrary dialog safe.
     else if (row <= composerRow || !locatedComposer || value.charCodeAt(0) < 0x20) return output;
   }
-  return footer && row === composerRow ? output.slice(0, end) + restored[0] : output;
+  return footer && row === composerRow ? output.slice(0, end) + restored : output;
 }
 
 /** EL/ECH immediately after a freshly painted badge only erase its blank right side. */
@@ -106,6 +111,12 @@ function hasOwnedCodexLiteral(output: string, text: string): boolean {
   const prompt = output.lastIndexOf('›');
   if (prompt < 0 || text.length > 4096) return false;
   let literal = output.slice(prompt + 1);
+  const returned = [...literal.matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].at(-1);
+  if (returned) {
+    const bottom = Number(returned[1]);
+    const footer = [...literal.matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].find(move => Number(move[1]) > bottom);
+    if (footer) literal = trimCodexFooter(literal, footer.index!, bottom, true, returned[0]);
+  }
   // Erases, inserts, deletes and unknown controls cannot prove an intact draft.
   literal = literal.replace(/\x1b\](?:0|7501);[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
     .replace(/\x1b\[[\d;]*m/g, '')

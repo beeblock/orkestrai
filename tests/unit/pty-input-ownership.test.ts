@@ -56,7 +56,9 @@ describe('human input while an automatic message owns the composer', () => {
     f.manager.writeHumanInput(f.session.id, 'next human line\r');
     expect(f.writes).not.toContain('next human line\r');
     f.accept();
-    expect(f.writes.at(-1)).toBe('next human line\r');
+    expect(f.writes.at(-1)).toBe('next human line');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(f.writes.slice(-2)).toEqual(['next human line', '\r']);
   });
 
   it('does not make terminal protocol replies wait behind the paste', async () => {
@@ -114,6 +116,30 @@ describe('human input while an automatic message owns the composer', () => {
     f.manager.writeHumanInput(f.session.id, '\r');
     expect(f.writes.at(-1)).toBe('\r');
     expect(f.manager.automaticDeliverySubmittedAt(f.session.id)).toBe(at);
+  });
+
+  it('lets Ctrl+C cancel an owner Enter that is waiting behind its restored body', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, 'owner line\r');
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.accept();
+    expect(f.writes.at(-1)).toBe('owner line');
+    f.manager.writeHumanInput(f.session.id, '\x03');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(f.writes.at(-1)).toBe('\x03');
+    expect(f.writes.filter(data => data === '\r')).toHaveLength(1);
+  });
+
+  it('does not emit a delayed owner Enter after its PTY is replaced', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, 'old owner line\r');
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.accept(); f.manager.kill(f.session.id);
+    const next = f.manager.create({ command: 'codex', provider: 'codex', cwd: tmpdir() });
+    f.manager.writeHumanInput(next.id, 'new owner line');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(f.writes.at(-1)).toBe('new owner line');
+    expect(f.writes.filter(data => data === '\r')).toHaveLength(1);
   });
 
   it('keeps typing immediate while an asynchronous preflight has not written paste bytes yet', async () => {

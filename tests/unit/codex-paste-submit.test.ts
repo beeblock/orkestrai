@@ -34,6 +34,9 @@ describe('Codex automatic paste on ConPTY', () => {
     const text = '[orkestrai:message:1234] External question';
     const frame = '\x1b[25;1H›\x1b[25;3H[orkestrai:message:1234]\x1b[26;3HExternal question\x1b[30;3H   \x1b[26;20H\x1b[?25h';
     expect(hasOwnedCodexPaste(frame, text)).toBe(true);
+    const windows = '\x1b[25;1H›\x1b[1C[orkestrai:message:1234]\x1b[26;3HExternal question\x1b[30;3H \x1b[1C   \x1b[1C\x1b[9X\x1b[26;20H\x1b[?25h';
+    expect(hasOwnedCodexPaste(windows, text)).toBe(true);
+    expect(hasOwnedCodexPaste(windows.replace('[30;3H', '[26;3H'), text)).toBe(false);
     expect(hasOwnedCodexPaste(`› ${text}`, text)).toBe(true);
     for (const bad of [text, `› ${text} changed`, `› owner ${text}`, `${frame}\x1b[2K`, `${frame}\x08`,
       `${frame}\x1b[1P`, `› ${text}\nApprove this action`]) expect(hasOwnedCodexPaste(bad, text), bad).toBe(false);
