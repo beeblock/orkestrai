@@ -104,7 +104,18 @@ try {
   assert.deepEqual(phases, ['backup', 'migrating', 'migrating', 'prepared']);
   // Exercise the actual scanner, packaged grammar WASM, analysis/storage workers
   // and FTS query. A healthy HTTP server alone cannot prove graph availability.
-  const graphUrl = `http://127.0.0.1:${port}/api/agent-room/workspaces/01900000-0000-7000-8000-000000000002/code-graph`;
+  const workspaceUrl = `http://127.0.0.1:${port}/api/agent-room/workspaces/01900000-0000-7000-8000-000000000002`;
+  const graphUrl = `${workspaceUrl}/code-graph`;
+  const restoredResponse = await fetch(workspaceUrl, { signal: AbortSignal.timeout(10_000) });
+  assert.equal(restoredResponse.ok, true);
+  assert.equal((await restoredResponse.json()).data.codeIntelligenceMode, 'disabled');
+  const disabledResponse = await fetch(graphUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ force: true }), signal: AbortSignal.timeout(10_000) });
+  assert.equal(disabledResponse.status, 403, 'An upgraded workspace must not index before explicit activation');
+  await disabledResponse.json();
+  const activatedResponse = await fetch(workspaceUrl, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ codeIntelligenceMode: 'manual' }), signal: AbortSignal.timeout(10_000) });
+  const activated = await activatedResponse.json();
+  assert.equal(activatedResponse.ok, true, `Packaged graph activation failed: ${JSON.stringify(activated)} ${output}`);
+  assert.equal(activated.data.codeIntelligenceMode, 'manual');
   const indexedResponse = await fetch(graphUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ force: true }), signal: AbortSignal.timeout(60_000) });
   const indexed = await indexedResponse.json();
   assert.equal(indexedResponse.ok, true, `Packaged code indexing failed: ${JSON.stringify(indexed)} ${output}`);
@@ -120,6 +131,7 @@ try {
   configure();
   assert.deepEqual(await Connection.raw('SELECT name, position, collapsed FROM agent_workspace_groups ORDER BY id'), [{ name: 'Preserved group', position: 0, collapsed: 0 }, { name: 'Preserved child', position: 0, collapsed: 0 }]);
   assert.deepEqual(await Connection.raw('SELECT name, position, group_id FROM agent_workspaces'), [{ name: 'Preserved workspace', position: 0, group_id: '01900000-0000-7000-8000-000000000001' }]);
+  assert.deepEqual(await Connection.raw('SELECT code_intelligence_mode, code_intelligence_opt_in FROM agent_workspaces'), [{ code_intelligence_mode: 'manual', code_intelligence_opt_in: 1 }]);
   assert.deepEqual(await Connection.raw('SELECT parent_id FROM agent_workspace_groups WHERE name = ?', ['Preserved child']), [{ parent_id: '01900000-0000-7000-8000-000000000001' }]);
   assert.equal((await Connection.raw('SELECT migration FROM migrations')).length, entries.length);
   assert.equal((await readdir(scratch)).filter((name) => /^database\.db\.bak-.*Z$/.test(name)).length, 1);

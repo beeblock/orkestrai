@@ -230,6 +230,11 @@ instalação antiga pode permanecer offline por meses antes de fazer a migraçã
 
 ## Proteções de desempenho contra regressão
 
+O smoke de atualização do pacote verifica que um workspace legado começa com
+Code Intelligence desativado e recusa indexação com HTTP 403. Só então ativa
+Manual pela API do workspace e testa scanner, workers, WASM, FTS e persistência
+da escolha explícita. O gate não depende mais de um modo implícito antigo.
+
 Na 0.50.0, o grafo de código passa a usar um SQLite próprio e workers fora da
 thread principal do Core. A preparação verifica a identidade do banco e a cópia
 antes de retirar as tabelas antigas; uma falha preserva os dados e permite abrir
