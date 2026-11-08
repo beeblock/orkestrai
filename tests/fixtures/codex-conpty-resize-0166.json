@@ -1,0 +1,8 @@
+{
+  "codexVersion": "0.166.0",
+  "cols": 72,
+  "rows": 20,
+  "promptLength": 9018,
+  "sourceRun": "42451186195",
+  "output": "\u001b[H  inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference. A bounded local-only paste, no tools or external             inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference. A bounded local-only paste, no tools or external             inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference. A bounded local-only paste, no tools or external\u001b[K\u001b[0m\r\n  inference.\u001b[K\u001b[0m\r\n\u001b[K\u001b[m\u001b[0m\r\n                                                                        \u001b[2m• \u001b[22mLocal fixture OK\u001b[K\u001b[0m\r\n\u001b[K\u001b[2m\u001b[0m\r\n  Worked for <1s • 5:35 AM                                              \u001b[22m\u001b[0m\r\n\u001b[K\u001b[0m\r\n\u001b[K\u001b[1m\u001b[0m\r\n›\u001b[22m \u001b[38;5;6m[Pasted Content 9018 chars]\u001b[K\u001b[m\u001b[0m\r\n\u001b[K\u001b[0m\r\n  \u001b[38;5;223mGPT-6.1-Sol default \u001b[m· \u001b[38;5;151mC:\\Users\\FIXTURE1\\AppData\\Local\\Temp\\orkestrai-…\u001b[m                                               ⚠ \u001b[38;5;179m1 warning \u001b[m· \u001b[1mf2\u001b[22m to view \u001b[17;30H\u001b[?25h\u001b[0m"
+}

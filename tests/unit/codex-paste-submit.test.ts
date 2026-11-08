@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { frameAutomaticPaste, hasOwnedCodexPaste, nativeComposerState } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 
@@ -39,6 +40,11 @@ describe('Codex automatic paste on ConPTY', () => {
   it('recognizes the current composer when a native resize repaints footer text below it', () => {
     expect(hasOwnedCodexPaste(`\x1b[17;1H›\x1b[1C[Pasted Content 9018 chars]${resizedFooter}`, 'x'.repeat(9018))).toBe(true);
     expect(hasOwnedCodexPaste(`\x1b[16;1H›\x1b[1C[Pasted Content 9018 chars]${resizedFooter}`, 'x'.repeat(9018))).toBe(false);
+  });
+
+  it('recognizes the captured native ConPTY redraw that positions the composer with CRLF', () => {
+    const fixture = JSON.parse(readFileSync(new URL('../fixtures/codex-conpty-resize-0166.json', import.meta.url), 'utf8'));
+    expect(hasOwnedCodexPaste(fixture.output, 'x'.repeat(fixture.promptLength))).toBe(true);
   });
 
   it.each([0, 1, 2, 3, 4, 5, 6])('keeps cursor style %s out of the current draft', style => {

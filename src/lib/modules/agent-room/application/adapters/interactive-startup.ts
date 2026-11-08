@@ -15,8 +15,13 @@ function withoutCodexFooter(output: string): string {
   const restored = [...suffix.matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].at(-1);
   if (!restored) return output;
   const composerRow = Number(restored[1]);
-  const painted = [...output.slice(0, badge.index).matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].at(-1);
-  const locatedComposer = painted && Number(painted[1]) === composerRow;
+  const prefix = output.slice(0, badge.index);
+  const painted = /\x1b\[(\d+);\d+[Hf](?:[\t ]|›|\x1b\[[\d;]*m|\x1b\[\d*C)*$/.exec(prefix);
+  // ConPTY also paints a whole screen using CRLF instead of absolute row
+  // moves. A fresh prompt on that line is separate from the following footer;
+  // an explicitly positioned prompt must still match the cursor return row.
+  const relativePrompt = /(?:^|\r?\n)(?:[\t ]|\x1b\[[\d;]*m)*›(?:[\t ]|\x1b\[[\d;]*m|\x1b\[\d*C)*$/.test(prefix);
+  const locatedComposer = painted ? Number(painted[1]) === composerRow : relativePrompt;
   let row = composerRow, footer = false;
   for (const token of suffix.matchAll(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|[\s\S]/g)) {
     const value = token[0];
@@ -36,7 +41,7 @@ function withoutCodexFooter(output: string): string {
       footer ||= row > composerRow;
       continue;
     }
-    if (value === '\n') row++;
+    if (value === '\n') { row++; footer ||= row > composerRow; }
     else if (value === '\r' || value === '\t' || value === ' ') continue;
     // Nonblank footer text needs an independently located, freshly painted
     // composer. A cursor return alone cannot prove an arbitrary dialog safe.

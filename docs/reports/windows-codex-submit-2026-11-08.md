@@ -44,6 +44,15 @@ The follow-up permits only an immediate right-side clear after a freshly
 painted prompt/badge, with no intervening cursor movement. Left/full erases,
 unlocated clears and further draft text still reject recovery.
 
+The right-clear candidate (`2df7b9e0`) passes the native 0.167.0 job in
+https://github.com/beeblock/orkestrai/actions/runs/42451186195:
+12 exact receipts, six missed Enters recovered and no duplicate primary
+requests across Canvas, Conversation and backend checks. Its 0.166.0 job
+exposes a further variation: ConPTY redraws rows with CRLF, then restores the
+cursor, instead of positioning every row absolutely. A captured 1 KiB fixture
+covers that stream. A freshly painted prompt line can identify this composer;
+explicitly positioned prompts must still match the cursor-return row.
+
 ## Cursor styling
 
 The pinned 0.167.0 TUI output contains DECSCUSR (`CSI 0 SP q`). Node's
@@ -71,7 +80,11 @@ so this separate fix is not presented as the cause of that native failure.
 - Cursor-style regressions fail before their correction.
 - Historical cursor-query regression fails before its correction.
 - Focused transport, owner-input, docs/tours and packaged-import checks pass.
-- Native corrected runs and the complete suite/build are still pending.
+- The first complete local suite passes 3,184 tests, with 24 skipped, before
+  the final right-clear and relative-redraw regression additions. Subsequent
+  focused checks cover those additions.
+- The native 0.167.0 short run passes as detailed above; the final native
+  compatibility and sustained runs remain required before release.
 
 ## Sustained-test design
 
