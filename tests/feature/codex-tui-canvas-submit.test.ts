@@ -18,6 +18,7 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
   const home = join(root, 'home'), cwd = join(root, 'project'), codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true }); await mkdir(cwd);
   let requests = 0, primaryRequests = 0, dropEnter = false, dropped = 0, output = '';
+  let duringPaste: (() => void) | null = null;
   const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const server = createServer(async (request, response) => {
     if (request.url !== '/v1/responses' || request.method !== 'POST') { response.writeHead(404).end(); return; }
@@ -70,7 +71,14 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       if (view === 'canvas') terminal.write(chunk);
     });
     const write = child.write.bind(child);
-    child.write = text => { if (dropEnter && text === '\r') { dropEnter = false; dropped++; } else write(text); };
+    child.write = text => {
+      if (dropEnter && text === '\r') { dropEnter = false; dropped++; }
+      else write(text);
+      if (duringPaste && text.includes('\x1b[200~')) {
+        const change = duringPaste; duringPaste = null;
+        setTimeout(change, 100);
+      }
+    };
     return child;
   }) as never, () => {});
   try {
@@ -87,10 +95,16 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       .catch(error => { throw new Error(`${error.message}\n${output.slice(-8000)}`); });
     await new Promise(resolve => setTimeout(resolve, 3000));
     let exactId: string | null = null, serial = 0;
-    async function deliver(missEnter = false) {
+    async function deliver(missEnter = false, viewerChange?: 'resize' | 'replay') {
       const message = `Fixture delivery ${++serial}\n` + 'A bounded local-only paste, no tools or external inference. '.repeat(150);
       const since = Date.now(); let submittedAt: number | null = null;
       dropEnter = missEnter;
+      duringPaste = viewerChange ? () => {
+        if (viewerChange === 'resize') {
+          terminal.resize(72, 20);
+          manager.resize(session.id, 72, 20);
+        } else if (view === 'canvas') terminal.write(`\x1bc${manager.replay(session.id)}`);
+      } : null;
       await manager.writeWithConfirmedSubmit(session.id, message.trim(), {
         confirmationWindowMs: 25000, maxAttempts: 1,
         onSubmitted: () => { submittedAt = manager.automaticDeliverySubmittedAt(session.id); },
@@ -104,7 +118,15 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
           }
           return false;
         },
-      }).catch(error => { throw new Error(`${error.message}\n${output.slice(-4000)}`); });
+      }).catch(error => {
+        const state = (manager as any).sessions.get(session.id);
+        const pending = state?.lastSubmittedDelivery;
+        console.info('Pending submit guards', { view, viewerChange, serial, nativeComposerState: state?.nativeComposerState,
+          waiting: state?.waiting, humanComposerLength: state?.humanComposerLength,
+          humanInputRevision: state?.humanInputRevision, pasteHumanRevision: pending?.humanInputRevision,
+          retries: pending?.pasteRetryCount, awaitingDeliveryIdle: state?.awaitingDeliveryIdle });
+        throw new Error(`${error.message}\n${output.slice(-12000)}`);
+      });
       await expect.poll(async () => exactId && (await latestTurnBoundary('codex', cwd, exactId, { codexHome })).ready,
         { timeout: 15000 }).toBe(true);
     }
@@ -115,8 +137,11 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       await deliver();
       if (serial % 10 === 0) console.info(`Codex TUI soak: ${serial} exact receipts, ${Math.floor((Date.now() - started) / 1000)}s`);
     }
-    await deliver(); await deliver();
-    expect(dropped).toBe(1); expect(primaryRequests).toBe(serial);
+    await deliver();
+    await deliver(true, 'resize');
+    if (view === 'canvas') await deliver(true, 'replay');
+    await deliver();
+    expect(dropped).toBe(view === 'canvas' ? 3 : 2); expect(primaryRequests).toBe(serial);
     console.info(JSON.stringify({ platform: process.platform, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped }));
   } catch (error) {
     // Cleanup failures must not hide the actual TUI/receipt failure.
@@ -132,4 +157,4 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 })
       .catch(error => process.stderr.write(`Private fixture cleanup deferred to runner: ${error.code}\n`));
   }
-}, duration + 150000);
+}, duration + 240000);
