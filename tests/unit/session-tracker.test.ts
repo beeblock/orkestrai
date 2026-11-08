@@ -47,7 +47,7 @@ describe('AgentSessionTracker', () => {
     const { home, tracker } = isolatedTracker();
 
     // Simula a estrutura real: ~/.claude/projects/-tmp-meu-projeto/
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     const sessionFile = join(claudeDir, 'abc-123-session.jsonl');
     touch(sessionFile, new Date());
@@ -68,7 +68,7 @@ describe('AgentSessionTracker', () => {
     const cwd = join(tmpdir(), 'projeto-multi-' + Date.now());
     const { home, tracker } = isolatedTracker();
 
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     const first = join(claudeDir, 'sessao-a.jsonl');
     const second = join(claudeDir, 'sessao-b.jsonl');
@@ -91,7 +91,7 @@ describe('AgentSessionTracker', () => {
     const cwd = join(tmpdir(), 'projeto-claude-subagent-' + Date.now());
     const { home, tracker } = isolatedTracker();
 
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     touch(join(claudeDir, 'agent-a2a88b5.jsonl'), new Date(Date.now() - 5_000));
     touch(join(claudeDir, 'sessao-principal.jsonl'), new Date());
@@ -104,7 +104,7 @@ describe('AgentSessionTracker', () => {
     const cwd = join(tmpdir(), 'projeto-claude-vazio-' + Date.now());
     const { home, tracker } = isolatedTracker();
 
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     const empty = join(claudeDir, 'sessao-vazia.jsonl');
     writeFileSync(empty, '');
@@ -119,7 +119,7 @@ describe('AgentSessionTracker', () => {
     const cwd = join(tmpdir(), 'projeto-claude-snapshot-' + Date.now());
     const { home, tracker } = isolatedTracker();
 
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     const snapshotOnly = join(claudeDir, 'sessao-snapshot.jsonl');
     writeFileSync(snapshotOnly, `${JSON.stringify({ type: 'file-history-snapshot', messageId: 'abc' })}\n`);
@@ -250,7 +250,7 @@ describe('AgentSessionTracker', () => {
   it('valida um id exato do Claude apenas quando o transcript e retomavel', async () => {
     const cwd = join(tmpdir(), 'projeto-claude-validacao-' + Date.now());
     const { home, tracker } = isolatedTracker();
-    const claudeDir = join(home, '.claude', 'projects', `-${cwd.replace(/[/\\]/g, '-').replace(/^-/, '')}`);
+    const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
     mkdirSync(claudeDir, { recursive: true });
     writeFileSync(join(claudeDir, 'reservada.jsonl'), `${JSON.stringify({ type: 'file-history-snapshot' })}\n`);
     touch(join(claudeDir, 'valida.jsonl'), new Date());
