@@ -32,6 +32,23 @@ describe('Codex automatic paste on ConPTY', () => {
   // Captured from the native Windows 0.166 TUI in the Canvas-sized fixture.
   // ConPTY paints the badge, erases the footer, then returns to the composer.
   const windowsFooter = '\x1b[m\x1b[12;3H \x1b[1C   \x1b[1C\x1b[9X\x1b[9;30H\x1b[?25h';
+  // Native Codex 0.167, 40x12 -> 72x20 while the third paste is pending.
+  // Ratatui repaints model/path and warning rows, then restores the composer.
+  const resizedFooter = '\x1b[38;5;223m\x1b[19;3HGPT-6.1-Sol default\x1b[m\x1b[1C·\x1b[38;5;151m\x1b[1CC:\\fixture\\project\x1b[m\x1b[20;48H⚠\x1b[38;5;179m\x1b[1C1 warning\x1b[m\x1b[1C·\x1b[1m\x1b[1Cf2\x1b[22m\x1b[1Cto\x1b[1Cview\x1b[17;30H\x1b[?25h';
+
+  it('recognizes the current composer when a native resize repaints footer text below it', () => {
+    expect(hasOwnedCodexPaste(`\x1b[17;1H›\x1b[1C[Pasted Content 9018 chars]${resizedFooter}`, 'x'.repeat(9018))).toBe(true);
+    expect(hasOwnedCodexPaste(`\x1b[16;1H›\x1b[1C[Pasted Content 9018 chars]${resizedFooter}`, 'x'.repeat(9018))).toBe(false);
+  });
+
+  it.each([
+    '\x1b[17;40Hhuman edit\x1b[17;30H',
+    '\x1b[16;1HApprove this action\x1b[17;30H',
+    '\x1b[19;1Hfooter without a cursor return',
+    '\x1b[19;1Hfooter\x1b[17;30H\x1b[2K',
+  ])('preserves edits and unproven redraws after a paste (%j)', suffix => {
+    expect(hasOwnedCodexPaste(`\x1b[17;1H›\x1b[1C[Pasted Content 9018 chars]${suffix}`, 'x'.repeat(9018))).toBe(false);
+  });
 
   it('recognizes a pending paste when ConPTY clears the footer after painting the badge', () => {
     expect(hasOwnedCodexPaste(`\x1b[38;5;6m[Pasted Content 9018 chars]${windowsFooter}`, 'x'.repeat(9018))).toBe(true);
@@ -88,6 +105,15 @@ describe('Codex automatic paste on ConPTY', () => {
     emit(`\x1b[38;5;6m[Pasted Content ${text.length} chars]${windowsFooter}`);
     await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+    expect(writes.filter(value => value.includes(text))).toHaveLength(1);
+  });
+
+  it('recovers the native resized footer while preserving the original delivery identity', async () => {
+    const { manager, session, writes, at, text, emit } = await fixture();
+    emit(`\x1b[17;1H›\x1b[1C[Pasted Content ${text.length} chars]${resizedFooter}`);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
+    expect(manager.automaticDeliverySubmittedAt(session.id)).toBe(at);
     expect(writes.filter(value => value.includes(text))).toHaveLength(1);
   });
 

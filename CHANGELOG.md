@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Recover a pending Codex paste after a native Windows resize repaints model, path and warning rows below the composer. Verify the freshly painted composer row and cursor return before excluding footer content; retain guards for owner edits, dialogs, working turns, erased composers and exact prompt receipts. Exercise missed Enter on later turns with real ConPTY resizing and viewer replay.
+
 - Restore terminal history without replaying cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Preserve current protocol replies, real owner edits and exact prompt receipts.
 
 ## 0.52.5 - 2026-11-07

@@ -6,23 +6,54 @@ export function frameAutomaticPaste(provider: string | null | undefined, enabled
   return enabled || (provider === 'codex' && conpty) ? `\x1b[200~${text}\x1b[201~` : text;
 }
 
+/** Separate a cursor-proven footer repaint from the current composer. */
+function withoutCodexFooter(output: string): string {
+  const badge = [...output.matchAll(/\[Pasted Content \d+ chars\](?: #\d+)?/g)].at(-1);
+  if (!badge) return output;
+  const end = badge.index! + badge[0].length;
+  const suffix = output.slice(end);
+  const restored = [...suffix.matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].at(-1);
+  if (!restored) return output;
+  const composerRow = Number(restored[1]);
+  const painted = [...output.slice(0, badge.index).matchAll(/\x1b\[(\d+);(\d+)[Hf]/g)].at(-1);
+  const locatedComposer = painted && Number(painted[1]) === composerRow;
+  let row = composerRow, footer = false;
+  for (const token of suffix.matchAll(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|[\s\S]/g)) {
+    const value = token[0];
+    if (value.startsWith('\x1b]')) continue;
+    if (value.startsWith('\x1b[')) {
+      const final = value.at(-1)!;
+      const params = value.slice(2, -1);
+      if (final === 'm' || (final === 'q' && /^[\d;]* $/.test(params))) continue;
+      if ('Hf'.includes(final) && /^\d*;?\d*$/.test(params)) row = Number(params.split(';')[0]) || 1;
+      else if ('ABEFd'.includes(final) && /^\d*$/.test(params)) {
+        const n = Number(params) || 1;
+        row = final === 'd' ? n : row + ('BE'.includes(final) ? n : -n);
+      } else if ('CDG'.includes(final) && /^\d*$/.test(params)) continue;
+      else if ('KX'.includes(final) && /^\d*$/.test(params) && row > composerRow) continue;
+      else if ('hl'.includes(final) && /^\?(?:25|1000|1002|1003|1004|1006|1015|2004|2026)(?:;(?:25|1000|1002|1003|1004|1006|1015|2004|2026))*$/.test(params)) continue;
+      else return output;
+      footer ||= row > composerRow;
+      continue;
+    }
+    if (value === '\n') row++;
+    else if (value === '\r' || value === '\t' || value === ' ') continue;
+    // Nonblank footer text needs an independently located, freshly painted
+    // composer. A cursor return alone cannot prove an arbitrary dialog safe.
+    else if (row <= composerRow || !locatedComposer || value.charCodeAt(0) < 0x20) return output;
+  }
+  return footer && row === composerRow ? output.slice(0, end) + restored[0] : output;
+}
+
 /** Inspect only output produced for this delivery. A badge in historical output
  * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
 export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0): boolean {
   let fresh = output.slice(-32_768);
   const clear = [...fresh.matchAll(/\x1b\[[23]J/g)].at(-1);
   if (clear) fresh = fresh.slice(clear.index! + clear[0].length);
-  // ConPTY may repaint a blank footer with ECH (CSI X), then restore the
-  // cursor to the paste. node:util does not strip ECH: it leaves a literal X,
-  // making a still-pending badge look like an edited draft. Only disregard this
-  // bounded blank cleanup when an absolute cursor move proves it is BELOW the
-  // composer and the cursor returns above it. Erases in/above the composer,
-  // printable footer content, unpaired moves and screen clears remain unsafe.
-  fresh = fresh.replace(
-    /\x1b\[(\d+);\d+[Hf]((?:[\t ]|\x1b\[\d*[CG])*)\x1b\[\d*[KX]((?:[\t ]|\x1b\[\d*[CG])*)\x1b\[(\d+);(\d+)[Hf]/g,
-    (sequence, footerRow, before, after, composerRow, composerColumn) => Number(footerRow) > Number(composerRow)
-      ? `\x1b[${footerRow};1H${before}${after}\x1b[${composerRow};${composerColumn}H` : sequence,
-  );
+  // ConPTY footer erases and model/path redraws are separate screen rows,
+  // not edits to the paste. Keep clears, unknown controls and composer edits.
+  fresh = withoutCodexFooter(fresh);
   const tail = stripVTControlCharacters(fresh
     .replace(/\x1b\[[\d;]*[BHEFfd]/g, '\n').replace(/\x1b\[\d*[CG]/g, ' '));
   const prompt = tail.lastIndexOf('›');
