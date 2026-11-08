@@ -28,6 +28,9 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       ORKESTRAI_REAL_CODEX_TEST: '1'
       ORKESTRAI_CODEX_SOAK_SECONDS: ${{ inputs.soak_seconds }}
+      # Keep one Canvas session alive across the reported one-hour boundary.
+      # Other scenarios still run; three 65-minute runs exceed the job budget.
+      ORKESTRAI_CODEX_SOAK_SCENARIO: 'canvas'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

@@ -14,11 +14,13 @@ const enabled = process.env.ORKESTRAI_REAL_CODEX_TEST === '1';
 const duration = Math.max(0, Number(process.env.ORKESTRAI_CODEX_SOAK_SECONDS ?? 0)) * 1000;
 
 it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real Codex TUI with the %s view open', async view => {
+  const viewDuration = process.env.ORKESTRAI_CODEX_SOAK_SCENARIO === 'canvas' && view !== 'canvas' ? 0 : duration;
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-codex-tui-'));
   const home = join(root, 'home'), cwd = join(root, 'project'), codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true }); await mkdir(cwd);
   let requests = 0, primaryRequests = 0, dropEnter = false, dropped = 0, output = '';
   let duringPaste: (() => void) | null = null;
+  let plannedDrops = 0, resizes = 0, replays = 0;
   const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const server = createServer(async (request, response) => {
     if (request.url !== '/v1/responses' || request.method !== 'POST') { response.writeHead(404).end(); return; }
@@ -99,11 +101,13 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       const message = `Fixture delivery ${++serial}\n` + 'A bounded local-only paste, no tools or external inference. '.repeat(150);
       const since = Date.now(); let submittedAt: number | null = null;
       dropEnter = missEnter;
+      if (missEnter) plannedDrops++;
       duringPaste = viewerChange ? () => {
         if (viewerChange === 'resize') {
-          terminal.resize(72, 20);
-          manager.resize(session.id, 72, 20);
-        } else if (view === 'canvas') terminal.write(`\x1bc${manager.replay(session.id)}`);
+          const [cols, rows] = resizes++ % 2 ? [40, 12] : [72, 20];
+          terminal.resize(cols, rows);
+          manager.resize(session.id, cols, rows);
+        } else if (view === 'canvas') { replays++; terminal.write(`\x1bc${manager.replay(session.id)}`); }
       } : null;
       await manager.writeWithConfirmedSubmit(session.id, message.trim(), {
         confirmationWindowMs: 25000, maxAttempts: 1,
@@ -132,17 +136,18 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
     }
     await deliver(true);
     const started = Date.now();
-    while (Date.now() - started < duration) {
-      await new Promise(resolve => setTimeout(resolve, Math.min(30000, duration - (Date.now() - started))));
-      await deliver();
+    while (Date.now() - started < viewDuration) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(30000, viewDuration - (Date.now() - started))));
+      const next = serial + 1;
+      await deliver(next % 10 === 0, next % 3 === 0 ? 'resize' : view === 'canvas' && next % 5 === 0 ? 'replay' : undefined);
       if (serial % 10 === 0) console.info(`Codex TUI soak: ${serial} exact receipts, ${Math.floor((Date.now() - started) / 1000)}s`);
     }
     await deliver();
     await deliver(true, 'resize');
     if (view === 'canvas') await deliver(true, 'replay');
     await deliver();
-    expect(dropped).toBe(view === 'canvas' ? 3 : 2); expect(primaryRequests).toBe(serial);
-    console.info(JSON.stringify({ platform: process.platform, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped }));
+    expect(dropped).toBe(plannedDrops); expect(primaryRequests).toBe(serial);
+    console.info(JSON.stringify({ platform: process.platform, view, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped, resizes, replays }));
   } catch (error) {
     // Cleanup failures must not hide the actual TUI/receipt failure.
     process.stderr.write(`Codex fixture failed: ${String(error)}\n${output.slice(-8000)}\n`);

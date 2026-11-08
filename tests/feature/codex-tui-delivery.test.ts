@@ -10,7 +10,8 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 import { findPromptInTranscript, latestTurnBoundary } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.ts';
 
 const enabled = process.env.ORKESTRAI_REAL_CODEX_TEST === '1';
-const duration = Math.max(0, Number(process.env.ORKESTRAI_CODEX_SOAK_SECONDS ?? 0)) * 1000;
+const duration = process.env.ORKESTRAI_CODEX_SOAK_SCENARIO === 'canvas' ? 0
+  : Math.max(0, Number(process.env.ORKESTRAI_CODEX_SOAK_SECONDS ?? 0)) * 1000;
 
 it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Enter after sustained use', async () => {
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-codex-tui-'));
