@@ -2010,6 +2010,7 @@
   "term.preparing_agent": "Preparing the agent session…",
   "term.send": "Send",
   "term.no_session": "No session provided.",
+  "term.input_deferred": "Sending a message to the agent. Your typing waits for confirmation. Press Ctrl+C to interrupt and take control.",
   "term.ws_error": "WebSocket connection to the server failed.",
   "term.workspace_suspended": "This workspace is paused. Open it again before starting a terminal.",
   "term.conversation_in_use": "This conversation belongs to another active agent. Its terminal was preserved; restore this agent's own conversation before retrying.",

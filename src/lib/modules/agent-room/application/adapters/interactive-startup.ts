@@ -99,6 +99,24 @@ function hasSegmentedCodexPaste(output: string, text: string, extraEnters: numbe
   return false;
 }
 
+/** Short Codex inputs are painted literally rather than as a paste badge.
+ * Require a fresh prompt and the complete owned body, not a prompt glyph or
+ * output activity alone. Ignore only presentation and visual wrapping. */
+function hasOwnedCodexLiteral(output: string, text: string): boolean {
+  const prompt = output.lastIndexOf('›');
+  if (prompt < 0 || text.length > 4096) return false;
+  let literal = output.slice(prompt + 1);
+  // Erases, inserts, deletes and unknown controls cannot prove an intact draft.
+  literal = literal.replace(/\x1b\](?:0|7501);[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[\d;]*m/g, '')
+    .replace(/\x1b\[\d*;?\d*[Hf]|\x1b\[\d*[ABCDEFGd]/g, ' ')
+    .replace(/\x1b\[\?(?:25|2026)[hl]/g, '');
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(literal)) return false;
+  // Cursor-positioned painting can wrap even inside a message UUID. This is
+  // visual evidence only: the transcript receipt still matches the full prompt.
+  return literal.replace(/\s/g, '') === text.replace(/\s/g, '');
+}
+
 /** Inspect only output produced for this delivery. A badge in historical output
  * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
 export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0): boolean {
@@ -112,6 +130,7 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   // ConPTY footer erases and model/path redraws are separate screen rows,
   // not edits to the paste. Keep clears, unknown controls and composer edits.
   fresh = withoutCodexFooter(fresh);
+  if (!fresh.includes('[Pasted Content ') && hasOwnedCodexLiteral(fresh, text)) return true;
   const tail = stripVTControlCharacters(fresh
     .replace(/\x1b\[[\d;]*[BHEFfd]/g, '\n').replace(/\x1b\[\d*[CG]/g, ' '));
   const prompt = tail.lastIndexOf('›');

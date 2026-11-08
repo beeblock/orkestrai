@@ -1475,6 +1475,7 @@ export class BridgeController extends Controller {
           });
       return this.json({ data: result });
     } catch (error) {
+      if ((error as { code?: string }).code === 'PTY_INPUT_BUSY') return this.json({ error: (error as Error).message, code: 'PTY_INPUT_BUSY' }, 409);
       return this.errorResponse(error, 'Falha no ask.');
     }
   }

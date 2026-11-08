@@ -30,6 +30,15 @@ describe('Codex automatic paste on ConPTY', () => {
     }
   });
 
+  it('recognizes an entire owned short prompt painted literally without a paste badge', () => {
+    const text = '[orkestrai:message:1234] External question';
+    const frame = '\x1b[25;1H›\x1b[25;3H[orkestrai:message:1234]\x1b[26;3HExternal question\x1b[30;3H   \x1b[26;20H\x1b[?25h';
+    expect(hasOwnedCodexPaste(frame, text)).toBe(true);
+    expect(hasOwnedCodexPaste(`› ${text}`, text)).toBe(true);
+    for (const bad of [text, `› ${text} changed`, `› owner ${text}`, `${frame}\x1b[2K`, `${frame}\x08`,
+      `${frame}\x1b[1P`, `› ${text}\nApprove this action`]) expect(hasOwnedCodexPaste(bad, text), bad).toBe(false);
+  });
+
   // Captured from the native Windows 0.166 TUI in the Canvas-sized fixture.
   // ConPTY paints the badge, erases the footer, then returns to the composer.
   const windowsFooter = '\x1b[m\x1b[12;3H \x1b[1C   \x1b[1C\x1b[9X\x1b[9;30H\x1b[?25h';
@@ -164,7 +173,7 @@ describe('Codex automatic paste on ConPTY', () => {
 
   it.each([false, true])('keeps the owned split-paste recovery subject to actual owner edits (edited=%s)', async edited => {
     const { manager, session, writes, at, emit, text } = await fixture(segmentedText);
-    if (edited) manager.writeHumanInput(session.id, 'owner edit');
+    if (edited) { manager.writeHumanInput(session.id, '\x03'); manager.writeHumanInput(session.id, 'owner edit'); }
     emit(segmentedFrame);
     await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(!edited);
@@ -216,8 +225,9 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(writes.filter(value => value === '\r')).toHaveLength(3);
   });
 
-  it.each(['human', '\x1b[A', '\t', '\x15'])('preserves owner edits after an automatic paste (%j)', async input => {
+  it.each(['human', '\x1b[A', '\t', '\x15'])('preserves owner edits after explicit terminal takeover (%j)', async input => {
     const { manager, session, at, badge } = await fixture();
+    manager.writeHumanInput(session.id, '\x03');
     manager.writeHumanInput(session.id, input); badge(); await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
   });
@@ -237,8 +247,9 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
   });
 
-  it.each(['\x1b[28;3R', 'owner\x1b[28;3R', '\x1b[1;2R'])('keeps unsolicited or mixed input protected (%j)', async input => {
+  it.each(['\x1b[28;3R', 'owner\x1b[28;3R', '\x1b[1;2R'])('keeps unsolicited or mixed input protected after takeover (%j)', async input => {
     const { manager, session, at, emit, badge } = await fixture();
+    manager.writeHumanInput(session.id, '\x03');
     if (input.startsWith('owner')) emit('\x1b[6n');
     manager.writeHumanInput(session.id, input); badge(); await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
@@ -248,6 +259,7 @@ describe('Codex automatic paste on ConPTY', () => {
     const { manager, session, at, emit, badge } = await fixture();
     emit('\x1b['); emit('6n');
     await vi.advanceTimersByTimeAsync(10_001);
+    manager.writeHumanInput(session.id, '\x03');
     manager.writeHumanInput(session.id, '\x1b[28;3R'); badge(); await vi.advanceTimersByTimeAsync(6000);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
   });

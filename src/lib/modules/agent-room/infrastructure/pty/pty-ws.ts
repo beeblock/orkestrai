@@ -147,6 +147,7 @@ export function handlePtyConnection(socket: WebSocket): void {
       (exitCode) => send({ type: 'exit', sessionId, exitCode }),
       (waiting) => send({ type: 'idle', sessionId, idle: waiting }),
       (cwd) => send({ type: 'cwd', sessionId, cwd }),
+      (deferred) => send({ type: 'input-state', sessionId, deferred }),
     );
     detachers.set(sessionId, detach);
     return stream ? scrollback : '';

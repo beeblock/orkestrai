@@ -17,7 +17,7 @@ import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { ObsoletePtyDeliveryError, ptySessionManager, sanitizeComposerText } from '../../infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracker.js';
-import { findReplyToPrompt, type MatchedTranscriptReply } from '../../infrastructure/transcript/AgentTranscript.js';
+import { findPromptInTranscript, findReplyToPrompt, type MatchedTranscriptReply } from '../../infrastructure/transcript/AgentTranscript.js';
 import { floorService } from './FloorService.js';
 import { getAgentAdapter, hasAgentAdapter, listAgentAdapters, materializeInteractiveAgentCommand } from '../adapters/registry.js';
 import { nativeNotificationService, type NativeNotificationKind } from './NativeNotificationService.js';
@@ -285,7 +285,16 @@ export class BridgeService {
       content: input.message,
       metadata: { raw: true },
     });
-    ptySessionManager.write(target.sessionId, input.message);
+    try {
+      ptySessionManager.writeRawInput(target.sessionId, input.message);
+    } catch (error) {
+      await controlCenterService.recordDelivery({
+        messageId, workspaceId, fromNodeId: origin?.nodeId ?? null, toNodeId: target.nodeId,
+        state: 'failed', content: input.message,
+        metadata: { raw: true, reason: (error as { code?: string }).code ?? 'raw_input_failed' },
+      });
+      throw error;
+    }
     await controlCenterService.recordDelivery({
       messageId,
       workspaceId,
@@ -591,15 +600,6 @@ export class BridgeService {
             workspaceId,
             fromNodeId: origin?.nodeId ?? null,
             toNodeId: target.nodeId,
-            state: 'sent',
-            content: input.message,
-            metadata,
-          });
-          await controlCenterService.recordDelivery({
-            messageId,
-            workspaceId,
-            fromNodeId: origin?.nodeId ?? null,
-            toNodeId: target.nodeId,
             state: 'delivered',
             content: input.message,
             metadata,
@@ -626,6 +626,21 @@ export class BridgeService {
           if (shellAgent && !await shellAgentService.stillRunning(workspaceId, target.nodeId, target.sessionId, shellAgent, beforeWrite)) return false;
           return !input.taskId || await this.isTaskMessageRelevant(workspaceId, input.taskId, target.nodeId, origin?.nodeId ?? null);
         } : undefined,
+        shellAgent && getAgentAdapter(shellAgent.provider).sessionStorage ? async () => {
+          const match = await findPromptInTranscript(shellAgent.provider, shellAgent.cwd, shellAgent.sessionId, prompt, requestStartedAt, shellAgent.options);
+          if (match) shellAgent.sessionId = match.sessionId;
+          return Boolean(match);
+        } : undefined,
+        async () => {
+          // A physical Enter starts reply waiters and their deadline, but is
+          // not a receipt. In particular, a Shell CLI can answer over MCP
+          // before it has saved its conversation.
+          await controlCenterService.recordDelivery({
+            messageId, workspaceId, fromNodeId: origin?.nodeId ?? null,
+            toNodeId: target.nodeId, state: 'sent', content: input.message, metadata,
+          });
+          markSubmitted?.();
+        },
       );
       const structuredReply = submitted.then(() => this.waitForTranscriptReply(
         workspaceId,
@@ -707,6 +722,10 @@ export class BridgeService {
     // WSL transcript propagation. Never add a second hidden 90-second wait.
     transcriptMatch ??= incompleteTranscript;
     const transcriptText = directReplyText ?? (transcriptMatch?.complete ? transcriptMatch.text : null);
+    // An exact saved turn or an authenticated explicit answer also proves
+    // receipt. It does not release PTY input custody: that still requires the
+    // exact prompt receipt or an explicit owner interrupt.
+    if (transcriptText) terminalDelivered = true;
     // Usa o provider da sessao PTY real, não apenas o metadata do nó. Isso
     // mantém shells explícitos utilizáveis e protege somente TUIs de agentes.
     const activeProvider = target.sessionId
@@ -718,6 +737,9 @@ export class BridgeService {
     if (terminalDelivered && !transcriptText && activeProvider && hasAgentAdapter(activeProvider)
       && getAgentAdapter(activeProvider).sessionStorage) {
       return { to: target.title, reply: transcriptMatch?.text ?? '', delivered: true, replyConfirmed: false, timedOut: true, messageId, deliveryState: 'delivered' };
+    }
+    if (!terminalDelivered && activeProvider && hasAgentAdapter(activeProvider) && getAgentAdapter(activeProvider).sessionStorage) {
+      throw Object.assign(new Error('The terminal was written, but no exact prompt receipt was found. Delivery remains uncertain; do not resend the message automatically.'), { code: 'PTY_DELIVERY_UNCONFIRMED' });
     }
     const replyText = resolveAgentReplyText(transcriptText, reply.text, activeProvider, target.title);
     const replyConfirmed = Boolean(transcriptText) || (!activeProvider && !reply.timedOut && Boolean(replyText));
@@ -2198,6 +2220,8 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
     provider?: string | null,
     onSubmitted?: () => Promise<void>,
     isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>,
+    confirmAcceptance?: () => Promise<boolean>,
+    onWritten?: () => Promise<void>,
   ): Promise<{ text: string; timedOut: boolean }> {
     return new Promise((resolvePromise, reject) => {
       let captured = '';
@@ -2287,6 +2311,18 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
       signal?.addEventListener('abort', onAbort, { once: true });
 
       const send = () => {
+        let written: Promise<void> | undefined;
+        const didWrite = () => {
+          if (done || written) return;
+          capturedAtSend = captured.length;
+          sent = true;
+          sentRealAt = Date.now();
+          lastOutputAt = sentRealAt;
+          timer = setTimeout(() => finish(true), timeoutMs);
+          quietTimer = setTimeout(maybeFinish, MIN_AFTER_SEND_MS);
+          written = Promise.resolve().then(onWritten);
+          void written.catch(fail);
+        };
         agentTerminalDeliveryService.deliver({
           workspaceId,
           nodeId,
@@ -2295,19 +2331,13 @@ ${LEADERSHIP_HANDOFF_CONTRACT}`,
           submitDelayMs: 120,
           signal,
           isStillRelevant,
+          confirmAcceptance,
+          onSubmitted: didWrite,
         })
           .then(async () => {
+            await written;
             if (done) return;
             await onSubmitted?.();
-            // Ignora boot/eco/comandos observados enquanto a mensagem aguardava
-            // um rascunho humano ser enviado. Daqui em diante e resposta real.
-            capturedAtSend = captured.length;
-            sent = true;
-            sentRealAt = Date.now();
-            lastOutputAt = sentRealAt;
-            timer = setTimeout(() => finish(true), timeoutMs);
-            // Rede de segurança caso o evento de ociosidade nunca dispare.
-            quietTimer = setTimeout(maybeFinish, MIN_AFTER_SEND_MS);
           })
           .catch(fail);
       };

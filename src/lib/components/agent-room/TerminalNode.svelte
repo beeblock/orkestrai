@@ -97,6 +97,7 @@
   let statusMessage = $state('');
   let exited = $state<number | null>(null);
   let waiting = $state(false);
+  let inputDeferred = $state(false);
 
   // -- Ditado por voz (Parakeet local ou sidecar configurado) ----------------
   let dictating = $state(false);
@@ -739,6 +740,7 @@
           break;
         case 'created':
           configureHostTerminal(message.session?.windowsPty);
+          inputDeferred = message.session?.inputDeferred === true;
           createdSessionId = message.session.id;
           attached = true;
           void Promise.resolve(onSessionCreated?.(message.session.id))
@@ -753,6 +755,7 @@
           break;
         case 'attached': {
           configureHostTerminal(message.session?.windowsPty);
+          inputDeferred = message.session?.inputDeferred === true;
           const internal = viewAttachPending > 0;
           if (internal) viewAttachPending--;
           attached = true;
@@ -780,8 +783,12 @@
         case 'idle':
           waiting = Boolean(message.idle);
           break;
+        case 'input-state':
+          if (message.sessionId === currentSessionId()) inputDeferred = message.deferred === true;
+          break;
         case 'exit':
           waiting = false;
+          inputDeferred = false;
           exited = message.exitCode;
           onExit?.(message.exitCode);
           break;
@@ -991,6 +998,8 @@
   {/if}
   {#if statusMessage}
     <p class="terminal-status">{statusMessage}</p>
+  {:else if inputDeferred}
+    <p class="terminal-status" role="status">{m['term.input_deferred']()}</p>
   {/if}
   {#if exited !== null}
     <p class="terminal-status">{m['term.process_exited']({ code: exited })}</p>

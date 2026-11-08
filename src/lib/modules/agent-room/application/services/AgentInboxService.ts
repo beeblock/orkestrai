@@ -753,15 +753,13 @@ export class AgentInboxService {
     // Notices never wake an offline agent; questions and work may restore it.
     const session = await this.liveSession(workspaceId, nodeId, live.some((envelope) => envelope.metadata.wake !== false));
     if (!session) return null;
-    const pendingAt = ptySessionManager.pendingAutomaticDeliveryAt(session.id);
-    if (!ptySessionManager.canAcceptAutomaticMessage(session.id) && pendingAt === null) return null;
+    // The PTY's receipt checker owns release of an unconfirmed composer.
+    // Another completed turn is not proof that its paste left the input.
+    if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
     const context = await this.transcriptContext(workspaceId, nodeId, session);
     if (context.provider) {
       const boundary = await latestTurnBoundary(context.provider, context.cwd, context.agentSessionId, context.options);
       if (boundary.ready === false) return null;
-      if (pendingAt !== null && boundary.ready === true && boundary.startedAt !== null && boundary.finishedAt !== null) {
-        ptySessionManager.releaseAutomaticDeliveryAfterTurn(session.id, pendingAt, boundary.startedAt, boundary.finishedAt);
-      }
     }
     if (!ptySessionManager.canAcceptAutomaticMessage(session.id)) return null;
 

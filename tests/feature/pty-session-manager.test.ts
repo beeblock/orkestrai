@@ -141,7 +141,7 @@ describe('PtySessionManager', () => {
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
-  it('recovers an unconfirmed delivery only after a proven newer completed turn, without retyping it', async () => {
+  it('reports a newer completed turn without freeing an unconfirmed composer or retyping its message', async () => {
     vi.useFakeTimers();
     const writes: string[] = [];
     let emitData!: (data: string) => void;
@@ -152,7 +152,8 @@ describe('PtySessionManager', () => {
     try {
       emitData('Ready');
       await vi.advanceTimersByTimeAsync(3000);
-      const first = manager.writeWithConfirmedSubmit(session.id, 'first handoff', { isAccepted: async () => false, confirmationWindowMs: 1000 });
+      let accepted = false;
+      const first = manager.writeWithConfirmedSubmit(session.id, 'first handoff', { isAccepted: async () => accepted, confirmationWindowMs: 1000 });
       const uncertain = expect(first).rejects.toThrow('confirm');
       await vi.advanceTimersByTimeAsync(2000); await uncertain;
       emitData('Turn finished, prompt ready');
@@ -160,18 +161,19 @@ describe('PtySessionManager', () => {
       const submittedAt = manager.pendingAutomaticDeliveryAt(session.id)!;
       expect(submittedAt).toBeTypeOf('number');
       expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
-      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt - 1000, submittedAt + 1000)).toBe(false);
-      manager.writeHumanInput(session.id, 'unsent draft');
-      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(false);
-      manager.writeHumanInput(session.id, '\x15');
+      expect(manager.hasUnconfirmedDeliveryAfterTurn(session.id, submittedAt, submittedAt - 1000, submittedAt + 1000)).toBe(false);
       emitData('Ready'); await vi.advanceTimersByTimeAsync(3000);
-      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(true);
-      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(true);
+      expect(manager.hasUnconfirmedDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(true);
+      expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
       const next = manager.queueWithSubmit(session.id, 'second handoff');
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(writes).toEqual(['first handoff', '\r']);
+      accepted = true;
+      await vi.advanceTimersByTimeAsync(4000);
       await vi.advanceTimersByTimeAsync(1000); await next.submitted;
       expect(writes.filter(text => text === 'first handoff')).toHaveLength(1);
       expect(writes.slice(-2)).toEqual(['second handoff', '\r']);
-      expect(manager.releaseAutomaticDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(false);
+      expect(manager.hasUnconfirmedDeliveryAfterTurn(session.id, submittedAt, submittedAt + 100, submittedAt + 1000)).toBe(false);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -215,6 +217,9 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(20_000);
       expect(writes).toEqual(['unconfirmed', '\r']);
       next.cancel(); await cancelled;
+      manager.writeHumanInput(session.id, 'human can still type');
+      expect(writes).not.toContain('human can still type');
+      manager.writeHumanInput(session.id, '\x03');
       manager.writeHumanInput(session.id, 'human can still type');
       expect(writes.at(-1)).toBe('human can still type');
     } finally { manager.kill(session.id); vi.useRealTimers(); }
@@ -351,7 +356,10 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(3_000);
       await rejected;
       manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r', 'human input']);
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r']);
+      manager.writeHumanInput(session.id, '\x03');
+      manager.writeHumanInput(session.id, 'human input');
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\r', '\x03', 'human input']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 

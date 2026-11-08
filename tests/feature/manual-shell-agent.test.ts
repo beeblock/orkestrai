@@ -105,8 +105,13 @@ describe('agents started manually inside a Shell', () => {
   it('does not confirm terminal output when Claude has no matching transcript', async () => {
     const f = await fixture(100, false);
     try {
-      const reply = await bridgeService.ask(f.workspace.id, { to: f.node.id, message: 'No saved reply', timeoutMs: 1500 });
-      expect(reply).toMatchObject({ reply: '', replyConfirmed: false, delivered: true, timedOut: true });
+      const started = Date.now();
+      await expect(bridgeService.ask(f.workspace.id, { to: f.node.id, message: 'No saved reply', timeoutMs: 1500 }))
+        .rejects.toMatchObject({ code: 'PTY_DELIVERY_UNCONFIRMED' });
+      expect(Date.now() - started).toBeLessThan(5000);
+      ptySessionManager.writeHumanInput(f.session.id, 'Owner draft must not enter the uncertain paste');
+      expect(ptySessionManager.get(f.session.id)?.inputDeferred).toBe(true);
+      expect((await controlCenterRepository.listDeliveries(f.workspace.id)).some(event => event.state === 'delivered')).toBe(false);
     } finally { await f.dispose(); }
   }, 20_000);
 

@@ -477,6 +477,19 @@ describe('BridgeService', () => {
     } finally { ptySessionManager.kill(session.id); }
   });
 
+  it('records busy raw controls as failed instead of writing into an owner draft', async () => {
+    const { workspace, terminal, session } = await createWorkspaceWithTerminal();
+    const rawWrite = vi.spyOn(ptySessionManager, 'writeRawInput');
+    try {
+      ptySessionManager.writeHumanInput(session.id, 'unfinished owner draft');
+      await expect(bridgeService.askRaw(workspace.id, { to: terminal.id, message: '\r' })).rejects.toMatchObject({ code: 'PTY_INPUT_BUSY' });
+      expect(rawWrite).toHaveBeenCalledTimes(1);
+      const events = await controlCenterRepository.listDeliveries(workspace.id);
+      expect(events.some(event => event.state === 'delivered')).toBe(false);
+      expect(events.at(-1)?.state).toBe('failed');
+    } finally { ptySessionManager.kill(session.id); }
+  });
+
   it('le, escreve e edita notas por substring', async () => {
     const workspace = await workspaceRepository.createWorkspace({ name: 'w', workingDir: '/tmp' });
     const note = await workspaceRepository.createNode({

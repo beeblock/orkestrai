@@ -21,6 +21,8 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
   let requests = 0, primaryRequests = 0, dropEnter = false, dropped = 0, output = '';
   let duringPaste: (() => void) | null = null;
   let plannedDrops = 0, resizes = 0, replays = 0;
+  const ownerDraft = 'Human input kept separate from the automatic message';
+  let ownerReceipts = 0, mixedInput = false;
   const viewerTimers: Array<ReturnType<typeof setTimeout>> = [];
   const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const server = createServer(async (request, response) => {
@@ -30,6 +32,7 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
     const last = body.input?.at(-1);
     const lastText = (last?.content ?? []).map((item: any) => item.text ?? '').join('');
     if (lastText.startsWith('Fixture delivery ')) primaryRequests++;
+    if (lastText.startsWith('Fixture delivery ') && lastText.includes(ownerDraft)) mixedInput = true;
     console.info('Local Responses fixture', { request: requests, model: body.model, inputCount: body.input?.length,
       lastText: lastText.slice(0, 75) });
     response.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -98,12 +101,18 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
       .catch(error => { throw new Error(`${error.message}\n${output.slice(-8000)}`); });
     await new Promise(resolve => setTimeout(resolve, 3000));
     let exactId: string | null = null, serial = 0;
-    async function deliver(missEnter = false, viewerChange?: 'resize' | 'resize-burst' | 'replay') {
+    async function deliver(missEnter = false, viewerChange?: 'resize' | 'resize-burst' | 'replay', typeWhileSending = false) {
       const message = `Fixture delivery ${++serial}\n` + 'A bounded local-only paste, no tools or external inference. '.repeat(150);
       const since = Date.now(); let submittedAt: number | null = null;
       dropEnter = missEnter;
       if (missEnter) plannedDrops++;
-      duringPaste = viewerChange ? () => {
+      duringPaste = typeWhileSending ? () => {
+        manager.writeHumanInput(session.id, `${ownerDraft}\r`);
+        // The pending-input status also reduces the mounted terminal height.
+        viewerTimers.push(setTimeout(() => {
+          resizes++; terminal.resize(40, 10); manager.resize(session.id, 40, 10);
+        }, 16));
+      } : viewerChange ? () => {
         if (viewerChange === 'resize' || viewerChange === 'resize-burst') {
           const resize = () => {
             const [cols, rows] = resizes++ % 2 ? [40, 12] : [72, 20];
@@ -136,11 +145,18 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
           retries: pending?.pasteRetryCount, awaitingDeliveryIdle: state?.awaitingDeliveryIdle });
         throw new Error(`${error.message}\n${output.slice(-12000)}`);
       });
+      if (typeWhileSending) {
+        await expect.poll(async () => {
+          const match = await findPromptInTranscript('codex', cwd, exactId, ownerDraft, since, { codexHome });
+          return Boolean(match);
+        }, { timeout: 20000, message: 'Held owner input never reached its own turn' }).toBe(true);
+        ownerReceipts++;
+      }
       if (viewerChange === 'resize-burst') await new Promise(resolve => setTimeout(resolve, 2500));
       await expect.poll(async () => exactId && (await latestTurnBoundary('codex', cwd, exactId, { codexHome })).ready,
         { timeout: 15000 }).toBe(true);
     }
-    await deliver(true);
+    await deliver(true, undefined, true);
     await deliver(false, 'resize-burst');
     const started = Date.now();
     while (Date.now() - started < viewDuration) {
@@ -154,7 +170,8 @@ it.skipIf(!enabled).each(['canvas', 'conversation'])('submits through the real C
     if (view === 'canvas') await deliver(true, 'replay');
     await deliver();
     expect(dropped).toBe(plannedDrops); expect(primaryRequests).toBe(serial);
-    console.info(JSON.stringify({ platform: process.platform, view, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped, resizes, replays }));
+    expect(ownerReceipts).toBe(1); expect(mixedInput).toBe(false);
+    console.info(JSON.stringify({ platform: process.platform, view, elapsedSeconds: Math.round((Date.now() - started) / 1000), exactReceipts: serial, requests, primaryRequests, recoveredEnter: dropped, resizes, replays, ownerReceipts, mixedInput }));
   } catch (error) {
     // Cleanup failures must not hide the actual TUI/receipt failure.
     process.stderr.write(`Codex fixture failed: ${String(error)}\n${output.slice(-8000)}\n`);

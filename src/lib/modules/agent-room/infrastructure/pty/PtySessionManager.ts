@@ -33,6 +33,8 @@ export type PtySessionInfo = {
   exitCode: number | null;
   /** true quando a sessão parou de produzir saída (estado neutro de ociosidade). */
   waiting: boolean;
+  /** Owner keystrokes are held until an automatic prompt is accepted. No text is exposed. */
+  inputDeferred?: boolean;
   /** The owner paused the process tree (SIGSTOP); it resumes with SIGCONT. */
   paused?: boolean;
   /** Já produziu algum output — usado na espera de prontidao antes de escrever. */
@@ -60,6 +62,7 @@ export type PtySessionListener = (data: string) => void;
 export type PtyExitListener = (exitCode: number, expected?: boolean) => void;
 export type PtyAttentionListener = (waiting: boolean) => void;
 export type PtyWorkingDirectoryListener = (cwd: string) => void;
+export type PtyInputStateListener = (deferred: boolean) => void;
 
 const execFileAsync = promisify(execFile);
 
@@ -158,6 +161,7 @@ type PtySession = PtySessionInfo & {
   exitListeners: Set<PtyExitListener>;
   attentionListeners: Set<PtyAttentionListener>;
   workingDirectoryListeners: Set<PtyWorkingDirectoryListener>;
+  inputStateListeners: Set<PtyInputStateListener>;
   workingDirectoryTimer: ReturnType<typeof setTimeout> | null;
   canTrackWorkingDirectory: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -186,6 +190,11 @@ type PtySession = PtySessionInfo & {
 
 export type PtyOutputMark = { sessionId: string; length: number };
 
+export class PtyInputBusyError extends Error {
+  readonly code = 'PTY_INPUT_BUSY';
+  constructor() { super('Terminal input is busy. No raw control was written; retry after the current draft or delivery finishes.'); }
+}
+
 type ComposerDelivery = {
   text: string;
   submitDelayMs: number;
@@ -202,6 +211,8 @@ type ComposerDelivery = {
   pasteRetryAt?: number;
   pasteOutputStart?: number;
   pasteEchoAt?: number;
+  /** Only an explicit owner interrupt may relinquish input without a receipt. */
+  ownerTakeover?: boolean;
   /** Where the terminal's output stood when Enter submitted this delivery. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -488,6 +499,7 @@ export class PtySessionManager {
       exitListeners: new Set(),
       attentionListeners: new Set(),
       workingDirectoryListeners: new Set(),
+      inputStateListeners: new Set(),
       workingDirectoryTimer: null,
       canTrackWorkingDirectory: !input.provider && input.runtime?.kind !== 'wsl',
       idleTimer: null,
@@ -684,12 +696,14 @@ export class PtySessionManager {
     onExit?: PtyExitListener,
     onAttention?: PtyAttentionListener,
     onWorkingDirectory?: PtyWorkingDirectoryListener,
+    onInputState?: PtyInputStateListener,
   ): { scrollback: string; detach: () => void } {
     const session = this.requireSession(id);
     session.listeners.add(onData);
     if (onExit) session.exitListeners.add(onExit);
     if (onAttention) session.attentionListeners.add(onAttention);
     if (onWorkingDirectory) session.workingDirectoryListeners.add(onWorkingDirectory);
+    if (onInputState) session.inputStateListeners.add(onInputState);
 
     const scrollback = this.replay(id);
     if (session.exited && onExit) {
@@ -703,6 +717,7 @@ export class PtySessionManager {
         if (onExit) session.exitListeners.delete(onExit);
         if (onAttention) session.attentionListeners.delete(onAttention);
         if (onWorkingDirectory) session.workingDirectoryListeners.delete(onWorkingDirectory);
+        if (onInputState) session.inputStateListeners.delete(onInputState);
       },
     };
   }
@@ -733,11 +748,18 @@ export class PtySessionManager {
     session.pty.write(data);
   }
 
+  /** Raw bridge controls are immediate actions, never delayed into another UI. */
+  writeRawInput(id: string, data: string): void {
+    const session = this.requireSession(id);
+    if (session.deliveryInProgress || session.awaitingDeliveryIdle || this.hasUnsubmittedOwnerInput(id)) throw new PtyInputBusyError();
+    session.humanInputRevision++;
+    this.write(id, data);
+  }
+
   /**
-   * Entrada originada no terminal visivel. Enquanto uma entrega automatica
-   * está entre o texto e o Enter, as teclas ficam em memória por alguns
-   * milissegundos e são reproduzidas logo depois. Isso impede que o rascunho
-   * humano seja concatenado a uma mensagem de outro agente.
+   * Visible-terminal input retains its own writer. Once an automatic paste
+   * starts, owner keys stay in memory until its exact receipt, or an explicit
+   * Ctrl+C takeover. Emitting Enter alone never makes the composer safe.
    */
   writeHumanInput(id: string, data: string, options: { imagePaste?: boolean } = {}): void {
     const session = this.requireSession(id);
@@ -754,9 +776,33 @@ export class PtySessionManager {
       });
     }
     const protocolOnly = data.length > 0 && (possibleProtocol === '' || /^(?:\x1b\[[IO]|\x1b\[[?>]?[\d;:]+c|\x1b\](?:10|11|12);rgba?:[a-fA-F\d/]+(?:\x07|\x1b\\))+$/.test(possibleProtocol));
-    if (imagePaste || (data.length && !protocolOnly)) session.humanInputRevision += 1;
-    if (session.deliveryInProgress) {
+    // Terminal responses are not drafts and may be needed for the CLI to
+    // accept this very paste. Never park them behind its receipt.
+    if (protocolOnly) { this.write(id, data); return; }
+    if (this.holdsHumanInput(session)) {
+      // Ctrl+C explicitly discards the owner's staged draft, like a normal
+      // terminal interrupt. It never silently acknowledges an automatic send.
+      if (data === '\x03') {
+        session.deferredHumanInput.length = 0;
+        const active = session.activeDelivery;
+        if (session.deliveryInProgress && active?.pasteOutputStart !== undefined) {
+          // Paste bytes already arrived, but Enter has not. Do not submit the
+          // message before honoring the owner's interrupt.
+          active.ownerTakeover = true;
+          if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
+          session.deliveryTimer = null;
+          session.deliveryInProgress = false;
+          session.activeDelivery = null;
+          session.lastSubmittedDelivery = active;
+          session.lastDeliveryAccepted = false;
+          active.reject(Object.assign(new Error('Automatic paste interrupted before Enter. Delivery is uncertain; automatic replay is disabled.'), { code: 'PTY_DELIVERY_UNCONFIRMED' }));
+          this.writeHumanInputNow(session, data, imagePaste);
+          this.notifyInputState(session);
+          return;
+        }
+      }
       session.deferredHumanInput.push({ data, imagePaste });
+      this.flushDeferredHumanInput(session);
       return;
     }
     this.writeHumanInputNow(session, data, imagePaste);
@@ -1024,7 +1070,7 @@ export class PtySessionManager {
       options.signal?.removeEventListener('abort', cancelQueuedDelivery);
     }
     if (options.signal?.aborted) throw new Error('Agent message delivery cancelled.');
-    if (!session.provider) return;
+    if (!session.provider && !confirmAcceptance) return;
     if (!session.conptySubmitGuard && !options.isAccepted) return;
 
     const confirmationWindowMs = options.confirmationWindowMs ?? (session.conptySubmitGuard ? 4_000 : 180_000);
@@ -1193,20 +1239,14 @@ export class PtySessionManager {
   }
 
   /**
-   * A newer structured turn has started AND ended in this exact conversation.
-   * This frees the composer, but never acknowledges the old prompt or retypes it.
-   * An old observation cannot release another delivery, a dialog or a human draft.
+   * A newer structured turn ended, but did not prove receipt of this prompt.
+   * Report uncertainty without releasing input custody. The owner may begin
+   * typing after this observation too; only the exact receipt or Ctrl+C may
+   * release that typing, never another turn's completion.
    */
-  releaseAutomaticDeliveryAfterTurn(id: string, submittedAt: number, startedAt: number, finishedAt: number): boolean {
+  hasUnconfirmedDeliveryAfterTurn(id: string, submittedAt: number, startedAt: number, finishedAt: number): boolean {
     if (![submittedAt, startedAt, finishedAt].every(Number.isFinite) || startedAt < submittedAt || finishedAt < startedAt
       || this.pendingAutomaticDeliveryAt(id) !== submittedAt) return false;
-    const session = this.sessions.get(id)!;
-    session.awaitingDeliveryIdle = false;
-    session.lastSubmittedDelivery = null;
-    session.lastDeliveryAccepted = false;
-    if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
-    session.deliveryTimer = null;
-    this.drainDeliveryQueue(session);
     return true;
   }
 
@@ -1218,7 +1258,7 @@ export class PtySessionManager {
       || (Number.isFinite(lastFinishedAt) ? lastFinishedAt >= submittedAt : session.nativeComposerState !== 'idle')
       || session.nativeComposerState === 'working'
       || this.pendingAutomaticDeliveryAt(id) !== submittedAt
-      || delivery.humanInputRevision !== session.humanInputRevision || session.deferredHumanInput.length
+      || delivery.humanInputRevision !== session.humanInputRevision || delivery.ownerTakeover
       || (delivery.pasteRetryCount ?? 0) >= 2
       || Date.now() - (delivery.pasteRetryAt ?? submittedAt) < 5000
       || (session.nativeComposerState !== 'idle' && Date.now() - session.lastOutputAt < SESSION_IDLE_MS)) return false;
@@ -1324,6 +1364,7 @@ export class PtySessionManager {
   }
 
   private async startDelivery(session: PtySession, delivery: ComposerDelivery): Promise<void> {
+    const ownerRevisionBeforeCheck = session.humanInputRevision;
     try {
       if (delivery.isStillRelevant && !await delivery.isStillRelevant(true)) throw new ObsoletePtyDeliveryError();
       if (session.exited || this.sessions.get(session.id) !== session) throw new Error('Terminal is no longer available.');
@@ -1338,6 +1379,16 @@ export class PtySessionManager {
       return;
     }
     const outputRevisionAtWrite = session.outputRevision;
+    // The asynchronous relevance check can race the first owner key. Before
+    // any paste bytes are written, return the slot to that draft instead.
+    if (session.deferredHumanInput.length || session.humanComposerLength > 0 || session.humanInputRevision !== ownerRevisionBeforeCheck) {
+      session.deliveryInProgress = false;
+      session.activeDelivery = null;
+      session.deliveryQueue.unshift(delivery);
+      this.flushDeferredHumanInput(session);
+      this.drainDeliveryQueue(session);
+      return;
+    }
     const textWrittenAt = Date.now();
     delivery.humanInputRevision = session.humanInputRevision;
     delivery.pasteOutputStart = session.outputLength;
@@ -1348,7 +1399,7 @@ export class PtySessionManager {
     } catch (error) {
       session.deliveryInProgress = false;
       session.activeDelivery = null;
-      delivery.reject(error instanceof Error ? error : new Error(String(error)));
+      delivery.reject(this.retainUnconfirmedWrite(session, delivery, error));
       this.drainDeliveryQueue(session);
       return;
     }
@@ -1403,7 +1454,7 @@ export class PtySessionManager {
           // An observer never undoes a submitted delivery.
         }
       } catch (error) {
-        delivery.reject(error instanceof Error ? error : new Error(String(error)));
+        delivery.reject(this.retainUnconfirmedWrite(session, delivery, error));
       } finally {
         session.deliveryInProgress = false;
         session.activeDelivery = null;
@@ -1474,7 +1525,7 @@ export class PtySessionManager {
 
   private releaseDeliveryBarrierWhenReady(session: PtySession): void {
     if (!session.awaitingDeliveryIdle || session.exited) return;
-    if (session.lastSubmittedDelivery?.requiresAcceptance && !session.lastDeliveryAccepted) {
+    if (session.lastSubmittedDelivery?.requiresAcceptance && !session.lastDeliveryAccepted && !session.lastSubmittedDelivery.ownerTakeover) {
       const delivery = session.lastSubmittedDelivery;
       if (delivery.confirmAcceptance && !delivery.confirmationPending) {
         delivery.confirmationPending = true;
@@ -1503,19 +1554,75 @@ export class PtySessionManager {
     session.lastDeliveryAccepted = false;
     if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
     session.deliveryTimer = null;
+    // The exact receipt releases human input first. A new automatic message
+    // cannot claim the composer in the interval before this draft is restored.
+    this.flushDeferredHumanInput(session);
     this.drainDeliveryQueue(session);
   }
 
+  private holdsHumanInput(session: PtySession): boolean {
+    return Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined)
+      || Boolean(session.lastSubmittedDelivery?.requiresAcceptance
+      && !session.lastDeliveryAccepted && !session.lastSubmittedDelivery.ownerTakeover);
+  }
+
+  private retainUnconfirmedWrite(session: PtySession, delivery: ComposerDelivery, error: unknown): Error {
+    if (!delivery.requiresAcceptance) return error instanceof Error ? error : new Error(String(error));
+    // An I/O exception after attempting paste bytes is not proof of an empty
+    // composer. Keep custody and the original confirmation callback.
+    if (!session.exited) {
+      session.lastSubmittedDelivery = delivery;
+      session.awaitingDeliveryIdle = true;
+      session.deliveryReadyAt = Date.now() + this.deliverySettleMs(session);
+      this.scheduleDeliveryBarrierFallback(session);
+    }
+    // Inbox recovery must not classify a failed write as definitely unsent
+    // and type the same text again into a still-live terminal.
+    return Object.assign(new Error('Terminal write is uncertain; the message may already be in the composer. Automatic replay is disabled.'), { code: 'PTY_DELIVERY_UNCONFIRMED' });
+  }
+
+  private notifyInputState(session: PtySession): void {
+    const deferred = session.deferredHumanInput.length > 0;
+    if (session.inputDeferred === deferred) return;
+    session.inputDeferred = deferred;
+    for (const listener of session.inputStateListeners) listener(deferred);
+  }
+
   private flushDeferredHumanInput(session: PtySession): void {
+    if (session.deliveryInProgress || session.exited) { this.notifyInputState(session); return; }
+    const delivery = session.lastSubmittedDelivery;
+    if (this.holdsHumanInput(session)) {
+      if (session.deferredHumanInput[0]?.data === '\x03') {
+        delivery!.ownerTakeover = true;
+        session.deliveryReadyAt = Math.max(session.deliveryReadyAt, Date.now() + HUMAN_SUBMIT_SETTLE_MS);
+        this.scheduleDeliveryBarrierFallback(session);
+      } else if (session.deferredHumanInput.length === 1 && session.deferredHumanInput[0].data === '\r') {
+        // A standalone Enter can help the visible pending paste. Preserve its
+        // automatic receipt identity and never mirror an invented owner line.
+        session.deferredHumanInput.length = 0;
+        session.humanInputRevision++;
+        this.write(session.id, '\r');
+        this.notifyInputState(session);
+        return;
+      } else { this.notifyInputState(session); return; }
+    }
     const chunks = session.deferredHumanInput.splice(0);
+    this.notifyInputState(session);
     for (const chunk of chunks) this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
   }
 
   private writeHumanInputNow(session: PtySession, data: string, imagePaste = false): void {
+    if (imagePaste || data.length) session.humanInputRevision++;
     session.startupGuard?.humanInput(data);
     const prompts = session.provider ? trackHumanDraft(session.humanDraft, data) : [];
     const submitted = this.updateHumanComposerState(session, data, imagePaste);
     this.write(session.id, data);
+    if (data === '\x03') {
+      session.awaitingDeliveryIdle = true;
+      session.deliveryReadyAt = Math.max(session.deliveryReadyAt, Date.now() + HUMAN_SUBMIT_SETTLE_MS);
+      this.scheduleDeliveryBarrierFallback(session);
+      return;
+    }
     if (session.provider && submitted) {
       // The owner just started a turn: the agent is working from here on.
       // Typing cleared `waiting` without a report, so say it explicitly.
@@ -1592,6 +1699,7 @@ export class PtySessionManager {
       exited: session.exited,
       exitCode: session.exitCode,
       waiting: session.waiting,
+      inputDeferred: session.deferredHumanInput.length > 0,
       label: session.label,
       workspace: session.workspace,
       workspaceId: session.workspaceId,

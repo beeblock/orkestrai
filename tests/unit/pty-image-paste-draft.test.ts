@@ -47,8 +47,9 @@ describe('missed automatic paste submission', () => {
     expect(writes.filter(text => text === '\r')).toHaveLength(3);
   });
 
-  it.skipIf(process.platform === 'win32').each(['human draft\x15', '\x1b[A', '\x1b[1;5C', '\t'])('does not submit after human input, even if no characters remain (%j)', async data => {
+  it.skipIf(process.platform === 'win32').each(['human draft\x15', '\x1b[A', '\x1b[1;5C', '\t'])('does not submit after explicit owner takeover, even if no characters remain (%j)', async data => {
     const { manager, session, at, writes, showPaste } = await pasted();
+    manager.writeHumanInput(session.id, '\x03');
     manager.writeHumanInput(session.id, data);
     showPaste();
     await vi.advanceTimersByTimeAsync(6000);

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import WebSocket from 'ws';
 
-test('confirms a missed automatic native Claude paste without retyping its text', async ({ request }) => {
+test('keeps owner typing separate while recovering a missed automatic Claude paste', async ({ page, request }) => {
   test.skip(process.platform === 'win32', 'ConPTY has its separate submit retry policy.');
   test.setTimeout(45_000);
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-paste-submit-'));
@@ -54,25 +54,39 @@ test('confirms a missed automatic native Claude paste without retyping its text'
   const socket = new WebSocket('ws://127.0.0.1:5199/ws/agent-room/pty', { origin: 'http://127.0.0.1:5199' });
   try {
     await new Promise<void>((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
-    const node = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Paste receiver', payload: { provider: 'claude', command: process.execPath, args: [script, conversation], maestro: false, agentSessionId: conversation } } })).json()).data;
+    const node = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Paste receiver', x: 80, y: 80, width: 700, height: 420, payload: { provider: 'claude', command: process.execPath, args: [script, conversation], maestro: false, agentSessionId: conversation } } })).json()).data;
     const sessionId = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Fixture PTY creation timed out')), 10_000);
       socket.on('message', raw => { const frame = JSON.parse(raw.toString()); if (frame.type === 'created' && frame.session.nodeId === node.id) { clearTimeout(timer); resolve(frame.session.id); } });
       socket.send(JSON.stringify({ type: 'create', command: process.execPath, args: [script, conversation], conversationArgs: [script, conversation], agentSessionId: conversation, provider: 'claude', cwd: root, workspaceId: workspace.id, workspaceRoot: root, nodeId: node.id, stream: false }));
     });
     expect((await request.patch(`${base}/nodes/${node.id}`, { data: { payload: { ...node.payload, sessionId, agentSessionId: conversation } } })).ok()).toBe(true);
+    await page.goto(`/canvas?workspace=${workspace.id}`);
+    const input = page.locator('.canvas-terminal .xterm-helper-textarea');
+    await expect(input).toBeAttached();
+    await input.focus();
     expect((await request.post(`${base}/channels/${encodeURIComponent(`dm:${node.id}`)}/messages`, { data: { body: marker } })).ok()).toBe(true);
     const readState = async (): Promise<{ enters: number; accepted: string[] }> => {
       try { return JSON.parse(await readFile(state, 'utf8')); }
       catch { return { enters: 0, accepted: [] }; }
     };
     await expect.poll(async () => (await readState()).enters, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
+    const ownerDraft = 'OWNER_DRAFT_MUST_REMAIN_SEPARATE';
+    await page.keyboard.type(ownerDraft);
+    const heldStatus = page.locator('.terminal-status[role="status"]');
+    await expect(heldStatus).toBeVisible();
+    await expect(input).toBeFocused();
     await expect.poll(async () => {
       return (await readState()).accepted.filter(text => text.includes(marker)).length;
     }, { timeout: 18_000 }).toBe(1);
     const saved = await readState();
     expect(saved.enters).toBe(2);
     expect(saved.accepted).toHaveLength(1);
+    expect(saved.accepted[0]).not.toContain(ownerDraft);
+    await expect(heldStatus).toBeHidden();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await readState()).accepted, { timeout: 5000 }).toEqual([saved.accepted[0], ownerDraft]);
   } finally { socket.close(); await request.delete(base); await rm(root, { recursive: true, force: true }); }
 });
 

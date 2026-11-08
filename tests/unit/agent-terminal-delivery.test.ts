@@ -20,7 +20,7 @@ describe('AgentTerminalDeliveryService', () => {
     vi.spyOn(workspaceRepository, 'getNode').mockResolvedValue({ id: 'node', workspaceId: 'workspace', type: 'terminal', payload: { provider: 'claude', sessionId: 'pty', agentSessionId: 'conversation' } } as never);
     vi.spyOn(ptySessionManager, 'automaticDeliverySubmittedAt').mockReturnValue(at);
     vi.spyOn(ptySessionManager, 'pendingAutomaticDeliveryAt').mockReturnValue(at);
-    vi.spyOn(ptySessionManager, 'releaseAutomaticDeliveryAfterTurn').mockReturnValue(false);
+    vi.spyOn(ptySessionManager, 'hasUnconfirmedDeliveryAfterTurn').mockReturnValue(false);
     const resubmit = vi.spyOn(ptySessionManager, 'retryPendingAutomaticPaste').mockReturnValue(true);
     vi.mocked(findPromptInTranscript).mockResolvedValue(null);
     vi.mocked(latestTurnBoundary).mockResolvedValue({ ready, startedAt: at - 1000, finishedAt: at + finishedOffset });
@@ -33,31 +33,36 @@ describe('AgentTerminalDeliveryService', () => {
     if (retry) expect(resubmit).toHaveBeenCalledWith('pty', at, at - 100);
   });
 
-  it.each(['native', 'wsl:Ubuntu-24.04'])('propagates missing receipt recovery even when the %s reconciler observes it first', async runtimeKey => {
+  it.each(['native', 'wsl:Ubuntu-24.04'])('reports uncertainty to the %s caller but still accepts a late exact receipt', async runtimeKey => {
     const at = Date.now();
     const session = { id: 'pty', provider: 'codex', agentSessionId: 'conversation', runtimeKey, cwd: '/project', transcriptCwd: '/project', transcriptHome: '/isolated-home', exited: false };
     vi.spyOn(ptySessionManager, 'get').mockReturnValue(session as never);
     vi.spyOn(workspaceRepository, 'getNode').mockResolvedValue({ id: 'node', workspaceId: 'workspace', type: 'terminal', payload: { provider: 'codex', sessionId: 'pty', agentSessionId: 'conversation' } } as never);
     vi.spyOn(ptySessionManager, 'automaticDeliverySubmittedAt').mockReturnValue(at);
     const pending = vi.spyOn(ptySessionManager, 'pendingAutomaticDeliveryAt').mockReturnValue(at);
-    const release = vi.spyOn(ptySessionManager, 'releaseAutomaticDeliveryAfterTurn').mockReturnValue(true);
+    const uncertainTurn = vi.spyOn(ptySessionManager, 'hasUnconfirmedDeliveryAfterTurn').mockReturnValue(true);
+    vi.spyOn(ptySessionManager, 'bindAgentSession').mockImplementation(() => {});
     vi.mocked(findPromptInTranscript).mockResolvedValue(null);
     vi.mocked(latestTurnBoundary).mockResolvedValue({ ready: true, startedAt: at + 10, finishedAt: at + 100 });
     let recovered: unknown;
+    let confirm!: () => Promise<boolean>;
     vi.spyOn(ptySessionManager, 'writeWithConfirmedSubmit').mockImplementation(async (_id, _text, options) => {
+      confirm = options!.isAccepted!;
       options?.onSubmitted?.({ sessionId: 'pty', length: 1 });
       try { await options!.isAccepted!(); } catch (error) { recovered = error; }
       expect(recovered).toMatchObject({ code: 'PTY_DELIVERY_UNCONFIRMED' });
       pending.mockReturnValue(null);
-      // The reconciler swallowed the first rejection; the waiting caller still
-      // has to observe it after the gate has already been cleared.
+      // The reconciler swallowed the first rejection; the waiting caller must
+      // still observe it without treating an unrelated turn as its receipt.
       await options!.isAccepted!();
     });
     const result = await new AgentTerminalDeliveryService().deliver({ workspaceId: 'workspace', nodeId: 'node', sessionId: 'pty', message: 'handoff' }).catch(error => error);
     expect(result).toBe(recovered);
     expect(result).toMatchObject({ code: 'PTY_DELIVERY_UNCONFIRMED' });
-    expect(release).toHaveBeenCalledWith('pty', at, at + 10, at + 100);
+    expect(uncertainTurn).toHaveBeenCalledWith('pty', at, at + 10, at + 100);
     expect(latestTurnBoundary).toHaveBeenCalledWith('codex', '/project', 'conversation', { homeDir: '/isolated-home', posixCwd: runtimeKey !== 'native' });
+    vi.mocked(findPromptInTranscript).mockResolvedValue({ sessionId: 'conversation' } as never);
+    expect(await confirm()).toBe(true);
   });
 
   it.each(['codex', 'claude'])('uses the exact %s prompt and runtime home for ConPTY/WSL, never redraw-only confirmation', async provider => {

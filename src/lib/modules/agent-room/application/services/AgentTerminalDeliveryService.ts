@@ -13,6 +13,8 @@ type DeliverAgentMessageInput = {
   queueTimeoutMs?: number;
   signal?: AbortSignal;
   isStillRelevant?: (beforeWrite?: boolean) => Promise<boolean>;
+  /** Verified foreground CLI in a pure Shell, without changing its provider/profile. */
+  confirmAcceptance?: () => Promise<boolean>;
   /** Called when Enter submits the message, with where the terminal's output stood. */
   onSubmitted?: (mark: PtyOutputMark) => void;
 };
@@ -30,9 +32,9 @@ export class AgentTerminalDeliveryService {
     const startedAt = Date.now();
     const submission: { at: number | null; boundaryCheckedAt: number; unverified?: Error } = { at: null, boundaryCheckedAt: 0 };
     const provider = ptySessionManager.get(input.sessionId)?.provider;
-    const confirmAccepted = provider && hasAgentAdapter(provider) && getAgentAdapter(provider).sessionStorage
+    const confirmAccepted = input.confirmAcceptance ?? (provider && hasAgentAdapter(provider) && getAgentAdapter(provider).sessionStorage
       ? await this.preparePromptConfirmation(input, startedAt, submission)
-      : undefined;
+      : undefined);
     await ptySessionManager.writeWithConfirmedSubmit(input.sessionId, input.message, {
       submitDelayMs: input.submitDelayMs ?? 200,
       queueTimeoutMs: input.queueTimeoutMs,
@@ -66,10 +68,6 @@ export class AgentTerminalDeliveryService {
     if (!provider) throw new Error('Agent message target has no provider.');
 
     return async () => {
-      // Both the PTY reconciler and the caller poll this callback. If the
-      // reconciler observes completion first, the caller must see the same
-      // uncertainty instead of waiting minutes behind an already freed gate.
-      if (submission.unverified) throw submission.unverified;
       const session = ptySessionManager.get(input.sessionId);
       if (!session || session.exited) return false;
       const preferredSessionId = session.agentSessionId
@@ -89,9 +87,13 @@ export class AgentTerminalDeliveryService {
         },
       );
       if (!match) {
-        // A missing exact receipt must not keep every future message blocked
-        // after the CLI has completed a newer turn. Read one coherent snapshot,
-        // at most once per 1.5 s, and keep the original delivery unverified.
+        // Both the caller and the background reconciler must observe the
+        // uncertainty. A late exact receipt may still release input custody,
+        // so always check for that receipt before returning this error.
+        if (submission.unverified) throw submission.unverified;
+        // A newer completed turn can end the caller's wait as uncertain, but
+        // cannot release typing into the old paste. Read one coherent
+        // snapshot, at most once per 1.5 s, and retain the receipt checker.
         const pendingAt = ptySessionManager.pendingAutomaticDeliveryAt(input.sessionId);
         if (!preferredSessionId && submission.at !== null && pendingAt === submission.at && ptySessionManager.hasNativeIdleComposer(input.sessionId)) {
           // A new Codex conversation may have no completed transcript yet. Its
@@ -112,7 +114,7 @@ export class AgentTerminalDeliveryService {
             ptySessionManager.retryPendingAutomaticPaste(input.sessionId, pendingAt, boundary.finishedAt);
           }
           if (boundary.ready === true && boundary.startedAt !== null && boundary.finishedAt !== null
-            && ptySessionManager.releaseAutomaticDeliveryAfterTurn(input.sessionId, pendingAt, boundary.startedAt, boundary.finishedAt)) {
+            && ptySessionManager.hasUnconfirmedDeliveryAfterTurn(input.sessionId, pendingAt, boundary.startedAt, boundary.finishedAt)) {
             const error = new Error('Provider turn completed without an exact prompt receipt; delivery remains unverified.');
             Object.assign(error, { code: 'PTY_DELIVERY_UNCONFIRMED' });
             submission.unverified = error;

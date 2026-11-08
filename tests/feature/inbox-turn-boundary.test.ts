@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { uuidv7 } from '@beeblock/svelar/support';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
@@ -12,7 +12,7 @@ import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 describe('inbox recovery at a real terminal turn boundary', () => {
   useSvelarTest({ refreshDatabase: true });
 
-  it.skipIf(process.platform === 'win32')('delivers the next message despite a missing receipt and late results from the completed turn', async () => {
+  it.skipIf(process.platform === 'win32')('holds an uncertain composer through turn completion, then delivers the next message after a late exact receipt', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'ork-inbox-boundary-')));
     const home = join(root, 'home');
     const conversation = uuidv7();
@@ -60,15 +60,26 @@ describe('inbox recovery at a real terminal turn boundary', () => {
       const first = await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: node.id, kind: 'owner', content: 'FIRST_HANDOFF' });
       await vi.waitFor(async () => expect(await readFile(received, 'utf8')).toContain('FIRST_HANDOFF'), { timeout: 5000 });
       await agentInboxService.enqueue({ workspaceId: workspace.id, toNodeId: node.id, kind: 'owner', content: 'SECOND_HANDOFF' });
-      const queuedAt = Date.now();
+      // Completion alone is not proof that the automatic paste left the input
+      // field. Preserve safety without retyping FIRST_HANDOFF, then prove that
+      // a delayed exact receipt still advances the next message autonomously.
+      await vi.waitFor(async () => expect(await controlCenterRepository.findEnvelope(first.id))
+        .toMatchObject({ state: 'sent', metadata: { unconfirmed: true } }), { timeout: 6000 });
+      const firstLine = (await readFile(received, 'utf8')).trim();
+      expect(firstLine).toContain('FIRST_HANDOFF');
+      expect(firstLine).not.toContain('SECOND_HANDOFF');
+      await appendFile(transcript, [
+        { type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: firstLine }] } },
+        { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-1', last_agent_message: 'Done' } },
+      ].map(event => JSON.stringify({ timestamp: new Date().toISOString(), ...event })).join('\n') + '\n');
+      const receiptAt = Date.now();
       await vi.waitFor(async () => expect(await readFile(received, 'utf8')).toContain('SECOND_HANDOFF'), { timeout: 8000 });
-      expect(Date.now() - queuedAt).toBeLessThan(10_000);
+      expect(Date.now() - receiptAt).toBeLessThan(10_000);
       const lines = (await readFile(received, 'utf8')).trim().split('\n');
       expect(lines).toHaveLength(2);
       expect(lines.filter(line => line.includes('FIRST_HANDOFF'))).toHaveLength(1);
-      console.log(`Inbox recovered without manual input in ${Date.now() - queuedAt} ms; first prompt typed once`);
-      // Composer recovery is not a false exact receipt for the first message.
-      expect(await controlCenterRepository.findEnvelope(first.id)).toMatchObject({ state: 'sent', metadata: { unconfirmed: true } });
+      console.log(`Inbox recovered after its late exact receipt in ${Date.now() - receiptAt} ms; first prompt typed once`);
+      await vi.waitFor(async () => expect(await controlCenterRepository.findEnvelope(first.id)).toMatchObject({ state: 'delivered' }), { timeout: 4000 });
       await agentInboxService.sweepNow();
     } finally {
       ptySessionManager.kill(session.id);
