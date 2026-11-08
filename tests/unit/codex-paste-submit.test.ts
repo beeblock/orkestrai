@@ -45,6 +45,15 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(hasOwnedCodexPaste(`\x1b[17;3H[Pasted Content 9018 chars]\x1b[${style} q\x1b[?25h`, 'x'.repeat(9018))).toBe(true);
   });
 
+  it.each(['\x1b[K', '\x1b[0K', '\x1b[22m\x1b[K\x1b[m', '\x1b[9X'])('recognizes a fresh composer whose blank right side is cleared (%j)', erase => {
+    expect(hasOwnedCodexPaste(`›\x1b[22m \x1b[38;5;6m[Pasted Content 9018 chars]${erase}`, 'x'.repeat(9018))).toBe(true);
+    expect(hasOwnedCodexPaste(`\x1b[17;3H[Pasted Content 9018 chars]${erase}`, 'x'.repeat(9018))).toBe(true);
+  });
+
+  it.each(['\x1b[1K', '\x1b[2K', '\x1b[1G\x1b[K', '\x1b[Kowner draft', '\x1b[9Xowner draft'])('keeps erased or edited composers protected (%j)', erase => {
+    expect(hasOwnedCodexPaste(`› [Pasted Content 9018 chars]${erase}`, 'x'.repeat(9018))).toBe(false);
+  });
+
   it.each([
     '\x1b[17;40Hhuman edit\x1b[17;30H',
     '\x1b[16;1HApprove this action\x1b[17;30H',

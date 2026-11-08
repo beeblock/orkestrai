@@ -45,6 +45,17 @@ function withoutCodexFooter(output: string): string {
   return footer && row === composerRow ? output.slice(0, end) + restored[0] : output;
 }
 
+/** EL/ECH immediately after a freshly painted badge only erase its blank right side. */
+function withoutCodexBlankRight(output: string): string {
+  const badge = [...output.matchAll(/\[Pasted Content \d+ chars\](?: #\d+)?/g)].at(-1);
+  if (!badge || !/(?:›|\x1b\[\d+;\d+[Hf])(?:[\t ]|\x1b\[[\d;]*m|\x1b\[\d*C)*$/.test(output.slice(0, badge.index))) return output;
+  const end = badge.index! + badge[0].length;
+  const suffix = output.slice(end);
+  const controls = /^(?:\x1b\[[\d;]*m|\x1b\[(?:0?K|\d{0,5}X))+/.exec(suffix)?.[0];
+  if (!controls) return output;
+  return output.slice(0, end) + controls.replace(/\x1b\[(?:0?K|\d{0,5}X)/g, '') + suffix.slice(controls.length);
+}
+
 /** Inspect only output produced for this delivery. A badge in historical output
  * is not proof of a pending composer. Counts are Unicode scalars, as in Codex. */
 export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0): boolean {
@@ -54,6 +65,7 @@ export function hasOwnedCodexPaste(output: string, text: string, extraEnters = 0
   // DECSCUSR changes only cursor shape/blinking. Node's ANSI stripper leaves
   // its final " q" behind, falsely making the pending paste look edited.
   fresh = fresh.replace(/\x1b\[[0-6]? q/g, '');
+  fresh = withoutCodexBlankRight(fresh);
   // ConPTY footer erases and model/path redraws are separate screen rows,
   // not edits to the paste. Keep clears, unknown controls and composer edits.
   fresh = withoutCodexFooter(fresh);

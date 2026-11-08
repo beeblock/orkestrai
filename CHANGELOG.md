@@ -11,7 +11,7 @@ pt-BR, English, and Spanish translations.
 
 - Keep Codex cursor shape and blinking controls out of automatic-paste draft evidence. Recognize the supported DECSCUSR styles explicitly because Node's ANSI stripper leaves a trailing `q`; preserve owner-input revisions and working-turn guards.
 
-- Recover a pending Codex paste after a native Windows resize repaints model, path and warning rows below the composer. Verify the freshly painted composer row and cursor return before excluding footer content; retain guards for owner edits, dialogs, working turns, erased composers and exact prompt receipts. Exercise missed Enter on later turns with real ConPTY resizing and viewer replay.
+- Recover a pending Codex paste after a native Windows resize repaints model, path and warning rows below the composer or clears blank cells immediately to the right of a freshly painted badge. Verify cursor positions and preserve the badge; retain guards for owner edits, dialogs, working turns, erases that reach the draft and exact prompt receipts. Exercise missed Enter on later turns with real ConPTY resizing and viewer replay.
 
 - Restore terminal history without replaying cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Preserve current protocol replies, real owner edits and exact prompt receipts.
 

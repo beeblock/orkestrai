@@ -35,6 +35,15 @@ requirements remain guarded. Recovery sends Enter only, never message text.
 This deliberately loses Enter to prove a recovery gap. It does not establish
 the cause of every initial Enter loss on the remote machine.
 
+The footer-only candidate (`3a4223f1`) still fails in
+https://github.com/beeblock/orkestrai/actions/runs/42450507256.
+The next captured redraw paints `› [Pasted Content 9018 chars]` followed by
+`CSI K`, clearing the blank cells to its right. The original final erase guard
+rejects all EL/ECH controls, including this one that leaves the badge intact.
+The follow-up permits only an immediate right-side clear after a freshly
+painted prompt/badge, with no intervening cursor movement. Left/full erases,
+unlocated clears and further draft text still reject recovery.
+
 ## Cursor styling
 
 The pinned 0.167.0 TUI output contains DECSCUSR (`CSI 0 SP q`). Node's
