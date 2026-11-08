@@ -69,8 +69,13 @@ for (const tour of TOURS_PT) {
     execSync('git init -q && git config user.email tour@test.dev && git config user.name tour && touch README.md && git add -A && git commit -qm init', { cwd: dir });
 
     const workspaceName = `E2E tour-${tour.id} ${Date.now()}`;
-    const created = await request.post('/api/agent-room/workspaces', { data: { name: workspaceName, workingDir: dir } });
-    const workspace = (await created.json()).data as { id: string };
+    // This catalog audit exercises tour actions. Set the documented owner
+    // prerequisite explicitly for a tour that indexes; other tours stay off.
+    const indexesCode = tour.steps.some(step => (Array.isArray(step.action) ? step.action : [step.action]).some(action => action?.kind === 'indexCodeGraph'));
+    const codeIntelligenceMode = indexesCode ? 'manual' : 'disabled';
+    const created = await request.post('/api/agent-room/workspaces', { data: { name: workspaceName, workingDir: dir, codeIntelligenceMode } });
+    const workspace = (await created.json()).data as { id: string; codeIntelligenceMode: string };
+    expect(workspace.codeIntelligenceMode).toBe(codeIntelligenceMode);
 
     const usesNativeImageGen = tour.steps.some(step => (Array.isArray(step.action) ? step.action : [step.action]).some(action => action?.kind === 'runImageWorkflow'));
     if (usesNativeImageGen) {

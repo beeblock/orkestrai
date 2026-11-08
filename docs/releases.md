@@ -235,6 +235,11 @@ Code Intelligence desativado e recusa indexação com HTTP 403. Só então ativa
 Manual pela API do workspace e testa scanner, workers, WASM, FTS e persistência
 da escolha explícita. O gate não depende mais de um modo implícito antigo.
 
+A auditoria do tour de indexação também prepara Manual explicitamente; os
+demais tours mantêm o grafo desativado. O teste de cancelamento do ditado espera
+o término da navegação inicial do Canvas antes do clique real, preservando as
+asserções de cancelamento, liberação do microfone e descarte de texto antigo.
+
 Na 0.50.0, o grafo de código passa a usar um SQLite próprio e workers fora da
 thread principal do Core. A preparação verifica a identidade do banco e a cópia
 antes de retirar as tabelas antigas; uma falha preserva os dados e permite abrir

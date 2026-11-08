@@ -58,6 +58,13 @@ test(`${mode}: cancels delayed startup and transcription without reopening the m
     await page.goto(`/${mode}?workspace=${workspace.id}&node=${node.id}`);
     const terminal = page.locator('.canvas-terminal');
     await expect(terminal.locator('.xterm-helper-textarea')).toBeAttached();
+    if (mode === 'canvas') {
+      // The route animates to the requested node after mounting xterm. Clicking
+      // during that animation can scroll/reposition the target between down/up.
+      await expect(page.locator(`.svelte-flow__node[data-id="${node.id}"].selected`)).toBeVisible();
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect(page.locator('.svelte-flow')).not.toHaveAttribute('data-canvas-navigating');
+    }
     const mic = terminal.getByRole('button', { name: /Ditar \(/ });
     await mic.click();
     await expect.poll(() => modelRequests).toBeGreaterThan(0);
