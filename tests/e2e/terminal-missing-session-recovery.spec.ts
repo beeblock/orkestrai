@@ -9,7 +9,16 @@ test('recovers a newly created Canvas terminal after input finds its PTY missing
   test.setTimeout(45000);
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-missing-session-'));
   const script = join(root, 'shell.mjs');
-  await writeFile(script, `process.stdin.setRawMode(true);process.stdin.resume();process.stdout.write('READY\\r\\n');let draft='';process.stdin.on('data',data=>{for(const char of data.toString()){if(char==='\\r'){process.stdout.write('ACCEPTED:'+draft+'\\r\\n');draft='';}else if(char.charCodeAt(0)>=32)draft+=char;}});`);
+  await writeFile(script, `process.stdin.setRawMode(true);process.stdin.resume();process.stdout.write('READY:'+process.pid+'\\r\\n');let draft='';process.stdin.on('data',data=>{for(const char of data.toString()){if(char==='\\r'){process.stdout.write('ACCEPTED:'+draft+'\\r\\n');draft='';}else if(char.charCodeAt(0)>=32)draft+=char;}});`);
+  const readyHeaders = new Map<string, string>();
+  page.on('websocket', connection => connection.on('framereceived', ({ payload }) => {
+    if (typeof payload !== 'string') return;
+    const frame = JSON.parse(payload);
+    const text = frame.type === 'output' ? frame.data : frame.scrollback;
+    const id = frame.sessionId ?? frame.session?.id;
+    const header = typeof text === 'string' ? /READY:\d+/.exec(text)?.[0] : undefined;
+    if (id && header) readyHeaders.set(id, header);
+  }));
   const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Missing PTY recovery', workingDir: root, codeIntelligenceMode: 'manual' } })).json()).data;
   const base = `/api/agent-room/workspaces/${workspace.id}`;
   const socket = new WebSocket('ws://127.0.0.1:5199/ws/agent-room/pty', { origin: 'http://127.0.0.1:5199' });
@@ -29,8 +38,14 @@ test('recovers a newly created Canvas terminal after input finds its PTY missing
     });
     await terminal.locator('.xterm-helper-textarea').focus();
     await page.keyboard.press('Control+c');
-    await expect.poll(currentId).not.toBe(oldId);
-    await expect(terminal.locator('.xterm-rows')).toContainText('READY');
+    // A cleared payload id and the dead terminal's last READY are not the
+    // replacement. Wait for the exact new PTY and its own parsed header.
+    await expect.poll(async () => {
+      const id = await currentId();
+      return Boolean(id && id !== oldId && readyHeaders.has(id));
+    }).toBe(true);
+    const replacementId = await currentId();
+    await expect(terminal.locator('.xterm-rows')).toContainText(readyHeaders.get(replacementId)!);
     await terminal.locator('.xterm-helper-textarea').focus();
     await page.keyboard.type('replacement-works'); await page.keyboard.press('Enter');
     await expect(terminal.locator('.xterm-rows')).toContainText('ACCEPTED:replacement-works');
