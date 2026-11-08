@@ -290,7 +290,8 @@ test.describe('code graph UI', () => {
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByRole('combobox', { name: 'Code Intelligence' })).toHaveText('Manual');
       await dialog.getByRole('combobox', { name: 'Code Intelligence' }).click();
-      await expect(page.getByRole('option', { name: 'Assisted (recommended)' })).toBeVisible();
+      await expect(page.getByRole('option', { name: 'Assisted', exact: true })).toBeVisible();
+      await expect(page.getByRole('option', { name: 'Assisted (recommended)', exact: true })).toHaveCount(0);
       await expect(page.getByRole('option', { name: 'Disabled' })).toBeVisible();
     } finally {
       await page.goto('about:blank').catch(() => undefined);
