@@ -167,9 +167,11 @@ https://github.com/beeblock/orkestrai/actions/runs/42506235665
 CI da main preparada `dae90d35`:
 https://github.com/beeblock/orkestrai/actions/runs/42507186202
 
-Ambos são **CI**, não Release Desktop. O primeiro concluiu com sucesso. No último
-acompanhamento, o CI da main já tinha testes gerais, build e Windows aprovados;
-um shard de navegador ainda estava ativo. Consultar o link para o estado atual.
+Ambos são **CI**, não Release Desktop, e **ambos concluíram com sucesso**.
+O segundo valida a main `dae90d35`, incluindo build, Windows e todos os shards
+de navegador. O fortalecimento do teste de identidade nesta branch foi validado
+localmente, sem alterar o código do app. Nenhum desses resultados reproduz o
+workspace pesado do dono depois de uma hora; não confirma a causa original.
 
 ## Logs e build disponíveis neste Mac
 
