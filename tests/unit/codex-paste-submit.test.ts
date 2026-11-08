@@ -59,6 +59,14 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(hasOwnedCodexPaste('[Pasted Content 8638 chars]', segmentedText)).toBe(false);
   });
 
+  it('recognizes the captured CRLF split-paste redraw only with its own absorbed Enter accounted for', () => {
+    const fixture = JSON.parse(readFileSync(new URL('../fixtures/codex-conpty-segmented-0167.json', import.meta.url), 'utf8'));
+    expect(hasOwnedCodexPaste(fixture.output, segmentedText)).toBe(false);
+    expect(hasOwnedCodexPaste(fixture.output, segmentedText, fixture.extraEnters)).toBe(true);
+    expect(hasOwnedCodexPaste(fixture.output + 'owner draft', segmentedText, fixture.extraEnters)).toBe(false);
+    expect(hasOwnedCodexPaste(fixture.output.replace('Fixture delivery 1', 'Unrelated question'), segmentedText, fixture.extraEnters)).toBe(false);
+  });
+
   it.each([0, 1, 2, 3, 4, 5, 6])('keeps cursor style %s out of the current draft', style => {
     expect(hasOwnedCodexPaste(`\x1b[17;3H[Pasted Content 9018 chars]\x1b[${style} q\x1b[?25h`, 'x'.repeat(9018))).toBe(true);
   });

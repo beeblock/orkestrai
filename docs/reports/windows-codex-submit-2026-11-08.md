@@ -143,3 +143,12 @@ remains required, and no prompt text is retransmitted.
 The final local suite also exposes three legacy simulated WSL tests with no
 startup output at all; they now emit native idle before testing post-startup
 acceptance/timeouts. Their existing Enter/receipt assertions remain unchanged.
+
+The earlier backend capture has another split: 7,259 scalars in the badge and
+one absorbed Enter, with the complete literal prefix repainted using CRLF.
+`codex-conpty-segmented-0167.json` retains that controlled frame (2.4 KiB,
+anonymized path). Its full literal prefix must match the count-implied prefix;
+the footer uses the same cursor-return verifier. The test fails without this
+line-based extension and rejects the same frame with a different prompt or
+added owner draft. The absorbed newline is accepted only within Orkestrai's
+actual Enter-attempt budget, never as an arbitrary count tolerance.

@@ -70,14 +70,12 @@ function hasSegmentedCodexPaste(output: string, text: string, extraEnters: numbe
   const badge = badges.at(-1);
   if (!badge) return false;
   const after = output.slice(badge.index! + badge[0].length);
-  // Only formatting, cursor restoration and an immediate blank-right erase.
-  // Composer clears, later text, unknown controls and dialogs remain unsafe.
-  if (!/^(?:(?:\x1b\[[\d;]*m|\x1b\[(?:0?K|\d{1,5}X)))*(?:(?:\x1b\[\d+;\d+[Hf]|\x1b\[\?(?:25|2026)[hl]|\x1b\[[\d;]*m)|[\t \r\n])*$/.test(after)) return false;
   const before = output.slice(0, badge.index);
   const painted = /\x1b\[(\d+);(\d+)[Hf]([^\x1b]*(?:\x1b\[[\d;]*m[^\x1b]*)*)$/.exec(before);
-  if (!painted) return false;
-  const literal = stripVTControlCharacters(painted[3]).replace(/\s+/g, ' ').trim();
-  if (!literal || literal.includes('[Pasted Content') || literal.includes('›')) return false;
+  const literal = painted ? stripVTControlCharacters(painted[3]).replace(/\s+/g, ' ').trim() : '';
+  const flat = stripVTControlCharacters(before.replace(/\x1b\[\d*[CG]/g, ' '));
+  const prompt = flat.lastIndexOf('›');
+  const wholeLiteral = prompt >= 0 ? flat.slice(prompt + 1).replace(/\s/g, '') : '';
   const source = Array.from(text.replace(/\r\n?/g, '\n'));
   const count = Number(badge[1]);
   for (let added = 0; added <= extraEnters; added++) {
@@ -85,7 +83,18 @@ function hasSegmentedCodexPaste(output: string, text: string, extraEnters: numbe
     if (prefixLength <= 0 || prefixLength >= source.length) continue;
     const prefix = source.slice(0, prefixLength).join('').replace(/\s+/g, ' ').trim();
     // A whole painted row, not merely a coincidental final character.
-    if (literal.length >= Math.min(12, prefix.length) && prefix.endsWith(literal)) return true;
+    const rowMatches = literal.length >= Math.min(12, prefix.length)
+      && !literal.includes('[Pasted Content') && !literal.includes('›') && prefix.endsWith(literal);
+    const wholeMatches = wholeLiteral.length >= Math.min(12, prefix.replace(/\s/g, '').length)
+      && wholeLiteral === prefix.replace(/\s/g, '');
+    if (!rowMatches && !wholeMatches) continue;
+    // Once the exact literal/count relationship is proved, use the same
+    // cursor-return/footer verifier as a full badge. This also covers CRLF
+    // full-screen redraws; arbitrary footer text or composer erases still fail.
+    const restored = [...after.matchAll(/\x1b\[(\d+);\d+[Hf]/g)].at(-1);
+    const located = `\x1b[${restored?.[1] ?? painted?.[1] ?? '1'};3H[Pasted Content ${count} chars]`;
+    const suffix = withoutCodexFooter(withoutCodexBlankRight(located + after)).slice(located.length);
+    if (/^(?:(?:\x1b\[\d+;\d+[Hf]|\x1b\[\?(?:25|2026)[hl]|\x1b\[[\d;]*m)|[\t \r\n])*$/.test(suffix)) return true;
   }
   return false;
 }
