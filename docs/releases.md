@@ -139,6 +139,16 @@ continuam exigindo testes específicos.
 
 ## Recuperação da fila de mensagens
 
+A 0.52.8 diferencia teclas reais dos relatórios automáticos enviados pelo
+xterm no mesmo canal de entrada. Mouse e respostas atrasadas ou duplicadas
+do cursor não criam um rascunho falso nem prendem o Enter. O Enter manual de
+uma mensagem automática ainda pendente mantém sua identidade e a recuperação
+por evidência se ele também falhar. O aviso de texto reservado deixa de
+recomendar Ctrl+C: esse comando pode limpar a colagem ou encerrar a CLI.
+Uma PTY ausente informa seu id também em erros de entrada/redimensionamento;
+a recuperação confere o histórico salvo antes de reenfileirar o conteúdo
+persistido, sem redigitar mensagens já confirmadas.
+
 Uma confirmação exata ausente podia deixar `awaitingDeliveryIdle` ativo para
 sempre. O dispatcher consultava esse bloqueio antes do transcript e nunca
 chegava à evidência de que o agente já havia terminado. A 0.44.1 recupera a

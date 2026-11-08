@@ -41,8 +41,7 @@ paste. No transcript receipt is fabricated to resolve these failures.
 
 ## Verification and limits
 
-- Ownership/transport/composer group: 112 tests passed.
-- Final persisted-inbox/ownership/buffer/packaged-import group: 91 passed.
+- Final combined local run: 196 tests passed, including the real-browser Codex scenario, persisted inbox, ownership, transport, composer, package import and documentation contracts.
 - Real Codex 0.167.0 on macOS, private loopback model endpoint, no owner accounts:
   Canvas and Conversation both passed; exact receipts, deliberately missed Enter,
   resize/replay and separate owner prompts were checked.
@@ -55,8 +54,18 @@ paste. No transcript receipt is fabricated to resolve these failures.
 - Native Windows checks now also run the browser fixture for pinned Codex
   0.166.0 and 0.167.0, in addition to the existing native ConPTY cases.
 
-Production build, production-app browser checks and native Windows results are
-pending at this commit. The owner's remote Windows workspace has not been
+Native Windows CI [42506235665](https://github.com/beeblock/orkestrai/actions/runs/42506235665)
+passed both official CLI versions, including the new real-browser case. Per
+version: 126 recovery guard tests, four real-CLI cases and the additional browser
+case passed. The browser case recorded six exact automatic receipts, three
+recovered Enter writes, two cursor replies, two mouse reports, a physical key,
+a separate owner receipt and no mixed model input. Canvas and Conversation also
+passed with 7/6 exact receipts and 4/3 recovered Enter writes respectively.
+
+The local production build reached its deliberately limited 4 GiB heap and
+aborted; this is not a successful build. Compilation and full production-app
+browser verification run on CI to avoid additional local memory/disk pressure.
+Those remaining CI checks are pending at this commit. The owner's remote Windows workspace has not been
 accessed. Passing macOS fixtures alone does not prove that workspace is fixed.
 No owner app restart or installation was performed for this investigation.
 
