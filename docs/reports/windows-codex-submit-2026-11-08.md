@@ -71,6 +71,13 @@ and on-demand replay now omit historical CPR queries; live output is unchanged.
 The tests verify one live reply, no replay reply, preserved delivery identity
 and exactly one copy of the message text.
 
+The separate maintainer review also caught a first-viewer regression before
+publication: omitting every request would discard a fresh request that had
+not received its first reply yet. Replays retain the latest currently pending
+requests within the existing correlation deadline; answered/expired requests
+are omitted. Actual xterm tests cover attach and replay in all three states.
+These cases also run in the native Windows guard step.
+
 Native ConPTY in the failing resize fixture emits no frontend protocol replies,
 so this separate fix is not presented as the cause of that native failure.
 

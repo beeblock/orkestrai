@@ -59,7 +59,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $version -notmatch ('^codex-cli ' + [regex]::Escape($expectedVersion))) { throw 'Unexpected Codex TUI executable/version' }
           "ORKESTRAI_TEST_CODEX_BINARY=$($binary.FullName)" >> $env:GITHUB_ENV
       - name: Check Windows recovery guards
-        run: npm test -- --run tests/unit/codex-paste-submit.test.ts tests/unit/learning-delivery-budget.test.ts tests/unit/terminal-output-buffer.test.ts tests/feature/task-dispatch-latency.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
+        run: npm test -- --run tests/unit/codex-paste-submit.test.ts tests/unit/terminal-replay-queries.test.ts tests/unit/pty-terminal-modes.test.ts tests/unit/learning-delivery-budget.test.ts tests/unit/terminal-output-buffer.test.ts tests/feature/task-dispatch-latency.test.ts tests/unit/interactive-startup.test.ts tests/unit/agent-terminal-delivery.test.ts tests/unit/transcript-listing-single-flight.test.ts tests/unit/pty-packaged-imports.test.ts --maxWorkers=2 --testTimeout=20000
       - name: Exercise real Codex over native ConPTY with loopback-only model responses
         shell: pwsh
         run: |

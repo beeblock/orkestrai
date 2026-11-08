@@ -13,7 +13,7 @@ pt-BR, English, and Spanish translations.
 
 - Recover a pending Codex paste after a native Windows resize repaints model, path and warning rows below the composer or clears blank cells immediately to the right of a freshly painted badge. Support absolute-position and line-based redraws, verify the fresh prompt and cursor return, and preserve the badge. Retain guards for owner edits, dialogs, working turns, erases that reach the draft and exact prompt receipts. Exercise missed Enter on later turns with real ConPTY resizing and viewer replay.
 
-- Restore terminal history without replaying cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Preserve current protocol replies, real owner edits and exact prompt receipts.
+- Restore terminal history without replaying answered or expired cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Retain fresh unanswered requests for the first viewer, current protocol replies, real owner edits and exact prompt receipts.
 
 ## 0.52.5 - 2026-11-07
 

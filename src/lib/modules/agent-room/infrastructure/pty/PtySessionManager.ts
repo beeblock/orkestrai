@@ -314,14 +314,15 @@ export function trimScrollback(text: string, limit: number): { kept: string; dro
  * ones from output the scrollback no longer keeps). A plain tail would drop the
  * alternate screen and mouse reporting of an agent TUI that started long ago.
  */
-export function replayTail(modes: ReadonlyMap<string, boolean>, scrollback: string, limit: number): string {
+export function replayTail(modes: ReadonlyMap<string, boolean>, scrollback: string, limit: number, pendingCursorReports = 0): string {
   const { kept, dropped } = trimScrollback(scrollback, limit);
   const replayed = new Map(modes);
   if (dropped) applyTerminalModes(replayed, dropped);
-  // Cursor queries have no painted state to restore. Answering a historical
-  // query after reattach injects an unsolicited report into the live CLI and
-  // makes its owner-input guard treat that reply as a human draft edit.
-  return terminalModePrefix(replayed) + kept.replace(/\x1b\[\??6n/g, '');
+  // Answered/expired queries have no painted state to restore. A fresh query
+  // still awaiting its first viewer must retain its normal protocol reply.
+  const pending = Number.isSafeInteger(pendingCursorReports) ? Math.max(0, Math.min(32, pendingCursorReports)) : 0;
+  let discard = Math.max(0, (kept.match(/\x1b\[\??6n/g)?.length ?? 0) - pending);
+  return terminalModePrefix(replayed) + kept.replace(/\x1b\[\??6n/g, query => discard-- > 0 ? '' : query);
 }
 
 /** Text the owner is typing into an agent's terminal, across input chunks. */
@@ -690,7 +691,7 @@ export class PtySessionManager {
     if (onAttention) session.attentionListeners.add(onAttention);
     if (onWorkingDirectory) session.workingDirectoryListeners.add(onWorkingDirectory);
 
-    const scrollback = replayTail(session.trimmedModes, session.scrollback, SCROLLBACK_LIMIT);
+    const scrollback = this.replay(id);
     if (session.exited && onExit) {
       queueMicrotask(() => onExit(session.exitCode ?? 0, Boolean(session.stopping || session.exitCode === 0)));
     }
@@ -709,7 +710,8 @@ export class PtySessionManager {
   /** At most `limit` characters of recent output, replayable on its own (see `replayTail`). */
   replay(id: string, limit = SCROLLBACK_LIMIT): string {
     const session = this.requireSession(id);
-    return replayTail(session.trimmedModes, session.scrollback, limit);
+    const pending = (session.cursorReportExpectedUntil ?? 0) >= Date.now() ? session.cursorReportsPending ?? 0 : 0;
+    return replayTail(session.trimmedModes, session.scrollback, limit, pending);
   }
 
   writeStartupOnce(id: string, input: string): boolean {

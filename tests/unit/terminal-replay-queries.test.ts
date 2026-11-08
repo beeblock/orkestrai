@@ -5,7 +5,11 @@ import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/Pt
 
 afterEach(() => vi.useRealTimers());
 
-it.each(['attach', 'replay'])('%s paints the viewer without sending a historical cursor query back as an owner edit', async source => {
+it.each([
+  { source: 'attach', initiallyAnswered: true, expired: false }, { source: 'replay', initiallyAnswered: true, expired: false },
+  { source: 'attach', initiallyAnswered: false, expired: false }, { source: 'replay', initiallyAnswered: false, expired: false },
+  { source: 'attach', initiallyAnswered: false, expired: true }, { source: 'replay', initiallyAnswered: false, expired: true },
+])('$source preserves current queries and omits stale history (answered=$initiallyAnswered, expired=$expired)', async ({ source, initiallyAnswered, expired }) => {
   vi.useFakeTimers();
   const writes: string[] = [];
   let emit = (_: string) => {};
@@ -33,13 +37,16 @@ it.each(['attach', 'replay'])('%s paints the viewer without sending a historical
     const at = manager.automaticDeliverySubmittedAt(session.id)!;
     emit(`\x1b[20;3H[Pasted Content ${text.length} chars]\x1b[20;30H`);
     emit('\x1b[6n');
-    await parse('\x1b[6n');
-    expect(writes.filter(data => /\x1b\[\d+;\d+R/.test(data))).toHaveLength(1);
+    if (initiallyAnswered) await parse('\x1b[6n');
+    expect(writes.filter(data => /\x1b\[\d+;\d+R/.test(data))).toHaveLength(initiallyAnswered ? 1 : 0);
+    if (expired) await vi.advanceTimersByTimeAsync(10_001);
     const snapshot = source === 'attach' ? manager.attach(session.id, () => {}).scrollback : manager.replay(session.id);
     await parse(`\x1bc${snapshot}`);
     await vi.advanceTimersByTimeAsync(6000);
-    // A viewer snapshot must paint the screen, never answer old CLI queries.
-    expect(writes.filter(data => /\x1b\[\d+;\d+R/.test(data))).toHaveLength(1);
+    // A first viewer still answers a live pending query. Later replays do not.
+    expect(writes.filter(data => /\x1b\[\d+;\d+R/.test(data))).toHaveLength(expired ? 0 : 1);
+    await parse(`\x1bc${manager.replay(session.id)}`);
+    expect(writes.filter(data => /\x1b\[\d+;\d+R/.test(data))).toHaveLength(expired ? 0 : 1);
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(true);
     expect(writes.filter(data => data.includes(text))).toHaveLength(1);
   } finally {

@@ -49,4 +49,10 @@ describe('terminal modes across a trimmed scrollback', () => {
     // A mode switched off inside the dropped part stays off.
     expect(replayTail(trimmed, `\x1b[?1006l${'x'.repeat(2_000)}`, 100)).toBe(`\x1b[?1049h${'x'.repeat(100)}`);
   });
+
+  it('keeps only the latest cursor requests still awaiting their first answer', () => {
+    const text = 'old\x1b[6ncurrent\x1b[?6n';
+    expect(replayTail(new Map(), text, 100, 1)).toBe('oldcurrent\x1b[?6n');
+    expect(replayTail(new Map(), text, 100)).toBe('oldcurrent');
+  });
 });
