@@ -318,7 +318,10 @@ export function replayTail(modes: ReadonlyMap<string, boolean>, scrollback: stri
   const { kept, dropped } = trimScrollback(scrollback, limit);
   const replayed = new Map(modes);
   if (dropped) applyTerminalModes(replayed, dropped);
-  return terminalModePrefix(replayed) + kept;
+  // Cursor queries have no painted state to restore. Answering a historical
+  // query after reattach injects an unsolicited report into the live CLI and
+  // makes its owner-input guard treat that reply as a human draft edit.
+  return terminalModePrefix(replayed) + kept.replace(/\x1b\[\??6n/g, '');
 }
 
 /** Text the owner is typing into an agent's terminal, across input chunks. */
@@ -687,7 +690,7 @@ export class PtySessionManager {
     if (onAttention) session.attentionListeners.add(onAttention);
     if (onWorkingDirectory) session.workingDirectoryListeners.add(onWorkingDirectory);
 
-    const scrollback = terminalModePrefix(session.trimmedModes) + session.scrollback;
+    const scrollback = replayTail(session.trimmedModes, session.scrollback, SCROLLBACK_LIMIT);
     if (session.exited && onExit) {
       queueMicrotask(() => onExit(session.exitCode ?? 0, Boolean(session.stopping || session.exitCode === 0)));
     }

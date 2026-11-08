@@ -5,6 +5,12 @@ oldest. Public GitHub Release notes are generated directly from the matching
 version section in this file. In-app and website changelogs provide equivalent
 pt-BR, English, and Spanish translations.
 
+## Unreleased
+
+### Fixed
+
+- Restore terminal history without replaying cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Preserve current protocol replies, real owner edits and exact prompt receipts.
+
 ## 0.52.5 - 2026-11-07
 
 ### Fixed
