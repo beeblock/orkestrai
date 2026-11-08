@@ -15,6 +15,8 @@ pt-BR, English, and Spanish translations.
 
 - Restore terminal history without replaying answered or expired cursor-position queries to the live CLI. Historical cursor replies could be mistaken for owner edits and disable Enter-only recovery of a pending automatic paste after viewer reattachment. Retain fresh unanswered requests for the first viewer, current protocol replies, real owner edits and exact prompt receipts.
 
+- Wait for the initial native input-ready boundary before writing a confirmed automatic paste on Windows/WSL. Reuse native idle reports and the existing quiet fallback instead of mistaking an early loading-screen prompt for a ready composer. Preserve native macOS input and owner drafts.
+
 ## 0.52.5 - 2026-11-07
 
 ### Fixed

@@ -1302,6 +1302,11 @@ export class PtySessionManager {
       session.managedTurn ||
       session.nativeComposerState === 'working' ||
       (session.startupGuard && !session.startupGuard.canAcceptMessages) ||
+      // A visible prompt glyph can belong to the loading screen, before
+      // ConPTY has enabled the provider's input/paste modes. Reuse the native
+      // idle report (or existing quiet fallback) before the first confirmed
+      // automatic write; waiting only before Enter is already too late.
+      (session.provider && session.conptySubmitGuard && !session.initialIdleObserved && session.deliveryQueue[0]?.requiresAcceptance) ||
       session.deliveryInProgress ||
       session.awaitingDeliveryIdle ||
       session.humanComposerLength > 0

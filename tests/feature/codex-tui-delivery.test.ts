@@ -65,7 +65,15 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
       });
     });
     const write = child.write.bind(child);
-    child.write = text => { if (dropEnter && text === '\r') { dropEnter = false; dropped++; } else write(text); };
+    child.write = text => {
+      if (text.includes('Fixture delivery ')) {
+        const state = liveSessionId && (manager as any).sessions.get(liveSessionId);
+        console.info('Native backend paste boundary', { initialIdleObserved: state?.initialIdleObserved,
+          nativeComposerState: state?.nativeComposerState, bracketedPaste: state?.bracketedPaste,
+          outputQuietMs: state?.lastOutputAt ? Date.now() - state.lastOutputAt : null });
+      }
+      if (dropEnter && text === '\r') { dropEnter = false; dropped++; } else write(text);
+    };
     return child;
   }) as never, () => {});
   try {

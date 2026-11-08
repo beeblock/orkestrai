@@ -111,3 +111,18 @@ The short fixture also schedules twelve rapid geometry changes during a paste
 without deliberately dropping Enter, then checks its exact receipt as usual.
 
 The owner's active Mac app and agents are not restarted by this investigation.
+
+## First-write readiness
+
+The rapid-resize main CI run
+https://github.com/beeblock/orkestrai/actions/runs/42452788128 passes both
+Canvas and Conversation cases on 0.167.0, but the independent no-alt-screen
+backend case fails on its first ordinary message: part is literal text and
+part a smaller paste badge, with no exact receipt. No Enter is deliberately
+lost at that point. The source allowed a confirmed write before the initial
+input-ready boundary; a unit regression reproduces that early write and fails
+before the guard. Confirmed ConPTY writes now reuse native idle or the existing
+quiet fallback before writing the body, not just before Enter. Native backend
+logs record readiness at each write without exposing message contents.
+This is a confirmed readiness gap; the partial-paste failure remains subject
+to the next native run and is not attributed to it without that evidence.

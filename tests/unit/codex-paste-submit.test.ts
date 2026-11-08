@@ -119,6 +119,29 @@ describe('Codex automatic paste on ConPTY', () => {
     return { manager, session, writes, at, emit, badge, text, delivery };
   }
 
+  it.each(['native idle', 'quiet fallback'])('waits for initial ConPTY readiness (%s) before writing a confirmed automatic message', async readiness => {
+    vi.useFakeTimers();
+    const writes: string[] = []; let emit = (_: string) => {};
+    const manager = new PtySessionManager((() => ({ pid: -1, cols: 120, rows: 30,
+      write: (data: string) => writes.push(data), resize() {}, kill() {},
+      onData: (callback: typeof emit) => { emit = callback; return { dispose() {} }; }, onExit: () => ({ dispose() {} }),
+    })) as never, () => {});
+    const session = manager.create({ command: 'codex', provider: 'codex', cwd: tmpdir() });
+    cleanup.push(() => manager.killAll());
+    (manager as any).sessions.get(session.id).conptySubmitGuard = true;
+    const delivery = manager.queueWithSubmit(session.id, 'Wait for the real input boundary', 10, true, async () => false);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(writes).toHaveLength(0);
+    emit('Codex is loading its composer ›');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(writes).toHaveLength(0);
+    if (readiness === 'native idle') emit('\x1b]7501;state=idle:app=codex\x1b\\');
+    else await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(1000);
+    await delivery.submitted;
+    expect(writes.filter(data => data.includes('Wait for the real input boundary'))).toHaveLength(1);
+  });
+
   it('recovers the captured Windows footer redraw without retyping the paste', async () => {
     const { manager, session, writes, at, text, emit } = await fixture();
     emit(`\x1b[38;5;6m[Pasted Content ${text.length} chars]${windowsFooter}`);
