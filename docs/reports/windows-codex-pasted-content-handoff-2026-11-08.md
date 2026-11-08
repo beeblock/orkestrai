@@ -169,7 +169,7 @@ https://github.com/beeblock/orkestrai/actions/runs/42507186202
 
 Ambos são **CI**, não Release Desktop. O primeiro concluiu com sucesso. No último
 acompanhamento, o CI da main já tinha testes gerais, build e Windows aprovados;
-três shards de navegador ainda estavam ativos. Consultar o link para o estado atual.
+um shard de navegador ainda estava ativo. Consultar o link para o estado atual.
 
 ## Logs e build disponíveis neste Mac
 
@@ -187,11 +187,23 @@ três shards de navegador ainda estavam ativos. Consultar o link para o estado a
   candidate-lock-47f.json
 ```
 
-O `build/` do clone é o artefato de CI de **47fabc69**, ainda com versão de pacote
-**0.52.7**; não confundir com o package.json preparado em 0.52.8. Sua proveniência
-foi verificada com SHA, versão e lockfile daquele commit, incluindo 3124 arquivos.
-**Não usar esse build para empacotar/publicar 0.52.8.** Os testes mais recentes acima
-usaram esse mesmo código de correção, anterior apenas à mudança de versão/docs.
+O build usado nos testes locais veio do CI de **47fabc69**, com versão de pacote
+**0.52.7**, anterior apenas à preparação de versão/docs. Sua proveniência foi
+verificada com SHA, versão e lockfile daquele commit, incluindo 3124 arquivos.
+**Esse build foi removido para liberar espaço**; o manifesto foi preservado em
+`candidate-provenance-47f.json` ao lado dos logs. Não há build local pronto.
+
+Se for necessário testar o código da main preparada, o CI já disponibiliza um
+artefato com identidade correta para `dae90d35` / 0.52.8. Só baixar se necessário:
+
+```bash
+gh run download 42507186202 --repo beeblock/orkestrai \
+  --name browser-candidate-dae90d3586c34ea27c59b82d56f09a062c824ded --dir build
+node scripts/production-bundle.mjs verify build dae90d3586c34ea27c59b82d56f09a062c824ded
+```
+
+Isso baixa um build de teste, não um instalador, e não autoriza publicação.
+Não misturar o build 0.52.7 com o lock/versão 0.52.8 na verificação de identidade.
 
 As dependências locais são majoritariamente links somente de leitura para o
 node_modules do dono. Não executar npm ci/postinstall/rebuild nesse arranjo sem
@@ -210,10 +222,20 @@ com o HOME real do dono. Não compilar enquanto Playwright serve esse build.
   `71450c0` adicionou as notas e `d3d6f41` marcou-as como **não publicadas**, após
   a suspensão pedida pelo dono. Site: `https://github.com/beeblock/orkestrai-site`.
 - Não apagar bancos, imagens, Floors ou volumes Docker para investigar. Há só
-  cerca de 3,8–3,9 GiB livres; preservar os logs e evitar duplicar node_modules/pacotes.
-  Depois dos testes, removi 136,5 MiB de HOME/bancos/temporários de QA, resultados
-  Playwright e ZIP de build já extraído. O build verificado e os logs foram mantidos.
+  **7,6 GiB livres na última medição**; preservar os logs e evitar duplicar dependências.
+  Removi primeiro 136,5 MiB de temporários/resultados de QA. Após nova cobrança,
+  removi mais **1,62 GiB**: nove worktrees antigos limpos cujos HEADs são ancestrais
+  da main, HOME/bancos isolados antigos de QA, cache de conteúdo do npm e o build
+  local. Preservei o checkout do dono, a branch de repasse e o worktree de testes
+  com commit único `059ab992`, que não foi comprovado como integrado.
+  `disk-cleanup-final.json` contém os caminhos, bytes e HEADs integrados removidos.
   `run.py` recria o HOME isolado necessário; não usar o HOME do dono por isso.
+- Medições de tamanho: Docker.raw alocado cerca de 43 GiB; cache Hugging Face
+  5,4 GiB (modelos); cache de runtimes do Codex 1,3 GiB. Modelos, runtimes em uso
+  e volumes Docker não foram removidos. Não considerar os 43 GiB inteiros descartáveis.
+- Executei também a [recuperação de blocos recomendada pelo Docker](https://docs.docker.com/desktop/troubleshoot-and-support/faqs/macfaqs/),
+  com saída 0; Docker.raw continuou aparecendo como 43 GiB. `docker image prune -f`
+  recuperou 0 B. Não atribuir a essas operações todos os ganhos de espaço observados.
 
 O próximo resultado esperado é identificar por que a entrega real fica colada e
 provar o fluxo completo líder ↔ especialistas no cenário que degrada. Os passes
