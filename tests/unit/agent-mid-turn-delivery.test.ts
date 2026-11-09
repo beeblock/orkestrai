@@ -106,7 +106,8 @@ describe('mid-turn agent input', () => {
   it.each([false, true])('submits a mid-turn prompt that the ended turn left in the composer once (owner typed: %s)', async ownerTyped => {
     const { manager, session, writes, emit } = await working();
     const steer = manager.queueWithSubmit(session.id, 'Reply typed mid-turn', 10, true, async () => false, undefined, undefined, true);
-    await vi.advanceTimersByTimeAsync(100); await steer.submitted;
+    // Windows sessions start with the ConPTY settle delay before Enter.
+    await vi.advanceTimersByTimeAsync(1000); await steer.submitted;
     expect(manager.automaticDeliveryDuringTurn(session.id)).toBe(true);
     // Still working: the steer may yet be consumed by this turn.
     await vi.advanceTimersByTimeAsync(6000);
