@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node-pty';
@@ -108,6 +108,14 @@ it.skipIf(!enabled)('delivers through the real Codex TUI, including a missed Ent
           return false;
         },
       }).catch(error => { throw new Error(`${error.message}\n${output.slice(-4000)}`); });
+      // Receipts accept a merged prompt; the flush key and Enter must add nothing to it.
+      const files = (await readdir(join(codexHome, 'sessions'), { recursive: true })).filter(name => String(name).endsWith('.jsonl'));
+      const persisted = (await Promise.all(files.map(name => readFile(join(codexHome, 'sessions', String(name)), 'utf8'))))
+        .join('\n').split('\n').filter(Boolean).map(line => JSON.parse(line))
+        .filter(record => record.type === 'response_item' && record.payload?.type === 'message' && record.payload.role === 'user')
+        .map(record => record.payload.content.map((part: any) => part.text ?? '').join('').replace(/\s+/g, ' ').trim())
+        .filter(text => text.includes(`Fixture delivery ${serial} `));
+      expect(persisted).toEqual([message.trim().replace(/\s+/g, ' ')]);
       await expect.poll(async () => exactId && (await latestTurnBoundary('codex', cwd, exactId, { codexHome })).ready,
         { timeout: 15000 }).toBe(true);
     }
