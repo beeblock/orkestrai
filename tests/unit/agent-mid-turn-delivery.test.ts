@@ -142,4 +142,14 @@ describe('mid-turn agent input', () => {
     expect(transcriptContainsPrompt('codex-rollout-jsonl', codex(plain, 'a newer prompt'), plain)).toBe(false);
     expect(transcriptContainsPrompt('codex-rollout-jsonl', codex('a newer prompt', plain), plain)).toBe(true);
   });
+
+  it('finds a plain receipt behind newer prompts only when it was recorded after the send', () => {
+    const plain = 'Run the routine step again and report the full result to the board, please.';
+    const at = (ms: number) => new Date(ms).toISOString();
+    const codex = (...items: Array<[string, number]>) => jsonl(items.map(([text, time]) => ({ timestamp: at(time), type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } })));
+    const since = Date.parse('2026-11-09T03:00:00Z');
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex([plain, since + 500], ['owner typed next', since + 900]), plain, since)).toBe(true);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex([plain, since - 60_000], ['owner typed next', since + 900]), plain, since)).toBe(false);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex([plain, since + 500], ['owner typed next', since + 900]), plain)).toBe(false);
+  });
 });

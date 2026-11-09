@@ -72,9 +72,10 @@ test('keeps owner typing separate while recovering a missed automatic Claude pas
     };
     await expect.poll(async () => (await readState()).enters, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
     const ownerDraft = 'OWNER_DRAFT_MUST_REMAIN_SEPARATE';
+    // Typing over the visibly unsubmitted paste sends that paste first; the
+    // owner's keys follow a moment later and are never held for long.
     await page.keyboard.type(ownerDraft);
     const heldStatus = page.locator('.terminal-status[role="status"]');
-    await expect(heldStatus).toBeVisible();
     await expect(input).toBeFocused();
     await expect.poll(async () => {
       return (await readState()).accepted.filter(text => text.includes(marker)).length;

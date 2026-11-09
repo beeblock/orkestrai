@@ -116,7 +116,8 @@ it.skipIf(!enabled).each(['steer', 'interrupted'] as const)('delivers a message 
     const receiptMs = Date.now() - enteredAt;
     // Codex adds the steer to this turn's next model request: after the command,
     // or at once if the model was still streaming when it arrived.
-    expect(requests.some(request => request.steer)).toBe(true);
+    // The rollout can record it while the request body is still arriving here.
+    await expect.poll(() => requests.some(request => request.steer), { timeout: 10000 }).toBe(true);
     // The owner's terminal is never held after Enter.
     manager.writeHumanInput(session.id, 'x');
     expect(manager.get(session.id)?.inputDeferred).toBe(false);

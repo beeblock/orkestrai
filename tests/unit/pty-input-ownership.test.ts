@@ -40,8 +40,9 @@ describe('human input while an automatic message owns the composer', () => {
     f.manager.writeHumanInput(f.session.id, 'my draft');
     expect(f.writes).not.toContain('my draft');
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
-    await vi.advanceTimersByTimeAsync(2500); await f.delivery.submitted;
-    // Enter went first; the owner's keys follow it shortly, receipt or not.
+    // Without a receipt or any evidence, the keys wait about 4 s after Enter.
+    await vi.advanceTimersByTimeAsync(9000); await f.delivery.submitted;
+    // Enter went first; the owner's keys follow it, receipt or not.
     const enter = f.writes.lastIndexOf('\r');
     expect(f.writes.indexOf('my draft')).toBeGreaterThan(enter);
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
@@ -173,8 +174,10 @@ describe('human input while an automatic message owns the composer', () => {
   it('lets Ctrl+C cancel an owner Enter that is waiting behind its restored body', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'owner line\r');
-    // Automatic Enter at 500 ms, held body 1 s later on ConPTY, its Enter after a settle.
-    await vi.advanceTimersByTimeAsync(1600); await f.delivery.submitted;
+    // Automatic Enter at 500 ms; its receipt releases the held body at the next check.
+    await vi.advanceTimersByTimeAsync(600); await f.delivery.submitted;
+    f.accept();
+    await vi.advanceTimersByTimeAsync(1000);
     expect(f.writes.at(-1)).toBe('owner line');
     f.manager.writeHumanInput(f.session.id, '\x03');
     await vi.advanceTimersByTimeAsync(10000);
@@ -225,7 +228,8 @@ describe('human input while an automatic message owns the composer', () => {
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
     const next: boolean[] = [];
     f.manager.attach(f.session.id, () => {}, undefined, undefined, undefined, value => next.push(value));
-    await vi.advanceTimersByTimeAsync(2500); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(600); await f.delivery.submitted;
+    f.accept(); await vi.advanceTimersByTimeAsync(1000);
     expect(next).toEqual([false]);
     expect(f.writes.filter(text => text === 'kept across reconnect')).toHaveLength(1);
   });
@@ -323,6 +327,7 @@ describe('human input while an automatic message owns the composer', () => {
     await vi.advanceTimersByTimeAsync(520); await f.delivery.submitted;
     expect(f.writes.at(-1)).toBe('\r');
     expect(f.writes).not.toContain('my draft');
+    f.accept();
     await vi.advanceTimersByTimeAsync(1000);
     expect(f.writes.at(-1)).toBe('my draft');
   });
@@ -331,8 +336,10 @@ describe('human input while an automatic message owns the composer', () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, '\r');
     f.manager.writeHumanInput(f.session.id, 'abc');
-    await vi.advanceTimersByTimeAsync(1600); await f.delivery.submitted;
+    // Native idle at the bound: the lost Enter is sent once, then the held keys.
+    await vi.advanceTimersByTimeAsync(5600); await f.delivery.submitted;
     expect(f.writes.slice(-2)).toEqual(['\x05', '\r']);
+    expect(f.writes).not.toContain('abc');
     await vi.advanceTimersByTimeAsync(1100);
     expect(f.writes.at(-1)).toBe('abc');
   });
@@ -340,7 +347,7 @@ describe('human input while an automatic message owns the composer', () => {
   it('keeps receipt identity and recovery for a lone Enter held during the paste', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, '\r');
-    await vi.advanceTimersByTimeAsync(2000); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(9000); await f.delivery.submitted;
     const at = f.manager.automaticDeliverySubmittedAt(f.session.id)!;
     expect(f.writes.slice(-4)).toEqual(['\x05', '\r', '\x05', '\r']);
     f.emit(`› [Pasted Content ${f.text.length + 2} chars]`);
@@ -395,5 +402,33 @@ describe('human input while an automatic message owns the composer', () => {
     // The usual settle after an automatic Enter, well before the 30 s idle release.
     await vi.advanceTimersByTimeAsync(10_000);
     expect(f.writes.filter(data => data.includes('after interrupt'))).toHaveLength(1);
+  });
+
+  it('sends a visibly lost automatic paste before the keys typed over it', async () => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    // The Enter was lost: the composer still shows the automatic paste.
+    f.emit(`› [Pasted Content ${f.text.length + 1} chars]`);
+    const enters = f.writes.filter(data => data === '\r').length;
+    f.manager.writeHumanInput(f.session.id, 'o');
+    f.manager.writeHumanInput(f.session.id, 'wner');
+    expect(f.writes.filter(data => data === '\r')).toHaveLength(enters + 1);
+    expect(f.writes.at(-1)).toBe('\r');
+    f.accept(); await vi.advanceTimersByTimeAsync(1100);
+    expect(f.writes.slice(-2)).toEqual(['o', 'wner']);
+    expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
+  });
+
+  it('never holds keys longer than the bound when nothing shows the paste', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, 'typed during paste');
+    await vi.advanceTimersByTimeAsync(4400);
+    expect(f.writes).not.toContain('typed during paste');
+    const enters = f.writes.filter(data => data === '\r').length;
+    await vi.advanceTimersByTimeAsync(2200);
+    // Codex reports idle and no receipt: its lost Enter goes first, then the keys.
+    expect(f.writes.filter(data => data === '\r')).toHaveLength(enters + 1);
+    expect(f.writes.at(-1)).toBe('typed during paste');
+    expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
   });
 });

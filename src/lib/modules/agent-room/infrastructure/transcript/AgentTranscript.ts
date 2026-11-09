@@ -721,18 +721,26 @@ function promptOccurrenceCount(storage: string, transcript: string, expectedProm
 /** Prompts typed during a turn can land together, so a receipt need not be the latest one. */
 const RECEIPT_RECENT_PROMPTS = 8;
 
-export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string): boolean {
+/**
+ * Whether the conversation recorded the expected prompt. The latest prompt
+ * always counts. An earlier one counts behind newer prompts (the owner may type
+ * right after an automatic message) only when it cannot be an older copy: it
+ * carries a unique inbox id, or it was recorded at or after `since`.
+ */
+export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string, since?: number): boolean {
   if (FILE_LOOKUP_STORAGES.has(storage)) {
     const expected = normalizedPrompt(expectedPrompt);
+    const unique = UNIQUE_PROMPT.test(expected);
+    if (!unique && since === undefined) return latestPromptMatches(storage, transcript, expected);
     let prompts = 0;
     for (const line of transcript.trim().split('\n').reverse()) {
       let event: any;
       try { event = JSON.parse(line); } catch { continue; }
       const prompt = promptFromJsonlEvent(storage, event);
       if (prompt) {
-        if (promptMatches(storage, prompt, expected)) return true;
-        // Only an inbox prompt is unique enough to be found behind newer prompts.
-        if (!UNIQUE_PROMPT.test(expected) || ++prompts >= RECEIPT_RECENT_PROMPTS) return false;
+        if (promptMatches(storage, prompt, expected)
+          && (prompts === 0 || unique || (jsonlEventTime(event) ?? -Infinity) >= since! - 2_000)) return true;
+        if (++prompts >= RECEIPT_RECENT_PROMPTS) return false;
         continue;
       }
       // Enqueue proves Enter was accepted, not that the model replied.
@@ -747,6 +755,20 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
   const parser = parserForStorage(storage);
   const prompt = parser?.(transcript).prompt;
   return Boolean(prompt && promptMatches(storage, prompt, expectedPrompt));
+}
+
+/** The previous rule for text that may repeat: only the latest prompt is its receipt. */
+function latestPromptMatches(storage: string, transcript: string, expected: string): boolean {
+  for (const line of transcript.trim().split('\n').reverse()) {
+    let event: any;
+    try { event = JSON.parse(line); } catch { continue; }
+    const prompt = promptFromJsonlEvent(storage, event);
+    if (prompt) return promptMatches(storage, prompt, expected);
+    if (event?.type === 'queue-operation' && typeof event.content === 'string' && promptMatches(storage, event.content, expected)) {
+      return event.operation === 'enqueue' || (event.operation === 'remove' && event.reason === 'absorbed_mid_turn');
+    }
+  }
+  return false;
 }
 
 function parserForStorage(storage: string | undefined): ((jsonl: string) => ParsedTranscriptTurn) | null {
@@ -1639,11 +1661,11 @@ async function findFileTurn(
     const revision = await transcriptRevision(path, knownSession ? 0 : since);
     if (!revision) return null;
     const occurrence = promptOnly ? undefined : promptBound(options);
-    const key = JSON.stringify([storage, path, sessionId, promptOnly, occurrence ?? null, createHash('sha256').update(expectedPrompt).digest('hex')]);
+    const key = JSON.stringify([storage, path, sessionId, promptOnly, occurrence ?? null, promptOnly ? since : null, createHash('sha256').update(expectedPrompt).digest('hex')]);
     return fileTurnCache.read(key, revision, async () => {
       const text = await transcriptTail(path, MATCH_TAIL_BYTES);
       if (text === null) return { value: null, cacheable: false };
-      const match = promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt) : transcriptTurnForPrompt(storage, text, expectedPrompt, occurrence);
+      const match = promptOnly ? transcriptContainsPrompt(storage, text, expectedPrompt, since) : transcriptTurnForPrompt(storage, text, expectedPrompt, occurrence);
       return { value: match ? { sessionId, reply: promptOnly ? null : parseTranscriptReplyStateForPrompt(storage, text, expectedPrompt, occurrence) } : null, cacheable: true };
     });
   };

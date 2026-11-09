@@ -298,6 +298,8 @@ const COMPOSER_OUTPUT_QUIET_MS = 400;
 const COMPOSER_SETTLE_LIMIT_MS = 5_000;
 /** An idle agent with no receipt for this long no longer holds its message queue. */
 const UNCONFIRMED_IDLE_RELEASE_MS = 30_000;
+/** Owner keys wait at most this long for evidence about the awaited automatic paste. */
+const HELD_INPUT_LIMIT_MS = 4_000;
 
 /**
  * Texto seguro para composers de TUI (Claude/Codex/Kimi): remove bytes de
@@ -849,6 +851,15 @@ export class PtySessionManager {
     // most likely the unconfirmed automatic message. Keep its receipt identity
     // and evidence-based recovery instead of counting it as an owner edit.
     if (data === '\r' && !imagePaste && this.submitsAwaitedMessage(session)) return;
+    // Typing over a paste whose Enter was visibly lost: submit that paste first,
+    // then the owner's keys shortly after, so the two never join.
+    const typesText = data.includes('\x1b[200~') || /^[^\x00-\x1f\x7f]/.test(data);
+    if (typesText && this.recoverAwaitedPaste(session)) {
+      const chunks = !data.includes('\x1b[200~') ? data.split(/(\r)/).filter(Boolean) : [data];
+      for (const part of chunks) session.deferredHumanInput.push({ data: part, imagePaste });
+      this.settleBeforeHeldInput(session);
+      return;
+    }
     this.writeHumanInputNow(session, data, imagePaste);
     if (/[\r\n]/.test(data)) this.scheduleWorkingDirectoryRefresh(session);
   }
@@ -1715,15 +1726,62 @@ export class PtySessionManager {
    * Enter as a newline. Let the Enter land on its own first; a starved ConPTY
    * machine reads late, so it waits longer there.
    */
-  private settleBeforeHeldInput(session: PtySession): void {
+  private settleBeforeHeldInput(session: PtySession, heldSince = Date.now()): void {
     session.deferredHumanSubmitTimer = setTimeout(() => {
       session.deferredHumanSubmitTimer = null;
       if (session.exited || this.sessions.get(session.id) !== session) return;
+      if (this.waitsForAwaitedPaste(session, heldSince)) return;
       this.flushDeferredHumanInput(session);
       this.drainDeliveryQueue(session);
     }, session.conptySubmitGuard ? 1000 : HUMAN_SUBMIT_SETTLE_MS);
     session.deferredHumanSubmitTimer.unref?.();
     this.notifyInputState(session);
+  }
+
+  /**
+   * Held owner keys must not join an automatic paste whose Enter was lost. A
+   * receipt or a started turn ends the wait at once; a paste still visible in
+   * the composer gets its Enter first. Without either, the keys go in after
+   * HELD_INPUT_LIMIT_MS: the owner is never held longer than that.
+   */
+  private waitsForAwaitedPaste(session: PtySession, heldSince: number): boolean {
+    const awaited = session.lastSubmittedDelivery;
+    if (!awaited?.requiresAcceptance || session.lastDeliveryAccepted || awaited.ownerTakeover
+      || session.nativeComposerState === 'working') return false;
+    if (Date.now() - heldSince < HELD_INPUT_LIMIT_MS) {
+      this.recoverAwaitedPaste(session);
+      this.settleBeforeHeldInput(session, heldSince);
+      return true;
+    }
+    // Still idle by its own report and no receipt: the Enter was lost. The owner's
+    // keys are held, so the composer holds that paste or nothing, and an empty
+    // composer ignores Enter. Submit it once, then the keys, never together.
+    if (heldSince && session.nativeComposerState === 'idle' && session.nativeComposerOpen !== false
+      && awaited.humanInputRevision === session.humanInputRevision && (awaited.pasteRetryCount ?? 0) < 2
+      && this.submitIfComposerFree(session.id)) {
+      awaited.pasteRetryCount = (awaited.pasteRetryCount ?? 0) + 1;
+      awaited.pasteRetryAt = Date.now();
+      this.settleBeforeHeldInput(session, 0);
+      return true;
+    }
+    return false;
+  }
+
+  /** Enter for the awaited automatic paste, only on visible evidence that it is still unsubmitted. */
+  private recoverAwaitedPaste(session: PtySession): boolean {
+    const delivery = session.lastSubmittedDelivery;
+    if (!delivery?.requiresAcceptance || session.lastDeliveryAccepted || delivery.ownerTakeover
+      || delivery.pasteOutputStart === undefined || delivery.humanInputRevision !== session.humanInputRevision
+      || (delivery.pasteRetryCount ?? 0) >= 2 || Date.now() - (delivery.pasteRetryAt ?? 0) < 2000
+      || session.nativeComposerState === 'working') return false;
+    const retainedFrom = session.outputLength - session.scrollback.length;
+    const fresh = session.scrollback.slice(Math.max(0, delivery.pasteOutputStart - retainedFrom));
+    const extraEnters = 1 + (delivery.pasteRetryCount ?? 0) + (delivery.manualEnterCount ?? 0);
+    if (!hasPendingAutomaticPaste(session.provider, fresh, delivery.text, session.startupGuard, extraEnters)
+      || !this.submitIfComposerFree(session.id)) return false;
+    delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
+    delivery.pasteRetryAt = Date.now();
+    return true;
   }
 
   /** A lone owner Enter on an empty draft while an automatic message awaits its receipt. */
@@ -1771,7 +1829,8 @@ export class PtySessionManager {
       const chunk = session.deferredHumanInput[0];
       if (chunk.data === '\r' && !chunk.imagePaste && this.submitsAwaitedMessage(session)) {
         session.deferredHumanInput.shift();
-        if (session.deferredHumanInput.length) { this.settleBeforeHeldInput(session); return; }
+        // That Enter already answered the wait: only let it land first.
+        if (session.deferredHumanInput.length) { this.settleBeforeHeldInput(session, 0); return; }
         continue;
       }
       if (chunk.data === '\r' && session.humanComposerLength > 0) {
