@@ -431,4 +431,15 @@ describe('human input while an automatic message owns the composer', () => {
     expect(f.writes.at(-1)).toBe('typed during paste');
     expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
   });
+
+  it('bounds the wait from the first held key, not from the later Enter', async () => {
+    const f = await terminal();
+    const delivery = f.manager.queueWithSubmit(f.session.id, 'Owned automatic message', 3000, true, async () => false);
+    void delivery.submitted.catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    f.manager.writeHumanInput(f.session.id, 'typed early');
+    // Enter only goes at 3 s; the key typed at 20 ms still goes in by about 5 s.
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(f.writes).toContain('typed early');
+  });
 });

@@ -152,4 +152,15 @@ describe('mid-turn agent input', () => {
     expect(transcriptContainsPrompt('codex-rollout-jsonl', codex([plain, since - 60_000], ['owner typed next', since + 900]), plain, since)).toBe(false);
     expect(transcriptContainsPrompt('codex-rollout-jsonl', codex([plain, since + 500], ['owner typed next', since + 900]), plain)).toBe(false);
   });
+
+  it('does not let an older Claude queue record confirm a new plain delivery', () => {
+    const plain = 'Run the routine step again and report the full result to the board, please.';
+    const at = (ms: number) => new Date(ms).toISOString();
+    const since = Date.parse('2026-11-09T03:00:00Z');
+    const old = [{ type: 'queue-operation', operation: 'enqueue', content: plain, timestamp: at(since - 60_000) },
+      { type: 'user', timestamp: at(since - 50_000), message: { content: 'Later prompt' } }];
+    expect(transcriptContainsPrompt('claude-project-jsonl', jsonl(old), plain, since)).toBe(false);
+    const fresh = [...old, { type: 'queue-operation', operation: 'enqueue', content: plain, timestamp: at(since + 300) }];
+    expect(transcriptContainsPrompt('claude-project-jsonl', jsonl(fresh), plain, since)).toBe(true);
+  });
 });

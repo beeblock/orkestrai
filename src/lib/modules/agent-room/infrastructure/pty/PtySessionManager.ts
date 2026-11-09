@@ -179,6 +179,8 @@ type PtySession = PtySessionInfo & {
   lastDeliveryAccepted: boolean;
   deliveryReadyAt: number;
   deferredHumanInput: Array<{ data: string; imagePaste: boolean }>;
+  /** When the oldest held owner key was typed; bounds how long any key waits. */
+  heldInputSince?: number;
   deferredHumanSubmitTimer: ReturnType<typeof setTimeout> | null;
   humanComposerLength: number;
   humanInputRevision: number;
@@ -843,6 +845,7 @@ export class PtySessionManager {
       // xterm sends Enter as a key event. Preserve that boundary even for an
       // unframed combined input; never split CR inside a bracketed paste.
       const chunks = !data.includes('\x1b[200~') ? data.split(/(\r)/).filter(Boolean) : [data];
+      session.heldInputSince ??= Date.now();
       for (const part of chunks) session.deferredHumanInput.push({ data: part, imagePaste });
       this.flushDeferredHumanInput(session);
       return;
@@ -856,6 +859,7 @@ export class PtySessionManager {
     const typesText = data.includes('\x1b[200~') || /^[^\x00-\x1f\x7f]/.test(data);
     if (typesText && this.recoverAwaitedPaste(session)) {
       const chunks = !data.includes('\x1b[200~') ? data.split(/(\r)/).filter(Boolean) : [data];
+      session.heldInputSince ??= Date.now();
       for (const part of chunks) session.deferredHumanInput.push({ data: part, imagePaste });
       this.settleBeforeHeldInput(session);
       return;
@@ -1726,7 +1730,7 @@ export class PtySessionManager {
    * Enter as a newline. Let the Enter land on its own first; a starved ConPTY
    * machine reads late, so it waits longer there.
    */
-  private settleBeforeHeldInput(session: PtySession, heldSince = Date.now()): void {
+  private settleBeforeHeldInput(session: PtySession, heldSince = session.heldInputSince ?? Date.now()): void {
     session.deferredHumanSubmitTimer = setTimeout(() => {
       session.deferredHumanSubmitTimer = null;
       if (session.exited || this.sessions.get(session.id) !== session) return;
@@ -1748,11 +1752,13 @@ export class PtySessionManager {
     const awaited = session.lastSubmittedDelivery;
     if (!awaited?.requiresAcceptance || session.lastDeliveryAccepted || awaited.ownerTakeover
       || session.nativeComposerState === 'working') return false;
+    const recovered = this.recoverAwaitedPaste(session);
     if (Date.now() - heldSince < HELD_INPUT_LIMIT_MS) {
-      this.recoverAwaitedPaste(session);
       this.settleBeforeHeldInput(session, heldSince);
       return true;
     }
+    // Past the bound: an Enter sent on evidence just now only needs to land first.
+    if (recovered) { this.settleBeforeHeldInput(session, 0); return true; }
     // Still idle by its own report and no receipt: the Enter was lost. The owner's
     // keys are held, so the composer holds that paste or nothing, and an empty
     // composer ignores Enter. Submit it once, then the keys, never together.
@@ -1818,6 +1824,7 @@ export class PtySessionManager {
 
   private notifyInputState(session: PtySession): void {
     const deferred = session.deferredHumanInput.length > 0;
+    if (!deferred) session.heldInputSince = undefined;
     if (session.inputDeferred === deferred) return;
     session.inputDeferred = deferred;
     for (const listener of session.inputStateListeners) listener(deferred);

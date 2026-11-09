@@ -737,15 +737,16 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
       let event: any;
       try { event = JSON.parse(line); } catch { continue; }
       const prompt = promptFromJsonlEvent(storage, event);
+      // Behind a newer prompt, only a unique or freshly recorded copy is this delivery's.
+      const current = prompts === 0 || unique || (jsonlEventTime(event) ?? -Infinity) >= since! - 2_000;
       if (prompt) {
-        if (promptMatches(storage, prompt, expected)
-          && (prompts === 0 || unique || (jsonlEventTime(event) ?? -Infinity) >= since! - 2_000)) return true;
+        if (current && promptMatches(storage, prompt, expected)) return true;
         if (++prompts >= RECEIPT_RECENT_PROMPTS) return false;
         continue;
       }
       // Enqueue proves Enter was accepted, not that the model replied.
       // Removal confirms consumption only for the explicit mid-turn reason.
-      if (event?.type === 'queue-operation' && typeof event.content === 'string'
+      if (current && event?.type === 'queue-operation' && typeof event.content === 'string'
         && promptMatches(storage, event.content, expected)) {
         return event.operation === 'enqueue' || (event.operation === 'remove' && event.reason === 'absorbed_mid_turn');
       }
