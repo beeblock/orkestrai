@@ -95,10 +95,13 @@ export class AgentTerminalDeliveryService {
         if (submission.at !== null && ptySessionManager.automaticDeliveryDuringTurn(input.sessionId)
           && Date.now() - submission.boundaryCheckedAt >= 1500) {
           submission.boundaryCheckedAt = Date.now();
-          const ended = !preferredSessionId || (await latestTurnBoundary(provider, session.transcriptCwd ?? session.cwd, preferredSessionId, {
-            ...ptySessionManager.transcriptStorageRoots(session.id),
-            homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
-          })).ready === true;
+          // Without the conversation, only a native idle report proves the turn ended.
+          const ended = preferredSessionId
+            ? (await latestTurnBoundary(provider, session.transcriptCwd ?? session.cwd, preferredSessionId, {
+              ...ptySessionManager.transcriptStorageRoots(session.id),
+              homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
+            })).ready === true
+            : ptySessionManager.hasNativeIdleComposer(input.sessionId);
           if (ended) ptySessionManager.retryRestoredTurnInput(input.sessionId);
           return false;
         }

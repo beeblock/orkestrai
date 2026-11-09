@@ -564,7 +564,8 @@ export class RoutineService {
           lease_owner: null, lease_expires_at: null, next_attempt_at: null,
           checkpoint_json: JSON.stringify({ stage: 'cancelled', attempt }),
         });
-      } else if (attempt < maxAttempts) {
+      } else if (attempt < maxAttempts && (error as { code?: string } | null)?.code !== 'PTY_DELIVERY_UNCONFIRMED') {
+        // An uncertain terminal delivery may already be in the CLI: never type it again.
         const delay = RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1);
         await AgentRoutineRun.query().where('id', runId).update({
           status: 'queued', ok: false, detail: `Retry ${attempt + 1} scheduled.`, error: message,

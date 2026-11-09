@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { routineService } from '$lib/modules/agent-room/application/services/RoutineService.js';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 
 async function setup() {
   const workspace = await workspaceRepository.createWorkspace({ name: 'rotinas', workingDir: '/tmp' });
@@ -120,5 +121,19 @@ describe('RoutineService', () => {
     expect(due.map((routine) => routine.id)).not.toContain(recurring.id);
 
     ptySessionManager.kill(session.id);
+  });
+
+  it('never schedules a retry that would type an uncertain step again', async () => {
+    const { workspace, terminal, session } = await setup();
+    const deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockRejectedValue(
+      Object.assign(new Error('A sessão PTY não confirmou o envio após 1 tentativas.'), { code: 'PTY_DELIVERY_UNCONFIRMED' }));
+    try {
+      const routine = await routineService.create({ workspaceId: workspace.id, targetNodeId: terminal.id, prompt: 'etapa incerta', intervalMinutes: 30 });
+      const result = await routineService.runNow(routine.id).catch(error => ({ ok: false, detail: String(error) }));
+      expect(result.ok).toBe(false);
+      const history = await routineService.history(routine.id);
+      expect(history.some(run => /Retry \d+ scheduled/.test(String(run.detail)))).toBe(false);
+      expect(deliver).toHaveBeenCalledTimes(1);
+    } finally { deliver.mockRestore(); ptySessionManager.kill(session.id); }
   });
 });

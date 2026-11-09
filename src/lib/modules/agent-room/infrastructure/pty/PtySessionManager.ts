@@ -1148,7 +1148,8 @@ export class PtySessionManager {
       queued.acknowledge();
       return;
     }
-    throw new Error(`A sessão PTY ${id} não confirmou o envio após ${maxAttempts} tentativas.`);
+    // The message may be in the CLI already: callers must not type it again.
+    throw Object.assign(new Error(`A sessão PTY ${id} não confirmou o envio após ${maxAttempts} tentativas.`), { code: 'PTY_DELIVERY_UNCONFIRMED' });
   }
 
   /** Aguarda o primeiro prompt do TUI estabilizar antes de injetar contexto. */
@@ -1583,19 +1584,8 @@ export class PtySessionManager {
         session.deliveryInProgress = false;
         session.activeDelivery = null;
         if (!session.exited && this.sessions.get(session.id) === session) {
-          if (session.deferredHumanInput.length && session.lastSubmittedDelivery === delivery) {
-            // Keys held during the paste must not reach the CLI in the same read
-            // as its Enter: a TUI can take that chunk as one paste and keep the
-            // Enter as a newline. Let the Enter land on its own first.
-            session.deferredHumanSubmitTimer = setTimeout(() => {
-              session.deferredHumanSubmitTimer = null;
-              if (session.exited || this.sessions.get(session.id) !== session) return;
-              this.flushDeferredHumanInput(session);
-              this.drainDeliveryQueue(session);
-            }, HUMAN_SUBMIT_SETTLE_MS);
-            session.deferredHumanSubmitTimer.unref?.();
-            this.notifyInputState(session);
-          } else {
+          if (session.deferredHumanInput.length && session.lastSubmittedDelivery === delivery) this.settleBeforeHeldInput(session);
+          else {
             this.flushDeferredHumanInput(session);
             this.drainDeliveryQueue(session);
           }
@@ -1633,7 +1623,7 @@ export class PtySessionManager {
       const pending = new Promise<never>((_resolve, reject) => {
         cancel = () => reject(new Error('Agent message delivery cancelled.'));
         signal?.addEventListener('abort', cancel, { once: true });
-        timer = setTimeout(() => reject(new Error('Transcript confirmation timed out. Delivery is uncertain; inspect the terminal before retrying.')), Math.max(1, deadline - Date.now()));
+        timer = setTimeout(() => reject(Object.assign(new Error('Transcript confirmation timed out. Delivery is uncertain; inspect the terminal before retrying.'), { code: 'PTY_DELIVERY_UNCONFIRMED' })), Math.max(1, deadline - Date.now()));
       });
       let accepted: boolean;
       try {
@@ -1646,6 +1636,13 @@ export class PtySessionManager {
       }
       if (accepted) return true;
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
+    }
+    // A release is not evidence of loss: read the receipt once more before
+    // reporting the delivery as uncertain.
+    if (released?.() && !signal?.aborted) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<boolean>(resolvePromise => { timer = setTimeout(() => resolvePromise(false), 5000); });
+      try { return await Promise.race([isAccepted().catch(() => false), late]); } finally { clearTimeout(timer); }
     }
     return false;
   }
@@ -1712,9 +1709,23 @@ export class PtySessionManager {
     this.drainDeliveryQueue(session);
   }
 
-  /** Owner keys wait only between an automatic paste and its Enter, so they
-   * cannot join that message. After Enter the terminal is the owner's again,
-   * with or without a receipt: nothing may keep the owner from typing. */
+  /**
+   * Keys held during the paste must not reach the CLI in the same read as the
+   * Enter just written: a TUI can take that chunk as one paste and keep the
+   * Enter as a newline. Let the Enter land on its own first; a starved ConPTY
+   * machine reads late, so it waits longer there.
+   */
+  private settleBeforeHeldInput(session: PtySession): void {
+    session.deferredHumanSubmitTimer = setTimeout(() => {
+      session.deferredHumanSubmitTimer = null;
+      if (session.exited || this.sessions.get(session.id) !== session) return;
+      this.flushDeferredHumanInput(session);
+      this.drainDeliveryQueue(session);
+    }, session.conptySubmitGuard ? 1000 : HUMAN_SUBMIT_SETTLE_MS);
+    session.deferredHumanSubmitTimer.unref?.();
+    this.notifyInputState(session);
+  }
+
   /** A lone owner Enter on an empty draft while an automatic message awaits its receipt. */
   private submitsAwaitedMessage(session: PtySession): boolean {
     const awaited = session.lastSubmittedDelivery;
@@ -1724,6 +1735,9 @@ export class PtySessionManager {
     return true;
   }
 
+  /** Owner keys wait only between an automatic paste and its Enter, so they
+   * cannot join that message. After Enter the terminal is the owner's again,
+   * with or without a receipt: nothing may keep the owner from typing. */
   private holdsHumanInput(session: PtySession): boolean {
     return Boolean(session.deferredHumanSubmitTimer)
       || Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined);
@@ -1757,6 +1771,7 @@ export class PtySessionManager {
       const chunk = session.deferredHumanInput[0];
       if (chunk.data === '\r' && !chunk.imagePaste && this.submitsAwaitedMessage(session)) {
         session.deferredHumanInput.shift();
+        if (session.deferredHumanInput.length) { this.settleBeforeHeldInput(session); return; }
         continue;
       }
       if (chunk.data === '\r' && session.humanComposerLength > 0) {

@@ -40,8 +40,8 @@ describe('human input while an automatic message owns the composer', () => {
     f.manager.writeHumanInput(f.session.id, 'my draft');
     expect(f.writes).not.toContain('my draft');
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
-    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
-    // Enter went first; the owner's keys follow it at once, receipt or not.
+    await vi.advanceTimersByTimeAsync(2500); await f.delivery.submitted;
+    // Enter went first; the owner's keys follow it shortly, receipt or not.
     const enter = f.writes.lastIndexOf('\r');
     expect(f.writes.indexOf('my draft')).toBeGreaterThan(enter);
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
@@ -128,7 +128,7 @@ describe('human input while an automatic message owns the composer', () => {
   it('keeps the owner draft ahead of the next automatic delivery', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'my draft');
-    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(2500); await f.delivery.submitted;
     const next = f.manager.queueWithSubmit(f.session.id, 'must wait', 20);
     const cancelled = next.submitted.catch(() => {});
     f.accept();
@@ -173,8 +173,8 @@ describe('human input while an automatic message owns the composer', () => {
   it('lets Ctrl+C cancel an owner Enter that is waiting behind its restored body', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'owner line\r');
-    // Automatic Enter at 500 ms, held body 400 ms later, its Enter after a settle.
-    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
+    // Automatic Enter at 500 ms, held body 1 s later on ConPTY, its Enter after a settle.
+    await vi.advanceTimersByTimeAsync(1600); await f.delivery.submitted;
     expect(f.writes.at(-1)).toBe('owner line');
     f.manager.writeHumanInput(f.session.id, '\x03');
     await vi.advanceTimersByTimeAsync(10000);
@@ -185,7 +185,7 @@ describe('human input while an automatic message owns the composer', () => {
   it('does not emit a delayed owner Enter after its PTY is replaced', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'old owner line\r');
-    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(1600); await f.delivery.submitted;
     f.manager.kill(f.session.id);
     const next = f.manager.create({ command: 'codex', provider: 'codex', cwd: tmpdir() });
     f.manager.writeHumanInput(next.id, 'new owner line');
@@ -225,7 +225,7 @@ describe('human input while an automatic message owns the composer', () => {
     expect(f.manager.get(f.session.id)?.inputDeferred).toBe(true);
     const next: boolean[] = [];
     f.manager.attach(f.session.id, () => {}, undefined, undefined, undefined, value => next.push(value));
-    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(2500); await f.delivery.submitted;
     expect(next).toEqual([false]);
     expect(f.writes.filter(text => text === 'kept across reconnect')).toHaveLength(1);
   });
@@ -323,14 +323,24 @@ describe('human input while an automatic message owns the composer', () => {
     await vi.advanceTimersByTimeAsync(520); await f.delivery.submitted;
     expect(f.writes.at(-1)).toBe('\r');
     expect(f.writes).not.toContain('my draft');
-    await vi.advanceTimersByTimeAsync(450);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(f.writes.at(-1)).toBe('my draft');
+  });
+
+  it('separates text held after a lone held Enter from that Enter as well', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, '\r');
+    f.manager.writeHumanInput(f.session.id, 'abc');
+    await vi.advanceTimersByTimeAsync(1600); await f.delivery.submitted;
+    expect(f.writes.slice(-2)).toEqual(['\x05', '\r']);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(f.writes.at(-1)).toBe('abc');
   });
 
   it('keeps receipt identity and recovery for a lone Enter held during the paste', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, '\r');
-    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(2000); await f.delivery.submitted;
     const at = f.manager.automaticDeliverySubmittedAt(f.session.id)!;
     expect(f.writes.slice(-4)).toEqual(['\x05', '\r', '\x05', '\r']);
     f.emit(`› [Pasted Content ${f.text.length + 2} chars]`);
@@ -341,8 +351,20 @@ describe('human input while an automatic message owns the composer', () => {
   it('ends the caller wait once the idle terminal releases the delivery', async () => {
     const f = await terminal();
     const send = f.manager.writeWithConfirmedSubmit(f.session.id, 'never confirmed', { isAccepted: async () => false });
-    const rejected = expect(send).rejects.toThrow('não confirmou');
+    const rejected = expect(send).rejects.toMatchObject({ code: 'PTY_DELIVERY_UNCONFIRMED' });
     await vi.advanceTimersByTimeAsync(40_000); await rejected;
+  });
+
+  it('reads the receipt once more when an owner interrupt releases the wait', async () => {
+    const f = await terminal();
+    let reads = 0;
+    // The receipt shows up on the read right after the owner's Ctrl+C.
+    const send = f.manager.writeWithConfirmedSubmit(f.session.id, 'received anyway', { isAccepted: async () => ++reads > 1 && interrupted });
+    let interrupted = false;
+    await vi.advanceTimersByTimeAsync(600);
+    f.manager.writeHumanInput(f.session.id, '\x03'); interrupted = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(send).resolves.toBeUndefined();
   });
 
   it('still releases the queue while a receipt read hangs', async () => {
