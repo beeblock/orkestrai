@@ -7,6 +7,8 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.53.1 - 2026-11-09
+
 ### Fixed
 
 - Never hold the owner's typing after an automatic message's Enter. Keys typed in the second between an automatic paste and its Enter are still kept apart, then written in a separate read shortly after that Enter, so a TUI cannot take them as one paste with it. If that Enter was lost, the automatic paste still visible in the composer, or an idle Codex without its receipt, gets its Enter first; the owner's keys follow within about 4 seconds and never join it. Later keys go straight to the terminal whether or not the exact receipt has arrived. 0.53.0 kept them until a receipt that could fail to arrive, which left a leader idle for hours with typing locked and messages typed in the Canvas bar or Conversa queued behind it.

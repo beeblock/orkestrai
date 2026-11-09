@@ -144,8 +144,19 @@ precisa confirmar que a entrada está disponível; perguntas ou aprovações
 abertas mantêm a entrega aguardando. As outras CLIs e os avisos de supervisão
 ou recuperação de agente ocioso continuam esperando o fim do turno. Recibos
 exatos e a separação da digitação do dono continuam obrigatórios. No Windows
-nativo e WSL, uma tecla End antes do Enter automático encerra a rajada de
-colagem do Codex mesmo quando a máquina lê as teclas com atraso.
+nativo e WSL, Ctrl+E antes do Enter automático encerra a rajada de
+colagem do Codex mesmo quando a máquina lê as teclas com atraso. A 0.53.1
+substitui End por esse controle de um byte, que não pode ser lido como Esc.
+
+A 0.53.1 limita a separação de teclas do dono ao intervalo entre a colagem
+automática e seu Enter, com uma leitura separada em cerca de 4 segundos após
+a primeira tecla (até cerca de 7 segundos no pior caso da ConPTY). Um recibo
+ausente não retém a digitação. Após 30 segundos com o agente parado sem
+recibo, a fila avança sem redigitar a mensagem anterior; o chamador faz uma
+última leitura do recibo antes de encerrar a espera. Ctrl+C do dono também
+libera a fila. A confirmação tardia continua sendo reconhecida, e a consulta
+de lotes ainda não confirmados passa a cada 15 segundos após dois minutos e
+a cada minuto depois. Rotinas não repetem uma entrega incerta.
 
 A 0.53.0 reúne os fixes preparados para a 0.52.8, que não foi publicada.
 Ela diferencia teclas reais dos relatórios automáticos enviados pelo

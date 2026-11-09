@@ -292,7 +292,9 @@ Adventure desktop input on Linux requires X11/XWayland (for example, `--ozone-pl
   Busy Codex and Claude recipients can receive messages during their turn,
   without waiting for it to finish. Open questions and approvals pause delivery;
   other CLIs and idle recovery notices keep the turn boundary. Exact prompt
-  receipts and separate owner drafts remain required. Messages also arrive in
+  receipts confirm delivery, while owner typing stays separate and never waits
+  for a receipt. An idle queue advances after 30 seconds without a receipt,
+  without retyping the previous message. Messages also arrive in
   bridge responses, while the sender is released at once; answers are routed exactly once
   to the waiting caller or to the asker's inbox (`orkestrai inbox`,
   `orkestrai reply <messageId>`). Task briefings never block the leader on a
