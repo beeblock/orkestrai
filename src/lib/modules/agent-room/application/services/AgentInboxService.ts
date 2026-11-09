@@ -101,6 +101,8 @@ type BatchTracking = {
   deadline: number;
   /** Typed while the agent's turn ran, as a person types into a working CLI. */
   duringTurn?: boolean;
+  /** When an unconfirmed batch is next matched against its transcript. */
+  nextCheckAt?: number;
 };
 
 /** Notices that exist to restart an idle agent; a working one needs neither. */
@@ -119,6 +121,15 @@ const MAX_BATCH_CHARS = 20_000;
 const MAX_ATTEMPTS = 5;
 const REPLY_WATCH_MS = 3 * 60 * 60_000;
 const CONFIRMATION_WINDOW_MS = 10 * 60_000;
+
+/**
+ * How long an unconfirmed batch waits before its next transcript match. A late
+ * receipt is still recognized, but batches that never confirm must not re-read
+ * every large transcript on each sweep and slow the whole server down.
+ */
+export function confirmationCheckDelay(ageMs: number): number {
+  return ageMs < 2 * 60_000 ? 0 : ageMs < 10 * 60_000 ? 15_000 : 60_000;
+}
 const RESTORE_RETRY_MS = 60_000;
 const PENDING_HORIZON_MS = 48 * 60 * 60_000;
 const CLAIM_LIMIT = 10;
@@ -215,7 +226,7 @@ export class AgentInboxService {
 
   /** One dispatcher pass: deliveries, confirmations and reply capture. */
   async sweepNow(): Promise<void> {
-    await this.sweep();
+    await this.sweep(true);
     await Promise.allSettled([...this.drainRuns.values()]);
   }
 
@@ -642,7 +653,8 @@ export class AgentInboxService {
     this.ensureTimer();
   }
 
-  private async sweep(): Promise<void> {
+  /** `force` matches every unconfirmed batch now, ignoring `confirmationCheckDelay`. */
+  private async sweep(force = false): Promise<void> {
     if (this.sweeping) return;
     this.sweeping = true;
     try {
@@ -651,7 +663,11 @@ export class AgentInboxService {
       for (const [nodeId, workspaceId] of [...this.recipients]) {
         if (!this.drainRuns.has(nodeId)) void this.drain(workspaceId, nodeId);
       }
-      await Promise.all([...this.confirmations].map(([batchId, tracking]) => this.checkConfirmation(batchId, tracking).catch(() => undefined)));
+      const now = Date.now();
+      await Promise.all([...this.confirmations].filter(([, tracking]) => force || (tracking.nextCheckAt ?? 0) <= now).map(([batchId, tracking]) => {
+        tracking.nextCheckAt = now + confirmationCheckDelay(now - tracking.since);
+        return this.checkConfirmation(batchId, tracking).catch(() => undefined);
+      }));
       await Promise.all([...this.replyWatches].map(([batchId, tracking]) => this.checkReply(batchId, tracking).catch(() => undefined)));
       if (this.forwardsPending) await this.recoverForwards();
       if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size && !this.forwardsPending) this.stop();

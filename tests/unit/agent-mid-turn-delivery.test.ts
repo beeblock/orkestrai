@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { acceptsInputDuringTurn, nativeComposerOpen } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
 import { parseInteractiveRequestPending } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.ts';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { confirmationCheckDelay } from '$lib/modules/agent-room/application/services/AgentInboxService.ts';
 
 const osc = (state: string) => `\x1b]7501;state=${state}\x1b\\`;
 const jsonl = (records: unknown[]) => records.map(record => JSON.stringify(record)).join('\n');
@@ -121,5 +122,12 @@ describe('mid-turn agent input', () => {
     // Never in a burst: at most once per 5 s and twice per message.
     expect(manager.retryRestoredTurnInput(session.id)).toBe(false);
     expect(writes.filter(data => data.includes('Reply typed mid-turn'))).toHaveLength(1);
+  });
+
+  it('spaces transcript matching of a batch that stays unconfirmed', () => {
+    expect(confirmationCheckDelay(0)).toBe(0);
+    expect(confirmationCheckDelay(119_000)).toBe(0);
+    expect(confirmationCheckDelay(3 * 60_000)).toBe(15_000);
+    expect(confirmationCheckDelay(3 * 60 * 60_000)).toBe(60_000);
   });
 });

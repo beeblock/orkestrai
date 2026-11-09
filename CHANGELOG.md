@@ -13,6 +13,7 @@ pt-BR, English, and Spanish translations.
 - Keep each agent's message queue moving. After 30 seconds of an idle agent without the receipt of its last automatic message, the next messages are delivered; nothing is retyped and the receipt is still matched later. When Codex or Claude puts a mid-turn message back into the composer at the end of a turn and nobody has typed since, Enter submits it once.
 - Accept a receipt when Codex or Claude merges the automatic prompt with other composer text, or records it among several prompts typed during one turn. This applies only to long automatic prompts, which carry unique message ids; short prompts still need the latest prompt to match exactly.
 - Flush the Codex key-stream paste on native Windows and WSL with Ctrl+E instead of the End key. Both only move the cursor to the end of the line, but Ctrl+E's single byte cannot be read as Esc, which would interrupt a running turn.
+- Space out transcript matching for batches that stay unconfirmed: every sweep for two minutes, then every 15 seconds, then every minute. Accumulated unconfirmed deliveries had re-read large transcripts every 1.5 seconds and slowed the whole server to 20–280 second API responses on native Windows.
 - Update the Canvas queued-message notice: Codex and Claude take a message mid-turn as soon as they can, rather than when the turn ends.
 
 ## 0.53.0 - 2026-11-08
