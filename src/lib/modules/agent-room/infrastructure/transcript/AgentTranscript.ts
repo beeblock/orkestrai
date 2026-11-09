@@ -311,6 +311,11 @@ function normalizedPrompt(value: string): string {
 
 function promptMatches(storage: string, actual: string, expected: string): boolean {
   if (normalizedPrompt(actual) === normalizedPrompt(expected)) return true;
+  // Codex and Claude merge a restored mid-turn prompt with other composer text
+  // into one submission. A whole automatic prompt (long, with its message ids)
+  // inside the submitted one is still its receipt.
+  const wanted = normalizedPrompt(expected);
+  if (wanted.length >= 64 && normalizedPrompt(actual).includes(wanted)) return true;
   if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return false;
   // Claude wraps a bracketed paste in the persisted user message. Match the
   // entire envelope and its id, never a substring from several pasted prompts.
@@ -711,14 +716,23 @@ function promptOccurrenceCount(storage: string, transcript: string, expectedProm
   }
 }
 
+/** Prompts typed during a turn can land together, so a receipt need not be the latest one. */
+const RECEIPT_RECENT_PROMPTS = 8;
+
 export function transcriptContainsPrompt(storage: string, transcript: string, expectedPrompt: string): boolean {
-  if ((storage === 'claude-project-jsonl' || storage === 'orkestrai-jsonl')) {
+  if (FILE_LOOKUP_STORAGES.has(storage)) {
     const expected = normalizedPrompt(expectedPrompt);
+    let prompts = 0;
     for (const line of transcript.trim().split('\n').reverse()) {
       let event: any;
       try { event = JSON.parse(line); } catch { continue; }
       const prompt = promptFromJsonlEvent(storage, event);
-      if (prompt) return promptMatches(storage, prompt, expected);
+      if (prompt) {
+        if (promptMatches(storage, prompt, expected)) return true;
+        // A short prompt can repeat; only a long automatic one (with its ids) is unique.
+        if (expected.length < 64 || ++prompts >= RECEIPT_RECENT_PROMPTS) return false;
+        continue;
+      }
       // Enqueue proves Enter was accepted, not that the model replied.
       // Removal confirms consumption only for the explicit mid-turn reason.
       if (event?.type === 'queue-operation' && typeof event.content === 'string'
@@ -730,7 +744,7 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
   }
   const parser = parserForStorage(storage);
   const prompt = parser?.(transcript).prompt;
-  return Boolean(prompt && normalizedPrompt(prompt) === normalizedPrompt(expectedPrompt));
+  return Boolean(prompt && promptMatches(storage, prompt, expectedPrompt));
 }
 
 function parserForStorage(storage: string | undefined): ((jsonl: string) => ParsedTranscriptTurn) | null {

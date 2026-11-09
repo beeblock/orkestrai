@@ -152,6 +152,8 @@ type PtySession = PtySessionInfo & {
   nativeComposerState?: 'idle' | 'working';
   /** A native report that the composer takes typed input, including mid-turn. */
   nativeComposerOpen?: boolean;
+  /** When the native report last turned idle, to let a finished turn settle. */
+  nativeIdleSince?: number;
   cursorReportExpectedUntil?: number;
   cursorReportsPending?: number;
   terminalModeTail: string;
@@ -223,8 +225,11 @@ type ComposerDelivery = {
   submittedAt?: number;
   humanInputRevision?: number;
   pasteRetryCount?: number;
+  /** Owner Enters that could only submit this message, never edit it. */
   manualEnterCount?: number;
   pasteRetryAt?: number;
+  /** Since when the agent has sat idle without this delivery's receipt. */
+  idleWithoutReceiptSince?: number;
   pasteOutputStart?: number;
   pasteEchoAt?: number;
   /** Only an explicit owner interrupt may relinquish input without a receipt. */
@@ -289,6 +294,8 @@ const SHELL_DELIVERY_SETTLE_MS = 400;
 const HUMAN_SUBMIT_SETTLE_MS = 400;
 const COMPOSER_OUTPUT_QUIET_MS = 400;
 const COMPOSER_SETTLE_LIMIT_MS = 5_000;
+/** An idle agent with no receipt for this long no longer holds its message queue. */
+const UNCONFIRMED_IDLE_RELEASE_MS = 30_000;
 
 /**
  * Texto seguro para composers de TUI (Claude/Codex/Kimi): remove bytes de
@@ -563,6 +570,8 @@ export class PtySessionManager {
       if (composerState !== undefined) session.nativeComposerState = composerState;
       const composerOpen = nativeComposerOpen(session.provider, modes);
       if (composerOpen !== undefined) session.nativeComposerOpen = composerOpen;
+      if (composerState === 'idle') session.nativeIdleSince ??= Date.now();
+      else if (composerState === 'working') session.nativeIdleSince = undefined;
       for (const match of modes.matchAll(/\x1b\[\?([\d;]+)([hl])/g)) {
         if (match[1].split(';').includes('2004')) session.bracketedPaste = match[2] === 'h';
       }
@@ -832,6 +841,16 @@ export class PtySessionManager {
       const chunks = !data.includes('\x1b[200~') ? data.split(/(\r)/).filter(Boolean) : [data];
       for (const part of chunks) session.deferredHumanInput.push({ data: part, imagePaste });
       this.flushDeferredHumanInput(session);
+      return;
+    }
+    // A standalone Enter cannot edit the composer, only submit what is there:
+    // most likely the unconfirmed automatic message. Keep its receipt identity
+    // and evidence-based recovery instead of counting it as an owner edit.
+    const unconfirmed = session.lastSubmittedDelivery;
+    if (data === '\r' && !imagePaste && session.humanComposerLength === 0 && unconfirmed?.requiresAcceptance
+      && !session.lastDeliveryAccepted && !unconfirmed.ownerTakeover) {
+      unconfirmed.manualEnterCount = (unconfirmed.manualEnterCount ?? 0) + 1;
+      this.writeAutomaticSubmit(session);
       return;
     }
     this.writeHumanInputNow(session, data, imagePaste);
@@ -1268,6 +1287,41 @@ export class PtySessionManager {
     };
   }
 
+  /** The latest automatic Enter went in while the provider's turn was running. */
+  automaticDeliveryDuringTurn(id: string): boolean {
+    const delivery = this.sessions.get(id)?.lastSubmittedDelivery;
+    return Boolean(delivery?.duringTurn && delivery.requiresAcceptance && !delivery.ownerTakeover);
+  }
+
+  /**
+   * Codex and Claude put a prompt typed during a turn back into the composer
+   * when that turn is interrupted or aborted before consuming it. Once the agent
+   * is idle again and nobody has typed since, the composer holds only that
+   * prompt or nothing, so Enter submits it once; an empty composer ignores it.
+   */
+  retryRestoredTurnInput(id: string): boolean {
+    const session = this.sessions.get(id);
+    const delivery = session?.lastSubmittedDelivery;
+    if (!session || !delivery?.duringTurn || !delivery.requiresAcceptance || session.lastDeliveryAccepted
+      || delivery.ownerTakeover || delivery.humanInputRevision !== session.humanInputRevision
+      || session.managedTurn || (delivery.pasteRetryCount ?? 0) >= 2
+      || Date.now() - (delivery.pasteRetryAt ?? delivery.submittedAt ?? 0) < 5000
+      || !this.composerIdle(session) || !this.submitIfComposerFree(id)) return false;
+    delivery.pasteRetryCount = (delivery.pasteRetryCount ?? 0) + 1;
+    delivery.pasteRetryAt = Date.now();
+    session.outputBurst = true;
+    this.recordLifecycle(session, 'working');
+    return true;
+  }
+
+  /** Between turns: a settled native idle report, or quiet output otherwise. */
+  private composerIdle(session: PtySession): boolean {
+    if (session.exited || session.deliveryInProgress || session.nativeComposerState === 'working') return false;
+    return session.nativeComposerState === 'idle'
+      ? Date.now() - (session.nativeIdleSince ?? Date.now()) >= 2000
+      : session.waiting;
+  }
+
   /** Only an idle, empty composer may recover an unconfirmed automatic submit. */
   pendingAutomaticDeliveryAt(id: string): number | null {
     const session = this.sessions.get(id);
@@ -1596,6 +1650,16 @@ export class PtySessionManager {
     if (!session.awaitingDeliveryIdle || session.exited) return;
     if (session.lastSubmittedDelivery?.requiresAcceptance && !session.lastDeliveryAccepted && !session.lastSubmittedDelivery.ownerTakeover) {
       const delivery = session.lastSubmittedDelivery;
+      // A receipt can lag a running turn, never an idle agent this long. Stop
+      // holding the queue; the inbox keeps matching it and nothing is retyped.
+      if (!this.composerIdle(session)) delivery.idleWithoutReceiptSince = undefined;
+      else delivery.idleWithoutReceiptSince ??= Date.now();
+      if (delivery.idleWithoutReceiptSince !== undefined && Date.now() - delivery.idleWithoutReceiptSince >= UNCONFIRMED_IDLE_RELEASE_MS) {
+        delivery.ownerTakeover = true;
+        this.recordLifecycle(session, 'idle', 'Automatic message unconfirmed while the agent was idle; its queue continues.');
+        this.releaseDeliveryBarrierWhenReady(session);
+        return;
+      }
       if (delivery.confirmAcceptance && !delivery.confirmationPending) {
         delivery.confirmationPending = true;
         // The caller can time out or disconnect after a successful paste.
@@ -1629,11 +1693,12 @@ export class PtySessionManager {
     this.drainDeliveryQueue(session);
   }
 
+  /** Owner keys wait only between an automatic paste and its Enter, so they
+   * cannot join that message. After Enter the terminal is the owner's again,
+   * with or without a receipt: nothing may keep the owner from typing. */
   private holdsHumanInput(session: PtySession): boolean {
     return Boolean(session.deferredHumanSubmitTimer)
-      || Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined)
-      || Boolean(session.lastSubmittedDelivery?.requiresAcceptance
-      && !session.lastDeliveryAccepted && !session.lastSubmittedDelivery.ownerTakeover);
+      || Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined);
   }
 
   private retainUnconfirmedWrite(session: PtySession, delivery: ComposerDelivery, error: unknown): Error {
@@ -1660,24 +1725,6 @@ export class PtySessionManager {
 
   private flushDeferredHumanInput(session: PtySession): void {
     if (session.deliveryInProgress || session.deferredHumanSubmitTimer || session.exited) { this.notifyInputState(session); return; }
-    const delivery = session.lastSubmittedDelivery;
-    if (this.holdsHumanInput(session)) {
-      if (session.deferredHumanInput[0]?.data === '\x03') {
-        delivery!.ownerTakeover = true;
-        session.deliveryReadyAt = Math.max(session.deliveryReadyAt, Date.now() + HUMAN_SUBMIT_SETTLE_MS);
-        this.scheduleDeliveryBarrierFallback(session);
-      } else if (session.deferredHumanInput.length === 1 && session.deferredHumanInput[0].data === '\r') {
-        // A standalone Enter can help the visible pending paste. Preserve its
-        // automatic receipt identity and never mirror an invented owner line.
-        session.deferredHumanInput.length = 0;
-        // This submits the still-owned body; it does not edit it or disable
-        // later evidence-based recovery if ConPTY consumes this Enter too.
-        delivery!.manualEnterCount = (delivery!.manualEnterCount ?? 0) + 1;
-        this.writeAutomaticSubmit(session);
-        this.notifyInputState(session);
-        return;
-      } else { this.notifyInputState(session); return; }
-    }
     while (session.deferredHumanInput.length) {
       const chunk = session.deferredHumanInput[0];
       if (chunk.data === '\r' && session.humanComposerLength > 0) {

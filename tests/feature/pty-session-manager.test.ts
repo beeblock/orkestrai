@@ -217,9 +217,7 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(20_000);
       expect(writes).toEqual(['unconfirmed', '\r']);
       next.cancel(); await cancelled;
-      manager.writeHumanInput(session.id, 'human can still type');
-      expect(writes).not.toContain('human can still type');
-      manager.writeHumanInput(session.id, '\x03');
+      // The automatic queue waits for the receipt; the owner never does.
       manager.writeHumanInput(session.id, 'human can still type');
       expect(writes.at(-1)).toBe('human can still type');
     } finally { manager.kill(session.id); vi.useRealTimers(); }
@@ -313,8 +311,8 @@ describe('PtySessionManager', () => {
       clearInterval(spinner);
       await vi.advanceTimersByTimeAsync(1_000);
       await second;
-      // ConPTY delivers Codex pastes as keys: End flushes the burst before each Enter.
-      const submit = framed ? ['\x1b[F', '\r'] : ['\r'];
+      // ConPTY delivers Codex pastes as keys: Ctrl+E flushes the burst before each Enter.
+      const submit = framed ? ['\x05', '\r'] : ['\r'];
       expect(writes).toEqual([framed ? '\x1b[200~first prompt\x1b[201~' : 'first prompt', ...submit, framed ? '\x1b[200~second prompt\x1b[201~' : 'second prompt', ...submit]);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
@@ -358,10 +356,7 @@ describe('PtySessionManager', () => {
       await vi.advanceTimersByTimeAsync(3_000);
       await rejected;
       manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\x1b[F', '\r']);
-      manager.writeHumanInput(session.id, '\x03');
-      manager.writeHumanInput(session.id, 'human input');
-      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\x1b[F', '\r', '\x03', 'human input']);
+      expect(writes).toEqual(['\x1b[200~one prompt\x1b[201~', '\x05', '\r', 'human input']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
 
@@ -836,7 +831,7 @@ describe('PtySessionManager', () => {
       isAccepted: async () => accepted,
     })).rejects.toThrow('não confirmou');
 
-    expect(writes).toEqual(['\x1b[200~execute a tarefa\x1b[201~', '\x1b[F', '\r']);
+    expect(writes).toEqual(['\x1b[200~execute a tarefa\x1b[201~', '\x05', '\r']);
     manager.kill(session.id);
   });
 

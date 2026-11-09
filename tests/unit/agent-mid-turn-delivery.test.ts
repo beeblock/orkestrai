@@ -101,4 +101,25 @@ describe('mid-turn agent input', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     expect(manager.canAcceptAutomaticMessageDuringTurn(session.id)).toBe(true);
   });
+
+  it.each([false, true])('submits a mid-turn prompt that the ended turn left in the composer once (owner typed: %s)', async ownerTyped => {
+    const { manager, session, writes, emit } = await working();
+    const steer = manager.queueWithSubmit(session.id, 'Reply typed mid-turn', 10, true, async () => false, undefined, undefined, true);
+    await vi.advanceTimersByTimeAsync(100); await steer.submitted;
+    expect(manager.automaticDeliveryDuringTurn(session.id)).toBe(true);
+    // Still working: the steer may yet be consumed by this turn.
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(manager.retryRestoredTurnInput(session.id)).toBe(false);
+    if (ownerTyped) manager.writeHumanInput(session.id, 'x');
+    // The turn is interrupted and Codex puts the steer back into the composer.
+    emit(osc('idle:app=codex'));
+    expect(manager.retryRestoredTurnInput(session.id)).toBe(false);
+    await vi.advanceTimersByTimeAsync(2500);
+    const enters = writes.filter(data => data === '\r').length;
+    expect(manager.retryRestoredTurnInput(session.id)).toBe(!ownerTyped);
+    expect(writes.filter(data => data === '\r')).toHaveLength(enters + (ownerTyped ? 0 : 1));
+    // Never in a burst: at most once per 5 s and twice per message.
+    expect(manager.retryRestoredTurnInput(session.id)).toBe(false);
+    expect(writes.filter(data => data.includes('Reply typed mid-turn'))).toHaveLength(1);
+  });
 });

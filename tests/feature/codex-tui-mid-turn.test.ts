@@ -16,7 +16,7 @@ const enabled = process.env.ORKESTRAI_REAL_CODEX_TEST === '1';
  * The automatic delivery does the same mid-command and still requires the
  * exact prompt receipt, without a second Enter or a separate turn.
  */
-it.skipIf(!enabled)('delivers a message into a running real Codex turn and confirms its exact receipt', async () => {
+it.skipIf(!enabled).each(['steer', 'interrupted'] as const)('delivers a message into a running real Codex turn and confirms its exact receipt (%s)', async scenario => {
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-codex-mid-turn-'));
   const home = join(root, 'home'), cwd = join(root, 'project'), codexHome = join(home, '.codex');
   await mkdir(codexHome, { recursive: true }); await mkdir(cwd);
@@ -47,7 +47,7 @@ it.skipIf(!enabled)('delivers a message into a running real Codex turn and confi
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
-  let output = '', liveSessionId: string | null = null;
+  let output = '', liveSessionId: string | null = null, rawWrite: ((data: string) => void) | null = null;
   const ownedChildren: Array<{ pid: number; exited: boolean }> = [];
   const manager = new PtySessionManager(((command: string, args: string[], options: any) => {
     // Only an allowlist enters the CLI. Never read or forward the owner's accounts.
@@ -59,6 +59,7 @@ it.skipIf(!enabled)('delivers a message into a running real Codex turn and confi
       XDG_CONFIG_HOME: join(home, '.config'), NO_PROXY: '127.0.0.1,localhost',
       HTTP_PROXY: 'http://127.0.0.1:1', HTTPS_PROXY: 'http://127.0.0.1:1', ALL_PROXY: 'http://127.0.0.1:1' });
     const child = spawn(command, args, { ...options, env });
+    rawWrite = data => child.write(data);
     const owned = { pid: child.pid, exited: false }; ownedChildren.push(owned);
     child.onExit(() => { owned.exited = true; });
     child.onData(chunk => {
@@ -84,7 +85,7 @@ it.skipIf(!enabled)('delivers a message into a running real Codex turn and confi
     liveSessionId = session.id;
     await expect.poll(() => output.includes('›'), { timeout: 30000, message: 'Codex did not reach its composer' }).toBe(true);
     await expect.poll(() => manager.canAcceptAutomaticMessage(session.id), { timeout: 20000 }).toBe(true);
-    let exactId: string | null = null;
+    let exactId: string | null = null, recoveries = 0;
     const deliver = async (text: string, duringTurn: boolean) => {
       const since = Date.now();
       await manager.writeWithConfirmedSubmit(session.id, text, {
@@ -92,6 +93,8 @@ it.skipIf(!enabled)('delivers a message into a running real Codex turn and confi
         isAccepted: async () => {
           const match = await findPromptInTranscript('codex', cwd, exactId, text, since, { codexHome });
           if (match) { exactId = match.sessionId; manager.bindAgentSession(session.id, exactId); }
+          // As the delivery service does: an ended turn may have put the prompt back.
+          else if (manager.automaticDeliveryDuringTurn(session.id) && manager.retryRestoredTurnInput(session.id)) recoveries++;
           return Boolean(match);
         },
       });
@@ -101,16 +104,28 @@ it.skipIf(!enabled)('delivers a message into a running real Codex turn and confi
     await expect.poll(() => manager.canAcceptAutomaticMessageDuringTurn(session.id), { timeout: 15000 }).toBe(true);
     expect(manager.canAcceptAutomaticMessage(session.id)).toBe(false);
     const enteredAt = Date.now();
-    await deliver(`Fixture mid-turn reply ${'Specialist result for the leader, sent while it works. '.repeat(25)}`.trim(), true);
+    const steer = deliver(`Fixture mid-turn reply ${'Specialist result for the leader, sent while it works. '.repeat(25)}`.trim(), true);
+    if (scenario === 'interrupted') {
+      // Something other than the owner's keys stops the turn before the steer is
+      // consumed; Codex puts the steer back into its composer.
+      await expect.poll(() => manager.automaticDeliveryDuringTurn(session.id), { timeout: 10000 }).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      rawWrite!('\x1b');
+    }
+    await steer;
     const receiptMs = Date.now() - enteredAt;
-    // Codex adds the steer to the same turn's next model request, with the command output.
-    expect(requests.some(request => request.steer && request.toolOutput)).toBe(true);
-    expect(requests.filter(request => request.steer && !request.toolOutput)).toHaveLength(0);
+    // Codex adds the steer to this turn's next model request: after the command,
+    // or at once if the model was still streaming when it arrived.
+    expect(requests.some(request => request.steer)).toBe(true);
+    // The owner's terminal is never held after Enter.
+    manager.writeHumanInput(session.id, 'x');
+    expect(manager.get(session.id)?.inputDeferred).toBe(false);
+    manager.writeHumanInput(session.id, '\x7f');
     const files = (await readdir(join(codexHome, 'sessions'), { recursive: true })).filter(name => String(name).endsWith('.jsonl'));
     const records = (await Promise.all(files.map(name => readFile(join(codexHome, 'sessions', String(name)), 'utf8'))))
       .join('\n').split('\n').filter(Boolean).map(line => JSON.parse(line));
-    expect(records.filter(record => record.payload?.type === 'task_started')).toHaveLength(1);
-    console.info(JSON.stringify({ platform: process.platform, receiptMs, requests }));
+    if (scenario === 'steer') expect(records.filter(record => record.payload?.type === 'task_started')).toHaveLength(1);
+    console.info(JSON.stringify({ platform: process.platform, scenario, receiptMs, recoveries, requests }));
   } catch (error) {
     process.stderr.write(`Codex mid-turn fixture failed: ${String(error)}\n${output.slice(-6000)}\n`);
     throw error;

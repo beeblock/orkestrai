@@ -90,6 +90,18 @@ export class AgentTerminalDeliveryService {
         },
       );
       if (!match) {
+        // A prompt typed during a turn that ended without consuming it is back
+        // in the composer; the turn's own end is the evidence to submit it.
+        if (submission.at !== null && ptySessionManager.automaticDeliveryDuringTurn(input.sessionId)
+          && Date.now() - submission.boundaryCheckedAt >= 1500) {
+          submission.boundaryCheckedAt = Date.now();
+          const ended = !preferredSessionId || (await latestTurnBoundary(provider, session.transcriptCwd ?? session.cwd, preferredSessionId, {
+            ...ptySessionManager.transcriptStorageRoots(session.id),
+            homeDir: session.transcriptHome ?? undefined, posixCwd: session.runtimeKey.startsWith('wsl:'),
+          })).ready === true;
+          if (ended) ptySessionManager.retryRestoredTurnInput(input.sessionId);
+          return false;
+        }
         // Both the caller and the background reconciler must observe the
         // uncertainty. A late exact receipt may still release input custody,
         // so always check for that receipt before returning this error.

@@ -16,8 +16,8 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(frameAutomaticPaste('codex', true, false, 'hello')).toBe('\x1b[200~hello\x1b[201~');
   });
 
-  it('flushes the Codex key-stream paste with End before Enter only where ConPTY delivers keys', () => {
-    expect(automaticSubmitPrefix('codex', true)).toBe('\x1b[F');
+  it('flushes the Codex key-stream paste with Ctrl+E before Enter only where ConPTY delivers keys', () => {
+    expect(automaticSubmitPrefix('codex', true)).toBe('\x05');
     expect(automaticSubmitPrefix('codex', false)).toBe('');
     expect(automaticSubmitPrefix('claude', true)).toBe('');
     expect(automaticSubmitPrefix(null, true)).toBe('');
@@ -233,9 +233,9 @@ describe('Codex automatic paste on ConPTY', () => {
     expect(manager.retryPendingAutomaticPaste(session.id, at, at - 100)).toBe(false);
     expect(writes.filter(value => value.includes(text))).toHaveLength(1);
     expect(writes.filter(value => value === '\r')).toHaveLength(3);
-    // The first Enter and both retries: End always lands between the paste and Enter.
+    // The first Enter and both retries: Ctrl+E always lands between the paste and Enter.
     const enters = writes.flatMap((value, index) => value === '\r' ? [index] : []);
-    expect(enters.map(index => writes[index - 1])).toEqual(['\x1b[F', '\x1b[F', '\x1b[F']);
+    expect(enters.map(index => writes[index - 1])).toEqual(['\x05', '\x05', '\x05']);
   });
 
   it.each(['human', '\x1b[A', '\t', '\x15'])('preserves owner edits after explicit terminal takeover (%j)', async input => {

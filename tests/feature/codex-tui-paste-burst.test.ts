@@ -41,7 +41,7 @@ it.skipIf(!enabled)('submits a ConPTY-style Codex paste on the first Enter while
   const resumes: Array<() => void> = [];
   let manager: PtySessionManager | null = null;
 
-  async function deliverStarved(serial: number, keepEnd: boolean) {
+  async function deliverStarved(serial: number, keepFlush: boolean) {
     let output = '', liveSessionId: string | null = null;
     const writes: string[] = [];
     manager = new PtySessionManager(((command: string, args: string[], options: any) => {
@@ -69,7 +69,7 @@ it.skipIf(!enabled)('submits a ConPTY-style Codex paste on the first Enter while
           process.kill(-child.pid, 'SIGSTOP');
           data = data.replaceAll('\x1b[200~', '').replaceAll('\x1b[201~', '');
         }
-        if (data === '\x1b[F' && !keepEnd) return;
+        if (data === '\x05' && !keepFlush) return;
         writes.push(data);
         write(data);
         if (data === '\r') setTimeout(resume, 2000);
@@ -99,7 +99,7 @@ it.skipIf(!enabled)('submits a ConPTY-style Codex paste on the first Enter while
     }).catch(cause => { error = cause; });
     return { error, submitted: primary.length > before, enters: writes.filter(data => data === '\r').length,
       badge: [...output.matchAll(/\[Pasted Content (\d+) chars\]/g)].at(-1)?.[1] ?? null, length: Array.from(text).length,
-      endBeforeEnter: writes[writes.indexOf('\r') - 1] === '\x1b[F' };
+      flushBeforeEnter: writes[writes.indexOf('\r') - 1] === '\x05' };
   }
 
   try {
@@ -114,7 +114,7 @@ it.skipIf(!enabled)('submits a ConPTY-style Codex paste on the first Enter while
     expect(fixed.error).toBeNull();
     expect(fixed.submitted).toBe(true);
     expect(fixed.enters).toBe(1);
-    expect(fixed.endBeforeEnter).toBe(true);
+    expect(fixed.flushBeforeEnter).toBe(true);
     console.info(JSON.stringify({ platform: process.platform, control: { ...control, error: String(control.error).slice(0, 80) }, fixed }));
   } finally {
     for (const resume of resumes) resume();
