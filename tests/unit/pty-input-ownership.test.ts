@@ -173,8 +173,8 @@ describe('human input while an automatic message owns the composer', () => {
   it('lets Ctrl+C cancel an owner Enter that is waiting behind its restored body', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'owner line\r');
-    // The automatic Enter goes at 500 ms; the owner's Enter settles after its body.
-    await vi.advanceTimersByTimeAsync(600); await f.delivery.submitted;
+    // Automatic Enter at 500 ms, held body 400 ms later, its Enter after a settle.
+    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
     expect(f.writes.at(-1)).toBe('owner line');
     f.manager.writeHumanInput(f.session.id, '\x03');
     await vi.advanceTimersByTimeAsync(10000);
@@ -185,7 +185,7 @@ describe('human input while an automatic message owns the composer', () => {
   it('does not emit a delayed owner Enter after its PTY is replaced', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'old owner line\r');
-    await vi.advanceTimersByTimeAsync(600); await f.delivery.submitted;
+    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
     f.manager.kill(f.session.id);
     const next = f.manager.create({ command: 'codex', provider: 'codex', cwd: tmpdir() });
     f.manager.writeHumanInput(next.id, 'new owner line');
@@ -315,5 +315,63 @@ describe('human input while an automatic message owns the composer', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     expect(f.writes.filter(data => data.includes('next automatic'))).toHaveLength(1);
     expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
+  });
+
+  it('writes keys held during the paste in a later read than its Enter', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, 'my draft');
+    await vi.advanceTimersByTimeAsync(520); await f.delivery.submitted;
+    expect(f.writes.at(-1)).toBe('\r');
+    expect(f.writes).not.toContain('my draft');
+    await vi.advanceTimersByTimeAsync(450);
+    expect(f.writes.at(-1)).toBe('my draft');
+  });
+
+  it('keeps receipt identity and recovery for a lone Enter held during the paste', async () => {
+    const f = await fixture();
+    f.manager.writeHumanInput(f.session.id, '\r');
+    await vi.advanceTimersByTimeAsync(1000); await f.delivery.submitted;
+    const at = f.manager.automaticDeliverySubmittedAt(f.session.id)!;
+    expect(f.writes.slice(-4)).toEqual(['\x05', '\r', '\x05', '\r']);
+    f.emit(`› [Pasted Content ${f.text.length + 2} chars]`);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(f.manager.retryPendingAutomaticPaste(f.session.id, at, at - 1)).toBe(true);
+  });
+
+  it('ends the caller wait once the idle terminal releases the delivery', async () => {
+    const f = await terminal();
+    const send = f.manager.writeWithConfirmedSubmit(f.session.id, 'never confirmed', { isAccepted: async () => false });
+    const rejected = expect(send).rejects.toThrow('não confirmou');
+    await vi.advanceTimersByTimeAsync(40_000); await rejected;
+  });
+
+  it('still releases the queue while a receipt read hangs', async () => {
+    const f = await terminal();
+    const stuck = f.manager.queueWithSubmit(f.session.id, 'read hangs', 20, true, () => new Promise<boolean>(() => {}));
+    void stuck.submitted.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1000);
+    const next = f.manager.queueWithSubmit(f.session.id, 'after the hang', 20);
+    await vi.advanceTimersByTimeAsync(40_000); await next.submitted;
+    expect(f.writes.filter(data => data.includes('after the hang'))).toHaveLength(1);
+  });
+
+  it('releases a quiet Claude terminal without output after an automatic Enter', async () => {
+    const f = await fixture('claude');
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    const next = f.manager.queueWithSubmit(f.session.id, 'next for Claude', 20);
+    void next.submitted.catch(() => {});
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(f.writes.filter(data => data.includes('next for Claude'))).toHaveLength(1);
+  });
+
+  it('lets an owner Ctrl+C after Enter release the queue without the idle wait', async () => {
+    const f = await fixture();
+    await vi.advanceTimersByTimeAsync(1500); await f.delivery.submitted;
+    f.manager.writeHumanInput(f.session.id, '\x03');
+    const next = f.manager.queueWithSubmit(f.session.id, 'after interrupt', 20);
+    void next.submitted.catch(() => {});
+    // The usual settle after an automatic Enter, well before the 30 s idle release.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(f.writes.filter(data => data.includes('after interrupt'))).toHaveLength(1);
   });
 });

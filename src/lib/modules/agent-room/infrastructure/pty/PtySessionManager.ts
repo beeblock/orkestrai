@@ -244,6 +244,8 @@ export type ComposerDeliveryHandle = {
   acknowledge: () => void;
   /** Cancela somente enquanto a entrega ainda está aguardando na fila. */
   cancel: (reason?: Error) => boolean;
+  /** The terminal no longer holds its queue for this receipt (owner or idle release). */
+  released: () => boolean;
 };
 
 export class ObsoletePtyDeliveryError extends Error {
@@ -846,13 +848,7 @@ export class PtySessionManager {
     // A standalone Enter cannot edit the composer, only submit what is there:
     // most likely the unconfirmed automatic message. Keep its receipt identity
     // and evidence-based recovery instead of counting it as an owner edit.
-    const unconfirmed = session.lastSubmittedDelivery;
-    if (data === '\r' && !imagePaste && session.humanComposerLength === 0 && unconfirmed?.requiresAcceptance
-      && !session.lastDeliveryAccepted && !unconfirmed.ownerTakeover) {
-      unconfirmed.manualEnterCount = (unconfirmed.manualEnterCount ?? 0) + 1;
-      this.writeAutomaticSubmit(session);
-      return;
-    }
+    if (data === '\r' && !imagePaste && this.submitsAwaitedMessage(session)) return;
     this.writeHumanInputNow(session, data, imagePaste);
     if (/[\r\n]/.test(data)) this.scheduleWorkingDirectoryRefresh(session);
   }
@@ -1128,7 +1124,7 @@ export class PtySessionManager {
     let revisionAtSubmit = session.lastSubmitOutputRevision;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const confirmed = confirmAcceptance
-        ? await this.waitForAcceptance(confirmAcceptance, confirmationWindowMs, options.signal)
+        ? await this.waitForAcceptance(confirmAcceptance, confirmationWindowMs, options.signal, queued.released)
         : await this.waitForOutputAfter(id, revisionAtSubmit, confirmationWindowMs, options.signal);
       if (confirmed) {
         if (options.isAccepted) queued.acknowledge();
@@ -1148,7 +1144,7 @@ export class PtySessionManager {
     // A busy TUI can queue input internally and persist it only after its
     // current tool/model turn ends. No further Enter is safe at this point.
     if (confirmAcceptance && session.conptySubmitGuard && options.confirmationWindowMs === undefined
-      && await this.waitForAcceptance(confirmAcceptance, 180_000, options.signal)) {
+      && await this.waitForAcceptance(confirmAcceptance, 180_000, options.signal, queued.released)) {
       queued.acknowledge();
       return;
     }
@@ -1201,6 +1197,7 @@ export class PtySessionManager {
         submitted: Promise.reject(new Error(`Sessão PTY ${id} já finalizada.`)),
         acknowledge: () => {},
         cancel: () => false,
+        released: () => true,
       };
     }
     const sanitized = sanitizeComposerText(text);
@@ -1209,6 +1206,7 @@ export class PtySessionManager {
         submitted: Promise.reject(new Error('A mensagem para o terminal está vazia.')),
         acknowledge: () => {},
         cancel: () => false,
+        released: () => true,
       };
     }
 
@@ -1235,6 +1233,7 @@ export class PtySessionManager {
         delivery.reject(reason);
         return true;
       },
+      released: () => Boolean(delivery.ownerTakeover),
     };
   }
 
@@ -1317,9 +1316,11 @@ export class PtySessionManager {
   /** Between turns: a settled native idle report, or quiet output otherwise. */
   private composerIdle(session: PtySession): boolean {
     if (session.exited || session.deliveryInProgress || session.nativeComposerState === 'working') return false;
+    // Without a native report, quiet output: `waiting` is cleared by every write
+    // and is not cleared again by output, so it cannot tell a turn from idle.
     return session.nativeComposerState === 'idle'
       ? Date.now() - (session.nativeIdleSince ?? Date.now()) >= 2000
-      : session.waiting;
+      : Date.now() - session.lastOutputAt >= SESSION_IDLE_MS;
   }
 
   /** Only an idle, empty composer may recover an unconfirmed automatic submit. */
@@ -1582,8 +1583,22 @@ export class PtySessionManager {
         session.deliveryInProgress = false;
         session.activeDelivery = null;
         if (!session.exited && this.sessions.get(session.id) === session) {
-          this.flushDeferredHumanInput(session);
-          this.drainDeliveryQueue(session);
+          if (session.deferredHumanInput.length && session.lastSubmittedDelivery === delivery) {
+            // Keys held during the paste must not reach the CLI in the same read
+            // as its Enter: a TUI can take that chunk as one paste and keep the
+            // Enter as a newline. Let the Enter land on its own first.
+            session.deferredHumanSubmitTimer = setTimeout(() => {
+              session.deferredHumanSubmitTimer = null;
+              if (session.exited || this.sessions.get(session.id) !== session) return;
+              this.flushDeferredHumanInput(session);
+              this.drainDeliveryQueue(session);
+            }, HUMAN_SUBMIT_SETTLE_MS);
+            session.deferredHumanSubmitTimer.unref?.();
+            this.notifyInputState(session);
+          } else {
+            this.flushDeferredHumanInput(session);
+            this.drainDeliveryQueue(session);
+          }
         } else {
           session.deferredHumanInput.length = 0;
         }
@@ -1608,9 +1623,11 @@ export class PtySessionManager {
     isAccepted: () => Promise<boolean>,
     timeoutMs: number,
     signal?: AbortSignal,
+    /** Stop once the terminal releases this delivery: the inbox keeps matching it. */
+    released?: () => boolean,
   ): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
-    while (!signal?.aborted && Date.now() < deadline) {
+    while (!signal?.aborted && Date.now() < deadline && !released?.()) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let cancel: (() => void) | undefined;
       const pending = new Promise<never>((_resolve, reject) => {
@@ -1674,6 +1691,8 @@ export class PtySessionManager {
           if (!session.exited && session.lastSubmittedDelivery === delivery) this.scheduleDeliveryBarrierFallback(session);
         });
       }
+      // A stalled read (UNC, WSL) must not stop the idle release from being checked.
+      this.scheduleDeliveryBarrierFallback(session);
       return;
     }
     const now = Date.now();
@@ -1696,6 +1715,15 @@ export class PtySessionManager {
   /** Owner keys wait only between an automatic paste and its Enter, so they
    * cannot join that message. After Enter the terminal is the owner's again,
    * with or without a receipt: nothing may keep the owner from typing. */
+  /** A lone owner Enter on an empty draft while an automatic message awaits its receipt. */
+  private submitsAwaitedMessage(session: PtySession): boolean {
+    const awaited = session.lastSubmittedDelivery;
+    if (session.humanComposerLength > 0 || !awaited?.requiresAcceptance || session.lastDeliveryAccepted || awaited.ownerTakeover) return false;
+    awaited.manualEnterCount = (awaited.manualEnterCount ?? 0) + 1;
+    this.writeAutomaticSubmit(session);
+    return true;
+  }
+
   private holdsHumanInput(session: PtySession): boolean {
     return Boolean(session.deferredHumanSubmitTimer)
       || Boolean(session.deliveryInProgress && session.activeDelivery?.pasteOutputStart !== undefined);
@@ -1727,6 +1755,10 @@ export class PtySessionManager {
     if (session.deliveryInProgress || session.deferredHumanSubmitTimer || session.exited) { this.notifyInputState(session); return; }
     while (session.deferredHumanInput.length) {
       const chunk = session.deferredHumanInput[0];
+      if (chunk.data === '\r' && !chunk.imagePaste && this.submitsAwaitedMessage(session)) {
+        session.deferredHumanInput.shift();
+        continue;
+      }
       if (chunk.data === '\r' && session.humanComposerLength > 0) {
         // Restoring held keys as one burst can turn the owner's Enter into a
         // paste newline on ConPTY too. Let the restored body settle first.
@@ -1762,6 +1794,9 @@ export class PtySessionManager {
     const submitted = this.updateHumanComposerState(session, data, imagePaste);
     this.write(session.id, data);
     if (data === '\x03') {
+      // An explicit interrupt ends the wait for the earlier automatic message.
+      const awaited = session.lastSubmittedDelivery;
+      if (awaited?.requiresAcceptance && !session.lastDeliveryAccepted) awaited.ownerTakeover = true;
       session.awaitingDeliveryIdle = true;
       session.deliveryReadyAt = Math.max(session.deliveryReadyAt, Date.now() + HUMAN_SUBMIT_SETTLE_MS);
       this.scheduleDeliveryBarrierFallback(session);

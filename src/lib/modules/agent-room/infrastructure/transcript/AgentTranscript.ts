@@ -309,13 +309,15 @@ function normalizedPrompt(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+/** Inbox prompts carry a unique message id; any other text may repeat. */
+const UNIQUE_PROMPT = /\[orkestrai:message:[0-9a-f-]{36}\]/i;
+
 function promptMatches(storage: string, actual: string, expected: string): boolean {
   if (normalizedPrompt(actual) === normalizedPrompt(expected)) return true;
   // Codex and Claude merge a restored mid-turn prompt with other composer text
-  // into one submission. A whole automatic prompt (long, with its message ids)
+  // into one submission. A whole inbox prompt, with its unique message id,
   // inside the submitted one is still its receipt.
-  const wanted = normalizedPrompt(expected);
-  if (wanted.length >= 64 && normalizedPrompt(actual).includes(wanted)) return true;
+  if (UNIQUE_PROMPT.test(expected) && normalizedPrompt(actual).includes(normalizedPrompt(expected))) return true;
   if (storage !== 'claude-project-jsonl' && storage !== 'orkestrai-jsonl') return false;
   // Claude wraps a bracketed paste in the persisted user message. Match the
   // entire envelope and its id, never a substring from several pasted prompts.
@@ -729,8 +731,8 @@ export function transcriptContainsPrompt(storage: string, transcript: string, ex
       const prompt = promptFromJsonlEvent(storage, event);
       if (prompt) {
         if (promptMatches(storage, prompt, expected)) return true;
-        // A short prompt can repeat; only a long automatic one (with its ids) is unique.
-        if (expected.length < 64 || ++prompts >= RECEIPT_RECENT_PROMPTS) return false;
+        // Only an inbox prompt is unique enough to be found behind newer prompts.
+        if (!UNIQUE_PROMPT.test(expected) || ++prompts >= RECEIPT_RECENT_PROMPTS) return false;
         continue;
       }
       // Enqueue proves Enter was accepted, not that the model replied.

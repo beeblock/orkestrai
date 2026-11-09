@@ -127,16 +127,20 @@ describe('PtySessionManager', () => {
         isAccepted: async () => accepted,
         ...(expired ? { confirmationWindowMs: 1_000 } : {}),
       });
-      const completion = expired ? expect(first).rejects.toThrow('confirm') : first;
+      // Either way the caller ends uncertain: no receipt, then the idle release.
+      const completion = expect(first).rejects.toThrow('confirm');
       await vi.advanceTimersByTimeAsync(2_000);
       if (expired) await completion;
       const next = manager.writeWithSubmit(session.id, 'next handoff');
-      await vi.advanceTimersByTimeAsync(130_000);
+      // Quiet for 30 s without the receipt: the queue moves on, nothing is retyped.
+      await vi.advanceTimersByTimeAsync(25_000);
       expect(writes).toEqual(['busy handoff', '\r']);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await next;
+      expect(writes).toEqual(['busy handoff', '\r', 'next handoff', '\r']);
+      await completion;
       accepted = true;
       await vi.advanceTimersByTimeAsync(4_000);
-      await completion;
-      await next;
       expect(writes).toEqual(['busy handoff', '\r', 'next handoff', '\r']);
     } finally { manager.kill(session.id); vi.useRealTimers(); }
   });
@@ -737,7 +741,9 @@ describe('PtySessionManager', () => {
     manager.writeHumanInput(session.id, 'rascunho humano');
     expect(writes).toEqual(['mensagem automatica']);
     await delivery;
-    expect(writes).toEqual(['mensagem automatica', '\r', 'rascunho humano']);
+    // The held keys follow the Enter in a later read, never in the same one.
+    expect(writes).toEqual(['mensagem automatica', '\r']);
+    await vi.waitFor(() => expect(writes).toEqual(['mensagem automatica', '\r', 'rascunho humano']), { timeout: 2000 });
   });
 
   it('cancela uma entrega confirmada que ainda aguarda o rascunho humano', async () => {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { acceptsInputDuringTurn, nativeComposerOpen } from '$lib/modules/agent-room/application/adapters/interactive-startup.ts';
-import { parseInteractiveRequestPending } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.ts';
+import { parseInteractiveRequestPending, transcriptContainsPrompt } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.ts';
 import { PtySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { confirmationCheckDelay } from '$lib/modules/agent-room/application/services/AgentInboxService.ts';
 
@@ -130,5 +130,16 @@ describe('mid-turn agent input', () => {
     expect(confirmationCheckDelay(119_000)).toBe(0);
     expect(confirmationCheckDelay(3 * 60_000)).toBe(15_000);
     expect(confirmationCheckDelay(3 * 60 * 60_000)).toBe(60_000);
+  });
+
+  it('accepts merged or earlier receipts only for prompts with a unique inbox id', () => {
+    const inbox = '[orkestrai:message:01a1c2d3-e4f5-7a6b-8c9d-0e1f2a3b4c5d] Specialist result for the leader';
+    const plain = 'Run the routine step again and report the full result to the board, please.';
+    const codex = (...texts: string[]) => jsonl(texts.map(text => ({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } })));
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex(`${inbox}\nowner typed later`), inbox)).toBe(true);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex(inbox, 'a newer prompt'), inbox)).toBe(true);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex(`${plain}\nmore`), plain)).toBe(false);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex(plain, 'a newer prompt'), plain)).toBe(false);
+    expect(transcriptContainsPrompt('codex-rollout-jsonl', codex('a newer prompt', plain), plain)).toBe(true);
   });
 });
