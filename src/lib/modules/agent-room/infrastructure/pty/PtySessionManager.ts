@@ -792,8 +792,8 @@ export class PtySessionManager {
 
   /**
    * Visible-terminal input retains its own writer. Once an automatic paste
-   * starts, owner keys stay in memory until its exact receipt, or an explicit
-   * Ctrl+C takeover. Emitting Enter alone never makes the composer safe.
+   * starts, owner keys stay separate until its Enter has settled. An absent
+   * receipt never retains later owner input.
    */
   writeHumanInput(id: string, data: string, options: { imagePaste?: boolean; source?: TerminalInputSource } = {}): void {
     const session = this.requireSession(id);
@@ -1849,6 +1849,11 @@ export class PtySessionManager {
           if (session.exited || this.sessions.get(session.id) !== session) return;
           session.deferredHumanInput.shift();
           try {
+            // This body was replayed as a burst. A starved Codex can read it
+            // together with Enter despite the delay, just like an automatic
+            // paste. Close that key stream before restoring the owner's Enter.
+            const flush = automaticSubmitPrefix(session.provider, session.conptySubmitGuard);
+            if (flush) this.write(session.id, flush);
             this.writeHumanInputNow(session, chunk.data, chunk.imagePaste);
             this.flushDeferredHumanInput(session);
           } catch {

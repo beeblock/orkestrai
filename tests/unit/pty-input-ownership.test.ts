@@ -171,6 +171,26 @@ describe('human input while an automatic message owns the composer', () => {
     expect(f.manager.automaticDeliverySubmittedAt(f.session.id)).toBe(at);
   });
 
+  it.each([
+    ['codex', 'native', true], ['codex', 'wsl', true],
+    ['claude', 'native', true], ['claude', 'wsl', true], ['codex', 'native', false],
+  ] as const)('submits a restored %s/%s owner line with the appropriate key-stream boundary (%s)', async (provider, runtime, conpty) => {
+    const f = await fixture(provider, runtime);
+    (f.manager as any).sessions.get(f.session.id).conptySubmitGuard = conpty;
+    f.manager.writeHumanInput(f.session.id, 'owner line\r');
+    await vi.advanceTimersByTimeAsync(600); await f.delivery.submitted;
+    f.accept();
+    await vi.advanceTimersByTimeAsync(4000);
+    const bodyAt = f.writes.indexOf('owner line');
+    expect(bodyAt).toBeGreaterThan(-1);
+    // Codex's key-stream parser can read the restored body and Enter together
+    // regardless of the write delay. End the burst before replaying that Enter.
+    expect(f.writes.slice(bodyAt)).toEqual(provider === 'codex' && conpty
+      ? ['owner line', '\x05', '\r'] : ['owner line', '\r']);
+    expect(f.manager.get(f.session.id)?.inputDeferred).toBe(false);
+    expect(f.writes.filter(data => data.includes(f.text))).toHaveLength(1);
+  });
+
   it('lets Ctrl+C cancel an owner Enter that is waiting behind its restored body', async () => {
     const f = await fixture();
     f.manager.writeHumanInput(f.session.id, 'owner line\r');

@@ -18,6 +18,7 @@ pt-BR, English, and Spanish translations.
 - Never retry a routine step whose terminal delivery is uncertain: it may already be in the CLI, and a retry would type it again. A released wait also reads the receipt once more before reporting the delivery as uncertain.
 - Space out transcript matching for batches that stay unconfirmed: every sweep for two minutes, then every 15 seconds, then every minute. Accumulated unconfirmed deliveries had re-read large transcripts every 1.5 seconds and slowed the whole server to 20–280 second API responses on native Windows.
 - Update the Canvas queued-message notice: Codex and Claude take a message mid-turn as soon as they can, rather than when the turn ends.
+- When replaying owner text held during an automatic paste on Windows or WSL, close the Codex key-stream burst before restoring its Enter. A delay alone could leave the owner's line visible but unsent when Codex read the keys late.
 
 ## 0.53.0 - 2026-11-08
 
