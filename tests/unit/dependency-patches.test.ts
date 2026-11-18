@@ -109,7 +109,7 @@ describe('release dependency security', () => {
     }
   });
 
-  it('removes the vulnerable dependency chains without bypassing npm audit', () => {
+  it('removes the vulnerable dependency chains and keeps the explicit audit guard', () => {
     const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
     expect(manifest.devDependencies['patch-package']).toBeUndefined();
@@ -117,7 +117,7 @@ describe('release dependency security', () => {
       expect(Object.keys(lock.packages).some((path) => path.endsWith(`/node_modules/${name}`) || path === `node_modules/${name}`)).toBe(false);
     }
     expect(manifest.overrides).toMatchObject({ 'global-agent': '4.1.3', 'http-cache-semantics': '4.3.0', joi: '17.13.9', 'source-map-js': '1.2.2' });
-    expect(fs.readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('npm audit --audit-level=moderate');
+    expect(fs.readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('node scripts/audit-reviewed-guards.mjs --allow-reviewed-guards');
   });
 
   it('preserves the legacy Electron downloader proxy bootstrap API', () => {

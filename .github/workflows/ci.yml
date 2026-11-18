@@ -161,7 +161,7 @@ jobs:
           npm ci --no-audit --no-fund
 
       - name: Audit all dependencies
-        run: npm audit --audit-level=moderate
+        run: node scripts/audit-reviewed-guards.mjs --allow-reviewed-guards
 
       - name: Install Electron runtime libraries for offline OCR tests
         run: |

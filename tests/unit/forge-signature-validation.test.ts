@@ -6,7 +6,7 @@ import { verifyForgeSignatureValidation } from '../fixtures/forge-signature-vali
 const require = createRequire(import.meta.url);
 
 describe('RSA signature validation', () => {
-  it('pins the reviewed source and archive integrity without weakening the audit gate', () => {
+  it('pins the reviewed source and archive integrity while retaining the explicit audit guard', () => {
     const archive = 'https://codeload.github.com/digitalbazaar/forge/tar.gz/ceba34402e329f0365134f23fe19898756527d65';
     const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
     const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
@@ -16,7 +16,7 @@ describe('RSA signature validation', () => {
     const metadata = packages[0][1] as { resolved: string; integrity: string };
     expect(metadata.resolved).toBe(archive);
     expect(metadata.integrity).toBe('sha512-fYRFJf8ymZNJ5jGirbhuwAljM0rSJG03cldnAK3sJRMDHSS+tG8DPosOB8he34pGWMylVCMOtnIxUEepsME2Rg==');
-    expect(readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('npm audit --audit-level=moderate');
+    expect(readFileSync('.github/workflows/ci.yml', 'utf8')).toContain('node scripts/audit-reviewed-guards.mjs --allow-reviewed-guards');
     expect(manifest.scripts.postinstall).toContain('scripts/apply-dependency-patches.mjs');
     expect(readFileSync('patches/node-forge+1.4.1-0.patch', 'utf8')).toContain("(('parameters' in capture) && capture.parameters !== '')");
     expect(readFileSync('tests/fixtures/packaged-startup-upgrade.mjs', 'utf8')).toContain("verifyForgeSignatureValidation(require('node-forge'))");

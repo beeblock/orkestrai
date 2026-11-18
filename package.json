@@ -51,8 +51,8 @@
     "@inlang/paraglide-js": "^2.29.1",
     "@lucide/svelte": "^1.61.0",
     "@playwright/test": "^1.64.1",
-    "@sveltejs/adapter-node": "^5.5.7",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-node": "^5.5.8",
+    "@sveltejs/kit": "^2.70.4",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/table-core": "^8.21.3",
@@ -137,7 +137,7 @@
     "electron-updater": "^6.8.11",
     "embla-carousel-svelte": "^8.6.0",
     "exceljs": "4.4.0",
-    "fast-xml-parser": "^5.11.2",
+    "fast-xml-parser": "^5.12.1",
     "formsnap": "^2.1.0",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "2.0.2",
@@ -217,7 +217,8 @@
     "zod": "$zod",
     "follow-redirects": "1.16.2",
     "glob@^10.0.0": "14.0.2",
-    "minimatch": "11.0.1"
+    "minimatch": "11.0.1",
+    "picomatch": "https://codeload.github.com/micromatch/picomatch/tar.gz/3222059ac27492d9c0147fee5c65f751bbd851ab"
   },
   "main": "electron/main.cjs",
   "workspaces": [

@@ -14,6 +14,11 @@ pt-BR, English, and Spanish translations.
 - Let leaders and specialists remove generated or imported image nodes through `canvas_remove_images` and `orkestrai canvas remove-images`. The authenticated native bridge accepts up to 50 images per assigned task, using each image revision from `canvas_list`, without Computer permissions.
 - Validate every removal target before deleting any node or edge, reject stale, missing, non-image or cross-workspace targets atomically, preserve original files and image workflows, and update the Canvas live. Document the operation in the agent instructions, three translated guides and a guided tour.
 
+### Security
+
+- Update SvelteKit 2.70.4, adapter-node 5.5.8 and fast-xml-parser 5.12.1. Pin the reviewed Picomatch repeated-wildcard fix by immutable source and archive integrity, with bounded adversarial tests.
+- Keep experimental SvelteKit remote functions explicitly disabled. The release-specific audit guard reports the two unreachable remote-function advisories and the source-patched Picomatch advisory separately; it rejects any other moderate-or-higher finding, changed security source, remote module or expired exception. This exception requires owner approval and expires after November 25, 2026 or any version other than 0.54.0.
+
 ## 0.53.1 - 2026-11-09
 
 ### Fixed

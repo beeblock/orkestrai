@@ -688,3 +688,40 @@ For a Windows-only QA build from a branch, dispatch Release Desktop with
 source without requiring a main CI artifact, runs the Windows gates and uploads
 QA artifacts. It skips all macOS/Linux jobs and publication. Real tag releases
 retain the complete CI and all-platform publication requirements.
+
+## Proposed 0.54.0 security guards (owner decision pending)
+
+The November 18 audit blocks the image-cleanup release before tests/build.
+Compatible updates use SvelteKit 2.70.4, adapter-node 5.5.8 and fast-xml-parser
+5.12.1. The Picomatch fix is pinned to the reviewed, not yet merged,
+[source commit](https://github.com/micromatch/picomatch/pull/262)
+`3222059ac27492d9c0147fee5c65f751bbd851ab`; package-lock retains the archive
+SHA-512 and the audit guard verifies the parser SHA-256. Isolated bounded
+regression tests exercise native/Windows/Bash matching and amplification inputs.
+
+Raw npm audit still reports GHSA-fc5q-39xc-vjpf for that package version. It also
+reports GHSA-3r8g-jcqq-3p5j and GHSA-6cf5-gc4q-fm3x for SvelteKit remote
+functions. Those functions are explicitly disabled, absent from app source and
+not required by the native bridge. The official fix needs SvelteKit 3, whose
+breaking changes and Svelar peer incompatibility require a separate migration.
+
+Only with owner approval, the proposed `audit-reviewed-guards.mjs` replaces the
+previous no-exception gate for version 0.54.0 through November 25, 2026. It runs
+the complete npm audit, rejects other moderate/high/critical advisories, invalid
+audit output and missing evidence, and separately reports these three guarded
+findings. It fails if remote functions are enabled, a remote module appears,
+the exact framework/source changes, the version changes or the deadline passes.
+A successful guarded gate is not a claim of zero npm vulnerabilities or of an
+official upstream Picomatch release. Do not merge or publish this proposal
+until the pending owner decision authorizes the exception.
+
+Validation before the owner decision: the Canvas feature passed 201 focused
+tests and all 138 Windows native Canvas/CLI/MCP tests in CI run
+[44293415699](https://github.com/beeblock/orkestrai/actions/runs/44293415699).
+That run stopped at raw npm audit before production compilation. The isolated
+local suite later passed 3,318 tests with two missing-dependency failures; both
+passed after repairing only private dependency copies, in a 66-test focused
+run that also covered the nine new security-guard tests. The site catalog has
+nine passing tests. A local build capped at 8 GB exhausted the Node heap;
+release compilation must be validated in CI, without increasing pressure on
+the owner's Mac. No 0.54.0 tag or desktop release exists yet.
