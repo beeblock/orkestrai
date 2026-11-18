@@ -79,6 +79,7 @@ describe('servidor MCP (orkestrai mcp)', () => {
     const nodeId = '00000000-0000-7000-8000-000000000003';
     const cases = [
       ['canvas_update_layout', { updates: [{ nodeId, revision: 'a'.repeat(64), changes: { y: 800 } }] }],
+      ['canvas_remove_images', { images: [{ nodeId, revision: 'c'.repeat(64) }] }],
       ['shell_create', { nodeId, title: 'Client', startupCommand: 'npm run dev' }],
       ['shell_update', { nodeId, revision: 'b'.repeat(64), changes: { startupCommand: 'npm run start' } }],
       ['portal_configure_hosts', { nodeId, revision: 'b'.repeat(64), allowedHosts: ['localhost', '127.0.0.1', '[::1]'] }],

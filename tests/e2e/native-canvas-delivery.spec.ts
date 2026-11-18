@@ -80,7 +80,7 @@ test('an authenticated terminal corrects and restarts its existing Shell through
       import { readFile, writeFile } from 'node:fs/promises';
       import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'packages/orkestrai-cli/src/cli.js')).href)};
       while (!(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8').catch(() => ''))) await new Promise(resolve => setTimeout(resolve, 50));
-      const { taskId, portalNodeId } = JSON.parse(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8'));
+      const { taskId, portalNodeId, imageNodeIds } = JSON.parse(await readFile(${JSON.stringify(join(root, 'input.json'))}, 'utf8'));
       const output = [];
       async function command(action, input) {
         output.length = 0;
@@ -98,7 +98,12 @@ test('an authenticated terminal corrects and restarts its existing Shell through
         await run(['canvas', 'list'], { cwd: ${JSON.stringify(root)}, out: value => output.push(value) });
         const portal = JSON.parse(output.join('')).nodes.find(node => node.nodeId === portalNodeId).portal;
         const configured = await command('portal-hosts', { nodeId: portalNodeId, revision: portal.revision, allowedHosts: ['localhost', '127.0.0.1', '[::1]'] });
-        await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ created, updated, restarted, retryRejected, configured }));
+        output.length = 0;
+        await run(['canvas', 'list'], { cwd: ${JSON.stringify(root)}, out: value => output.push(value) });
+        const images = JSON.parse(output.join('')).nodes.filter(node => imageNodeIds.includes(node.nodeId))
+          .map(node => ({ nodeId: node.nodeId, revision: node.image.revision }));
+        const removed = await command('remove-images', { images });
+        await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ created, updated, restarted, retryRejected, configured, removed }));
       } catch (error) { await writeFile(${JSON.stringify(resultPath)}, JSON.stringify({ error: error.message })); }
       // Keep the terminal identity alive until the assertion and cleanup.
       setInterval(() => {}, 1000);
@@ -122,10 +127,24 @@ test('an authenticated terminal corrects and restarts its existing Shell through
     const task = (await taskResponse.json()).data;
     const portal = (await (await request.post(`${base}/nodes`, { data: { type: 'portal', title: 'Host configuration',
       payload: { url: 'http://127.0.0.1:3000', portalAllowedHosts: ['127.0.0.1'], portalAllowBackground: false } } })).json()).data;
-    await writeFile(join(root, 'input.json'), JSON.stringify({ taskId: task.id, portalNodeId: portal.id }));
+    const sourceImage = join(root, 'source image.png');
+    await writeFile(sourceImage, 'retained original bytes');
+    const imageNodeIds: string[] = [];
+    for (const title of ['Discarded image A', 'Discarded image B']) {
+      const result = await request.post(`${base}/nodes`, { data: { type: 'image', title, payload: { path: 'source image.png' } } });
+      expect(result.ok(), await result.text()).toBe(true);
+      imageNodeIds.push((await result.json()).data.id);
+    }
+    await writeFile(join(root, 'input.json'), JSON.stringify({ taskId: task.id, portalNodeId: portal.id, imageNodeIds }));
     await expect.poll(async () => Boolean(await readFile(resultPath, 'utf8').catch(() => ''))).toBe(true);
     const result = JSON.parse(await readFile(resultPath, 'utf8'));
     expect(result.error).toBeUndefined();
+    expect(result.removed.filesPreserved).toBe(true);
+    expect(result.removed.removedNodeIds).toHaveLength(2);
+    expect([...result.removed.removedNodeIds].sort()).toEqual([...imageNodeIds].sort());
+    const liveNodes = (await (await request.get(`${base}/nodes`)).json()).data;
+    expect(liveNodes.filter((node: any) => imageNodeIds.includes(node.id))).toHaveLength(0);
+    expect(await readFile(sourceImage, 'utf8')).toBe('retained original bytes');
     expect(result.updated).toMatchObject({ updated: true, restartRequired: false });
     expect(result.restarted).toMatchObject({ startupSubmitted: true });
     expect(result.retryRejected).toBe(true);

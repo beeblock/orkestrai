@@ -278,6 +278,7 @@ describe('orkestrai CLI', () => {
     expect(requests.at(-1)).toMatchObject({ method: 'GET', url: '/api/agent-room/bridge/canvas?includeArchived=true&limit=20' });
     for (const [command, input, expected] of [
       ['layout', { updates: [{ nodeId, revision: 'a'.repeat(64), changes: { x: 1, y: 2 } }] }, 'layout'],
+      ['remove-images', { images: [{ nodeId, revision: 'c'.repeat(64) }] }, 'remove_images'],
       ['shell', { nodeId, title: 'Dev server', startupCommand: 'npm run dev', start: false }, 'create_shell'],
       ['shell-update', { nodeId, revision: 'b'.repeat(64), changes: { startupCommand: 'npm run start' } }, 'update_shell'],
       ['portal-hosts', { nodeId, revision: 'b'.repeat(64), allowedHosts: ['localhost', '127.0.0.1', '[::1]'] }, 'configure_portal_hosts'],

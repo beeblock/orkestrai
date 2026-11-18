@@ -7,6 +7,13 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.54.0 - 2026-11-18
+
+### Added
+
+- Let leaders and specialists remove generated or imported image nodes through `canvas_remove_images` and `orkestrai canvas remove-images`. The authenticated native bridge accepts up to 50 images per assigned task, using each image revision from `canvas_list`, without Computer permissions.
+- Validate every removal target before deleting any node or edge, reject stale, missing, non-image or cross-workspace targets atomically, preserve original files and image workflows, and update the Canvas live. Document the operation in the agent instructions, three translated guides and a guided tour.
+
 ## 0.53.1 - 2026-11-09
 
 ### Fixed

@@ -16,6 +16,9 @@ export const bridgeCanvasCommandSchema = z.object({
     z.object({ command: z.literal('layout'), updates: z.array(z.object({
       nodeId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/), changes: canvasLayoutChangesSchema,
     }).strict()).min(1).max(50) }).strict(),
+    z.object({ command: z.literal('remove_images'), images: z.array(z.object({
+      nodeId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/),
+    }).strict()).min(1).max(50) }).strict(),
     z.object({ command: z.literal('archive_note'), nodeId: z.string().uuid() }).strict(),
     z.object({ command: z.literal('restore_note'), nodeId: z.string().uuid() }).strict(),
     z.object({ command: z.literal('configure_portal_hosts'), nodeId: z.string().uuid(), revision: z.string().regex(/^[a-f0-9]{64}$/),

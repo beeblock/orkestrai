@@ -5,11 +5,13 @@ import { uuidv7 } from '@beeblock/svelar/support';
 import type { CanvasNode, TerminalNodePayload } from '../../domain/types.js';
 import type { BridgeCanvasCommandDto } from '../dto/BridgeCanvasCommandDto.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
+import { AgentBoardTask } from '../../domain/models/AgentBoardTask.js';
 import { defaultShell } from '../../infrastructure/workspace.js';
 import { findFreeCanvasPosition } from '../../domain/canvas-placement.js';
 import { agentSessionService } from './AgentSessionService.js';
 import { workspacePathService } from './WorkspacePathService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
+import { attentionService } from './AttentionService.js';
 import { normalizeSavedTerminalCommands } from '../../domain/terminal-commands.js';
 import { ptySessionManager } from '../../infrastructure/pty/PtySessionManager.js';
 import { portalGrantsAgent, portalProfileFromPayload } from '../../contracts/schemas/managed-portal.schema.js';
@@ -53,6 +55,14 @@ export function canvasNodeSummary(node: CanvasNode) {
     revision: createHash('sha256').update(JSON.stringify([node.id, layout])).digest('hex') };
 }
 
+/** Image removal revisions include identity/content and layout, never raw payloads. */
+export function canvasImageSummary(node: CanvasNode) {
+  if (node.type !== 'image') return undefined;
+  return { revision: createHmac('sha256', revisionKey).update(JSON.stringify([
+    canvasNodeSummary(node), node.workspaceId, node.payload,
+  ])).digest('hex') };
+}
+
 export class BridgeCanvasService {
   async list(workspaceId: string, input: { includeArchived: boolean; afterId?: string; limit: number }) {
     const activeIds = input.includeArchived
@@ -60,7 +70,7 @@ export class BridgeCanvasService {
     const nodes = (await workspaceRepository.listNodes(workspaceId, undefined, input.includeArchived))
       .sort((left, right) => left.id.localeCompare(right.id)).filter(node => !input.afterId || node.id > input.afterId);
     const page = nodes.slice(0, input.limit);
-    return { nodes: page.map(node => ({ ...canvasNodeSummary(node), shell: shellSummary(node), portal: portalConfigurationSummary(node), archived: activeIds ? !activeIds.has(node.id) : false })),
+    return { nodes: page.map(node => ({ ...canvasNodeSummary(node), image: canvasImageSummary(node), shell: shellSummary(node), portal: portalConfigurationSummary(node), archived: activeIds ? !activeIds.has(node.id) : false })),
       nextCursor: nodes.length > page.length ? page.at(-1)!.id : null };
   }
 
@@ -70,7 +80,8 @@ export class BridgeCanvasService {
     const input = dto.request.input;
     const request = { workspaceId, capability: input.command === 'configure_portal_hosts' ? 'browser' as const : 'tool' as const, operation: `canvas.${input.command}`,
       actorType: 'agent' as const, actorId, mutation: true,
-      input: { command: input.command, taskId: dto.request.taskId }, auditOutput: () => ({ command: input.command }) };
+      input: { command: input.command, taskId: dto.request.taskId, ...(input.command === 'remove_images' ? { images: input.images } : {}) },
+      auditOutput: () => ({ command: input.command, ...(input.command === 'remove_images' ? { nodeIds: input.images.map(image => image.nodeId) } : {}) }) };
     return autonomyPolicyService.execute(request, async () => {
       let result: unknown;
       if (input.command === 'layout') {
@@ -86,6 +97,37 @@ export class BridgeCanvasService {
           return Promise.all(nodes.map(async (node, index) => canvasNodeSummary(
             (await workspaceRepository.updateNode(node.id, input.updates[index].changes))!)));
         });
+      } else if (input.command === 'remove_images') {
+        if (new Set(input.images.map(image => image.nodeId)).size !== input.images.length) throw new Error('Duplicate image nodes in removal batch.');
+        result = await Connection.transaction(async () => {
+          const currentWorkspace = await workspaceRepository.getWorkspace(workspaceId);
+          const actor = await workspaceRepository.getActiveNode(workspaceId, actorId);
+          const task = await AgentBoardTask.query().where('workspace_id', workspaceId).where('id', dto.request.taskId).first();
+          if (!currentWorkspace || currentWorkspace.suspendedAt || actor?.type !== 'terminal' || !task
+            || task.getAttribute('assignee_node_id') !== actorId || task.getAttribute('archived_at')
+            || ['todo', 'done'].includes(String(task.getAttribute('status')))) {
+            throw new Error('Image removal requires an available workspace and an active task assigned to this agent.');
+          }
+          const nodes = await Promise.all(input.images.map(async image => {
+            const node = await this.requireNode(workspaceId, image.nodeId);
+            if (node.type !== 'image' || !(await workspaceRepository.getActiveNode(workspaceId, node.id))) {
+              throw new Error('Only active image nodes can be removed through this operation.');
+            }
+            if (canvasImageSummary(node)!.revision !== image.revision) {
+              throw new Error('Canvas image changed. Read canvas_list and retry with image.revision.');
+            }
+            return node;
+          }));
+          // A pause, policy edit or task reassignment while waiting for the
+          // database writer must take effect before the first deletion.
+          const decision = await autonomyPolicyService.decide(request);
+          if (decision.status !== 'allowed') throw new Error(decision.reason);
+          // Validate the complete batch before deleting any node or edge.
+          // This only removes database nodes/edges, never workspace image files.
+          for (const node of nodes) await workspaceRepository.deleteNode(node.id);
+          return { removedNodeIds: nodes.map(node => node.id), filesPreserved: true };
+        });
+        for (const image of input.images) await attentionService.resolveNode(workspaceId, image.nodeId).catch(() => 0);
       } else if (input.command === 'archive_note' || input.command === 'restore_note') {
         const node = await this.requireNode(workspaceId, input.nodeId);
         if (node.type !== 'note') throw new Error('Only notes can be archived or restored through this operation.');

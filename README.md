@@ -46,10 +46,13 @@ A direct task authorizes its normal implementation, validation and integration
 until delivery, unless your instructions, notes or configured policy explicitly
 restrict it. A blocker on one card does not pause other executable cards.
 Leaders and specialists can use `canvas_list`, `canvas_update_layout`,
-`shell_create`, `shell_update`, `shell_restart`, `note_archive` and `note_restore` (or `orkestrai canvas`) to
+`shell_create`, `shell_update`, `shell_restart`, `canvas_remove_images`, `note_archive` and `note_restore` (or `orkestrai canvas`) to
 operate the native canvas without Computer permissions. Layout updates require
-current revisions; note archival preserves content and references. Shell
-configuration edits preserve other settings without interrupting a live process;
+current revisions; note archival preserves content and references.
+Image cleanup uses `image.revision` from `canvas_list`, validates up to 50
+selected image nodes atomically and preserves original files and workflows.
+Use `orkestrai canvas remove-images --task <id> --input <json>` through the CLI.
+Shell configuration edits preserve other settings without interrupting a live process;
 explicit restart checks both configuration and session identity. New Portals do
 not invent host restrictions; existing owner host lists remain exact, including IPv6.
 For task-authorized host configuration, read `portal.revision` from `canvas_list`
