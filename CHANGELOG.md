@@ -17,7 +17,7 @@ pt-BR, English, and Spanish translations.
 ### Security
 
 - Update SvelteKit 2.70.4, adapter-node 5.5.8 and fast-xml-parser 5.12.1. Pin the reviewed Picomatch repeated-wildcard fix by immutable source and archive integrity, with bounded adversarial tests.
-- Keep experimental SvelteKit remote functions explicitly disabled. The release-specific audit guard reports the two unreachable remote-function advisories and the source-patched Picomatch advisory separately; it rejects any other moderate-or-higher finding, changed security source, remote module or expired exception. This exception requires owner approval and expires after November 25, 2026 or any version other than 0.54.0.
+- Keep experimental SvelteKit remote functions explicitly disabled. The release-specific audit guard reports the two unreachable remote-function advisories and the source-patched Picomatch advisory separately; it rejects any other moderate-or-higher finding, changed security source, remote module or expired exception. The owner-approved exception expires after November 25, 2026 or any version other than 0.54.0.
 
 ## 0.53.1 - 2026-11-09
 
