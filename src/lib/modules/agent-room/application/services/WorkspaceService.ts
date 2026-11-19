@@ -285,6 +285,8 @@ export class WorkspaceService {
   async remove(id: string) {
     const { creativeMediaRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeMediaRepository.js');
     if (await creativeMediaRepository.activeForWorkspace(id)) throw new Error('creative_workflow_busy');
+    const { whatsappBotService } = await import('./WhatsAppBotService.js');
+    await whatsappBotService.disconnectWorkspace(id);
     await codeGraphIndexService.pauseWorkspace(id);
     ptySessionManager.killWorkspace(id);
     await controlCenterService.settleWorkspace(id);
@@ -828,7 +830,13 @@ export class WorkspaceService {
       const { creativeStoryboardRepository } = await import('$lib/modules/creative-media/infrastructure/repositories/CreativeStoryboardRepository.js');
       await creativeStoryboardRepository.remove(workspaceId, nodeId);
     }
-    await Connection.transaction(() => workspaceRepository.deleteNode(nodeId));
+    await Connection.transaction(async () => {
+      if (node.type === 'terminal' && (node.payload as TerminalNodePayload).personalBot) {
+        const { personalBotGroupRepository } = await import('../../infrastructure/repositories/PersonalBotGroupRepository.js');
+        await personalBotGroupRepository.detachMember(workspaceId, nodeId);
+      }
+      await workspaceRepository.deleteNode(nodeId);
+    });
     await attentionService.resolveNode(workspaceId, nodeId).catch(() => 0);
     if (node.type === 'terminal') {
       const workspace = await workspaceRepository.getWorkspace(workspaceId);

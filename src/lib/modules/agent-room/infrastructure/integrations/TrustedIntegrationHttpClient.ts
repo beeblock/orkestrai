@@ -6,10 +6,10 @@ export type TrustedHttpResponse = {
   json: unknown;
 };
 
-async function readBounded(response: Response, maximum = MAX_RESPONSE_BYTES): Promise<string> {
+async function readBytes(response: Response, maximum = MAX_RESPONSE_BYTES): Promise<Uint8Array> {
   const declared = Number(response.headers.get('content-length') ?? 0);
   if (declared > maximum) throw new Error('Integration response exceeded the allowed size.');
-  if (!response.body) return '';
+  if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -33,7 +33,7 @@ async function readBounded(response: Response, maximum = MAX_RESPONSE_BYTES): Pr
     result.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(result);
+  return result;
 }
 
 export class TrustedIntegrationHttpClient {
@@ -48,7 +48,7 @@ export class TrustedIntegrationHttpClient {
     if (response.status >= 300 && response.status < 400) {
       throw new Error('Integration redirects are not followed.');
     }
-    const text = await readBounded(response);
+    const text = new TextDecoder().decode(await readBytes(response));
     let json: unknown = {};
     if (text) {
       try {
@@ -58,5 +58,12 @@ export class TrustedIntegrationHttpClient {
       }
     }
     return { status: response.status, ok: response.ok, json };
+  }
+
+  /** Callers supply only provider-validated HTTPS hosts, never arbitrary message URLs. */
+  async download(url: string, init: RequestInit = {}, maximum = 10 * 1024 * 1024): Promise<Uint8Array> {
+    const response = await this.fetchFn(url, { ...init, redirect: 'manual', signal: init.signal ?? AbortSignal.timeout(30_000) });
+    if (!response.ok || response.status >= 300) throw new Error('Integration attachment download failed.');
+    return readBytes(response, maximum);
   }
 }

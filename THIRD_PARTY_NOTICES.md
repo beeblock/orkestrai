@@ -234,3 +234,15 @@ The complete, reproducible dependency graph is recorded in `package-lock.json`.
 Installed npm packages include their own license files and notices. Direct
 runtime dependencies are predominantly licensed under MIT, Apache-2.0, ISC,
 MPL-2.0, or the Unlicense; each package remains governed by its own terms.
+
+
+## Personal bot transport dependencies
+
+- `@anthropic-ai/claude-agent-sdk` 0.3.328: official Anthropic SDK, subject to the
+  package's linked Anthropic Commercial Terms and Privacy Policy. The integration
+  invokes the owner's unchanged installed Claude Code; platform-specific bundled
+  CLI binaries are excluded from desktop packages.
+- `@whiskeysockets/baileys` 7.0.0-rc14 and `whatsapp-rust-bridge` 0.5.4: MIT;
+  upstream license files are retained with packaged dependencies.
+- Openbot was inspected only as an architectural reference. Its PolyForm
+  Noncommercial source was not copied or distributed.

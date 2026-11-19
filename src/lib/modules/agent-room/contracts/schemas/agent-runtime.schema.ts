@@ -3,6 +3,7 @@ import { z } from 'zod/v3';
 export const agentRuntimeModeSchema = z.enum(['interactive', 'on_demand', 'persistent']);
 
 export const updateAgentRuntimeSchema = z.object({
+  transport: z.enum(['terminal', 'structured']).optional(),
   mode: agentRuntimeModeSchema,
   idleMinutes: z.number().int().min(5).max(720),
   concurrency: z.number().int().min(1).max(8),
@@ -14,6 +15,8 @@ export const agentRuntimeActionSchema = z.object({
 });
 
 export const agentRuntimeSchema = updateAgentRuntimeSchema.extend({
+  transport: z.enum(['terminal', 'structured']).default('terminal'),
+  structuredAvailable: z.boolean().default(false),
   workspaceId: z.string().uuid(),
   nodeId: z.string().uuid(),
   sessionId: z.string().uuid().nullable(),

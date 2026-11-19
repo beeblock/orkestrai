@@ -70,6 +70,7 @@ export type InboundChannelMessage = {
   senderName: string;
   text: string;
   at: string;
+  attachments?: Array<{ id: string; name: string; mimeType: string; size: number; url?: string }>;
 };
 
 // Slack pages hold 50 messages; a poll reads at most this many pages before advancing.
@@ -279,7 +280,7 @@ export class IntegrationExecutionService {
   ): Promise<Record<string, unknown>> {
     if (integration.type === 'github') return this.github(integration, action);
     if (integration.type === 'gmail') return this.gmail(workspaceId, integration, action, input, context, beforeDispatch);
-    if (integration.type === 'slack') return this.slack(workspaceId, integration, action, input, beforeDispatch);
+    if (integration.type === 'slack') return this.slack(workspaceId, integration, action, input, context, beforeDispatch);
     if (integration.type === 'telegram') return this.telegram(workspaceId, integration, action, input, context, beforeDispatch);
     if (integration.type === 'whatsapp') return this.whatsapp(workspaceId, integration, action, input, beforeDispatch);
     return this.webhook(workspaceId, integration, input, beforeDispatch);
@@ -335,8 +336,28 @@ export class IntegrationExecutionService {
     return { id: data.id ?? record(data.message).id ?? null, threadId: data.threadId ?? record(data.message).threadId ?? null, labelIds: stringArray(data.labelIds, 100) };
   }
 
-  private async slack(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
+  private async slack(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const token = await this.secret(integration, action, 'slack.com');
+    if (action === 'slack.send_file') {
+      const channel = input.channel ?? integration.config.defaultChannel;
+      if (!channel) throw new Error('Slack channel is required.');
+      const file = await this.workspaceFile(workspaceId, String(input.path), context, typeof input.sha256 === 'string' ? input.sha256 : undefined);
+      const allocation = await this.http.request('https://slack.com/api/files.getUploadURLExternal', { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ filename: String(input.filename), length: String(file.length) }) });
+      const allocated = record(allocation.json);
+      if (!allocation.ok || allocated.ok !== true || typeof allocated.upload_url !== 'string' || !/^[A-Z0-9]{1,120}$/.test(String(allocated.file_id ?? ''))) throw new Error('Slack file allocation failed.');
+      const url = new URL(allocated.upload_url);
+      if (url.protocol !== 'https:' || url.hostname !== 'files.slack.com' || url.username || url.password || url.port || !url.pathname.startsWith('/upload/')) throw new Error('Slack returned an unsupported upload endpoint.');
+      await beforeDispatch();
+      const uploaded = await this.http.request(url.href, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Uint8Array(file) });
+      if (!uploaded.ok) throw new Error('Slack file upload failed.');
+      const complete = await this.http.request('https://slack.com/api/files.completeUploadExternal', { method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ files: [{ id: allocated.file_id, title: input.filename }], channel_id: channel, initial_comment: input.caption }) });
+      if (!complete.ok || record(complete.json).ok !== true) throw new Error('Slack file publication unconfirmed.');
+      return { id: allocated.file_id, channel };
+    }
     let endpoint = 'auth.test';
     let method = 'POST';
     let body: Record<string, unknown> = {};
@@ -365,15 +386,15 @@ export class IntegrationExecutionService {
 
   private async telegram(workspaceId: string, integration: AutomationIntegration, action: string, input: Record<string, unknown>, context: ExecutionContext, beforeDispatch: () => Promise<void>): Promise<Record<string, unknown>> {
     const token = await this.secret(integration, action, 'api.telegram.org');
-    const method = action === 'telegram.send_message' ? 'sendMessage' : action === 'telegram.send_document' ? 'sendDocument' : 'getUpdates';
+    const method = action === 'telegram.send_message' ? 'sendMessage' : action === 'telegram.send_photo' ? 'sendPhoto' : action === 'telegram.send_document' ? 'sendDocument' : 'getUpdates';
     let body: BodyInit | undefined;
     const headers: Record<string, string> = { accept: 'application/json' };
-    if (action === 'telegram.send_document') {
-      const file = await this.workspaceFile(workspaceId, String(input.path), context);
+    if (action === 'telegram.send_document' || action === 'telegram.send_photo') {
+      const file = await this.workspaceFile(workspaceId, String(input.path), context, typeof input.sha256 === 'string' ? input.sha256 : undefined);
       const form = new FormData();
       form.set('chat_id', String(input.chatId ?? integration.config.defaultChatId ?? ''));
       form.set('caption', String(input.caption ?? ''));
-      form.set('document', new Blob([new Uint8Array(file)]), String(input.filename ?? basename(String(input.path))));
+      form.set(action === 'telegram.send_photo' ? 'photo' : 'document', new Blob([new Uint8Array(file)]), String(input.filename ?? basename(String(input.path))));
       body = form;
     } else if (action === 'telegram.send_message') {
       headers['content-type'] = 'application/json';
@@ -490,7 +511,7 @@ export class IntegrationExecutionService {
     return base64Url(parts.join('\r\n'));
   }
 
-  private async workspaceFile(workspaceId: string, candidate: string, context: ExecutionContext): Promise<Buffer> {
+  private async workspaceFile(workspaceId: string, candidate: string, context: ExecutionContext, expectedSha256?: string): Promise<Buffer> {
     const workspace = await workspaceRepository.getWorkspace(workspaceId);
     if (!workspace) throw new Error('Workspace not found.');
     if (!candidate || isAbsolute(candidate)) throw new Error('Attachment path must be relative to the workspace.');
@@ -511,7 +532,16 @@ export class IntegrationExecutionService {
       actorId: context.actorId ?? null,
       filesystem: { path: canonical, permission: 'read', size: metadata.size },
       certainty: 'semantic',
-    }, async () => readFile(canonical));
+    }, async () => {
+      const bytes = await readFile(canonical);
+      if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error('Attachment exceeds the 24 MB integration limit.');
+      if (expectedSha256 && createHash('sha256').update(bytes).digest('hex') !== expectedSha256) throw new Error('BOT_ARTIFACT_CHANGED');
+      return bytes;
+    });
+  }
+
+  async readBotArtifact(workspaceId: string, nodeId: string, path: string, expectedSha256?: string): Promise<Buffer> {
+    return this.workspaceFile(workspaceId, path, { actorType: 'agent', actorId: nodeId }, expectedSha256);
   }
 
   private safeGmailMessage(data: Record<string, unknown>): Record<string, unknown> {
@@ -574,7 +604,13 @@ export class IntegrationExecutionService {
         const message = record(update.message);
         const text = String(message.text ?? message.caption ?? '').trim();
         const from = record(message.from);
-        if (!text || from.is_bot === true) continue;
+        const document = record(message.document);
+        const photos = Array.isArray(message.photo) ? message.photo.slice(0, 20).map(record) : [];
+        const photo = photos.filter(item => Number(item.file_size) <= 10 * 1024 * 1024).at(-1);
+        const media = document.file_id ? document : photo;
+        const attachments = media && typeof media.file_id === 'string' && /^[A-Za-z0-9_-]{1,512}$/.test(media.file_id)
+          ? [{ id: media.file_id, name: String(document.file_name ?? 'photo.jpg').slice(0, 180), mimeType: String(document.mime_type ?? 'image/jpeg').slice(0, 120), size: Number(media.file_size ?? 0) }] : [];
+        if ((!text && !attachments.length) || from.is_bot === true) continue;
         const handle = typeof from.username === 'string' && from.username.trim() ? from.username.trim().slice(0, 120) : null;
         const displayName = [from.first_name, from.last_name].filter((part) => typeof part === 'string' && part.trim()).join(' ');
         messages.push({
@@ -584,6 +620,7 @@ export class IntegrationExecutionService {
           senderHandle: handle,
           senderName: (handle ? `@${handle}` : displayName || String(from.id ?? '')).slice(0, 120),
           text: text.slice(0, 8_000),
+          ...(attachments.length ? { attachments } : {}),
           at: typeof message.date === 'number' ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
         });
       }
@@ -623,7 +660,10 @@ export class IntegrationExecutionService {
           if (newest === null || Number(ts) > Number(newest)) newest = ts;
           if (earliest === null || Number(ts) < Number(earliest)) earliest = ts;
           const text = String(message.text ?? '').trim();
-          if (!text || message.bot_id || message.subtype) continue;
+          const attachments = (Array.isArray(message.files) ? message.files : []).slice(0, 6).map(record)
+            .filter(file => typeof file.id === 'string' && /^[A-Z0-9]{1,120}$/.test(file.id) && typeof file.url_private_download === 'string')
+            .map(file => ({ id: String(file.id), name: String(file.name ?? 'attachment').slice(0, 180), mimeType: String(file.mimetype ?? 'application/octet-stream').slice(0, 120), size: Number(file.size ?? 0), url: String(file.url_private_download).slice(0, 4096) }));
+          if ((!text && !attachments.length) || message.bot_id || (message.subtype && message.subtype !== 'file_share')) continue;
           messages.push({
             externalId: ts,
             chatId: input.chatId,
@@ -631,6 +671,7 @@ export class IntegrationExecutionService {
             senderHandle: null,
             senderName: String(message.user ?? '').slice(0, 120),
             text: text.slice(0, 8_000),
+            ...(attachments.length ? { attachments } : {}),
             at: new Date(Number(ts) * 1000 || Date.now()).toISOString(),
           });
         }
@@ -652,6 +693,27 @@ export class IntegrationExecutionService {
       return { messages: messages.sort((a, b) => Number(a.externalId) - Number(b.externalId)), cursor: next };
     }
     throw new Error('This integration cannot deliver messages to an agent.');
+  }
+
+  async downloadInbound(workspaceId: string, integrationId: string, attachment: NonNullable<InboundChannelMessage['attachments']>[number]): Promise<Uint8Array> {
+    const integration = await this.requireIntegration(workspaceId, integrationId);
+    if (!integration.enabled || integration.status !== 'connected' || !Number.isFinite(attachment.size) || attachment.size < 0 || attachment.size > 10 * 1024 * 1024) throw new Error('CHANNEL_ATTACHMENT_UNAVAILABLE');
+    if (integration.type === 'telegram') {
+      if (!integration.permissions.includes('telegram.read_updates') || !/^[A-Za-z0-9_-]{1,512}$/.test(attachment.id)) throw new Error('CHANNEL_ATTACHMENT_DENIED');
+      const token = await this.secret(integration, 'telegram.read_updates', 'api.telegram.org');
+      const response = await this.http.request(`https://api.telegram.org/bot${token}/getFile`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file_id: attachment.id }) });
+      const data = record(response.json), result = record(data.result), path = result.file_path;
+      if (!response.ok || data.ok !== true || typeof path !== 'string' || !/^[A-Za-z0-9_/-]+\.[A-Za-z0-9]{1,12}$/.test(path) || path.split('/').includes('..') || Number(result.file_size ?? 0) > 10 * 1024 * 1024) throw new Error('CHANNEL_ATTACHMENT_UNAVAILABLE');
+      return this.http.download(`https://api.telegram.org/file/bot${token}/${path}`);
+    }
+    if (integration.type === 'slack') {
+      if (!integration.permissions.includes('slack.read_messages')) throw new Error('CHANNEL_ATTACHMENT_DENIED');
+      const url = new URL(attachment.url ?? '');
+      if (url.protocol !== 'https:' || url.hostname !== 'files.slack.com' || url.port || url.username || url.password || !url.pathname.startsWith('/files-pri/')) throw new Error('CHANNEL_ATTACHMENT_DENIED');
+      const token = await this.secret(integration, 'slack.read_messages', 'slack.com');
+      return this.http.download(url.href, { headers: { authorization: `Bearer ${token}` } });
+    }
+    throw new Error('CHANNEL_ATTACHMENT_DENIED');
   }
 
   private safeTelegramUpdate(update: Record<string, unknown>): Record<string, unknown> {

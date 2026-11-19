@@ -227,11 +227,16 @@ describe('release artifact validation', () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'orkestrai-release-source-'));
     temporaryDirectories.push(directory);
     const output = path.join(directory, 'output.txt');
-    const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+    const version = '1.2.3';
+    writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ version }));
+    const git = (args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    expect(git(['init', '-q']).status).toBe(0);
+    expect(git(['add', 'package.json']).status).toBe(0);
+    expect(git(['-c', 'user.name=Release test', '-c', 'user.email=release-test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'test: create immutable release fixture']).status).toBe(0);
     const invoke = (source: string, buildOnly: string, windowsOnly = 'false') => {
       writeFileSync(output, '');
       return spawnSync('bash', ['-c', script], {
-        encoding: 'utf8', timeout: 10_000,
+        cwd: directory, encoding: 'utf8', timeout: 10_000,
         env: { ...process.env, RELEASE_TAG: source, BUILD_ONLY: buildOnly, WINDOWS_ONLY: windowsOnly, GITHUB_OUTPUT: output },
       });
     };

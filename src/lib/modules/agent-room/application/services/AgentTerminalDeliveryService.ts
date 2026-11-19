@@ -5,6 +5,11 @@ import { findPromptInTranscript, latestTurnBoundary } from '../../infrastructure
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 
 type DeliverAgentMessageInput = {
+  conversationKey?: string;
+  messageId?: string;
+  onCompleted?: (text: string) => Promise<void>;
+  onAccepted?: () => Promise<void>;
+  onFailed?: (error: unknown) => Promise<void>;
   workspaceId: string;
   nodeId: string;
   sessionId: string;
@@ -30,6 +35,23 @@ export class AgentTerminalDeliveryService {
   async deliver(input: DeliverAgentMessageInput): Promise<void> {
     if (input.isStillRelevant && !(await input.isStillRelevant(true))) {
       throw new ObsoletePtyDeliveryError();
+    }
+    if (ptySessionManager.get(input.sessionId)?.transport === 'structured') {
+      const receipt = await ptySessionManager.submitStructured(input.sessionId, input.message,
+        input.conversationKey ?? 'owner', input.messageId ?? crypto.randomUUID(), input.signal);
+      input.onSubmitted?.({ sessionId: input.sessionId, length: 0 });
+      const accepted = Promise.resolve().then(() => input.onAccepted?.());
+      void receipt.completion.then(async text => {
+        // A temporarily unavailable DB must not discard a model result that
+        // already exists. Each callback is idempotent and persists before fan-out.
+        await accepted.catch(() => undefined);
+        for (let attempt = 0; ; attempt++) {
+          try { await input.onCompleted?.(text); return; }
+          catch (error) { if (attempt >= 9) throw error; await new Promise(resolve => setTimeout(resolve, 2_000)); }
+        }
+      }).catch(error => input.onFailed?.(error)).catch(() => undefined);
+      await accepted;
+      return;
     }
     const startedAt = Date.now();
     const submission: { at: number | null; boundaryCheckedAt: number; unverified?: Error } = { at: null, boundaryCheckedAt: 0 };

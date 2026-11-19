@@ -19,6 +19,7 @@ export function isTeamAgentNode(node: FloorScopedNode): boolean {
  * only that floor's nodes.
  */
 export function shownOnFloor(node: FloorScopedNode, floorId: string | null): boolean {
+  if (node.type === 'terminal' && (node.payload as { personalBot?: boolean } | undefined)?.personalBot) return false;
   const own = node.floorId ?? null;
   return own === floorId || (floorId === null && visitsGroundFloor(node));
 }

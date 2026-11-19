@@ -55,6 +55,7 @@ export type InboxKind =
   | 'handoff'
   | 'owner'
   | 'owner_question'
+  | 'bot_group'
   | 'owner_copy';
 
 export type InboxEnqueueInput = {
@@ -156,6 +157,15 @@ function asString(value: unknown): string | null {
  */
 export const taskRecoveryKey = (taskId: string, sessionId: string): string => `task-recovery:${taskId}:${sessionId}`;
 
+function structuredConversation(envelope: AgentMessageEnvelope): string {
+  if (typeof envelope.metadata.returnConversationKey === 'string') return envelope.kind === 'ask'
+    ? `delegated:${envelope.fromNodeId}:${envelope.metadata.returnConversationKey}` : envelope.metadata.returnConversationKey;
+  if (typeof envelope.metadata.bindingId === 'string') return `binding:${envelope.metadata.bindingId}`;
+  if (typeof envelope.metadata.botGroupId === 'string') return `group:${envelope.metadata.botGroupId}`;
+  if (envelope.fromNodeId) return `peer:${envelope.fromNodeId}`;
+  return 'owner';
+}
+
 export class AgentInboxService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private sweeping = false;
@@ -175,6 +185,8 @@ export class AgentInboxService {
   private readonly restoreAttempts = new Map<string, number>();
   private activeDeliveries = 0;
   private forwardsPending = false;
+  private structuredPending = false;
+  private structuredSignals = 0;
   /** Bumped by every pending-forward signal, so a recovery pass never clears a newer one. */
   private forwardSignals = 0;
   private readonly deliverySlots: Array<() => void> = [];
@@ -222,6 +234,7 @@ export class AgentInboxService {
     this.activeDeliveries = 0;
     for (const next of this.deliverySlots.splice(0)) next();
     this.restored = false;
+    this.structuredPending = false;
   }
 
   /** One dispatcher pass: deliveries, confirmations and reply capture. */
@@ -315,6 +328,12 @@ export class AgentInboxService {
    * are delivered: the dispatcher will not type them into the terminal again.
    */
   async claim(workspaceId: string, nodeId: string, limit = CLAIM_LIMIT): Promise<{ items: InboxItem[]; remaining: number }> {
+    // Native input and completion are correlated by turn and conversation.
+    // Appending another chat through a tool-response header would bypass that
+    // correlation and could leak its reply into the active conversation.
+    if (ptySessionManager.listLiveForNode(workspaceId, nodeId).some(session => session.transport === 'structured')) {
+      return { items: [], remaining: 0 };
+    }
     return this.withLock(nodeId, async () => {
       const queued = await controlCenterRepository.inboxCandidates(workspaceId, nodeId, Math.max(1, Math.min(limit, 50)));
       const titles = await this.titles(workspaceId);
@@ -526,6 +545,11 @@ export class AgentInboxService {
         replyTo: envelope.id,
         dedupKey: `reply-forward:${envelope.id}`,
         taskId: asString(envelope.metadata.taskId),
+        metadata: {
+          ...(typeof envelope.metadata.botGroupId === 'string' ? { botGroupId: envelope.metadata.botGroupId } : {}),
+          ...(typeof envelope.metadata.returnChannelMessageId === 'string' ? { returnChannelMessageId: envelope.metadata.returnChannelMessageId } : {}),
+          ...(typeof envelope.metadata.returnConversationKey === 'string' ? { returnConversationKey: envelope.metadata.returnConversationKey } : {}),
+        },
         content: `Resposta de ${titles.get(envelope.toNodeId) ?? 'agente'} à sua mensagem ${envelope.id}: ${envelope.reply ?? ''}`,
       });
     }
@@ -567,6 +591,50 @@ export class AgentInboxService {
     this.forwardSignals += 1;
     this.forwardsPending = true;
     this.ensureTimer();
+  }
+
+  /** Provider finals are durable before any reply forwarding or channel fan-out. */
+  private async keepStructuredResult(batch: BatchTracking, text: string, batchId: string): Promise<void> {
+    if (!text.trim()) return;
+    const { botResultRepository } = await import('../../infrastructure/repositories/BotResultRepository.js');
+    await botResultRepository.save({ id: batchId, workspaceId: batch.workspaceId, nodeId: batch.nodeId, messageIds: batch.messageIds, body: text });
+    this.structuredSignals++;
+    this.structuredPending = true;
+    this.ensureTimer();
+    await this.recoverStructuredResults();
+  }
+
+  private async recoverStructuredResults(): Promise<void> {
+    const { botResultRepository } = await import('../../infrastructure/repositories/BotResultRepository.js');
+    const generation = this.structuredSignals;
+    let after: string | null = null, failed = false;
+    try {
+      for (;;) {
+        const page = await botResultRepository.pending(after);
+        for (const result of page) await this.withLock(`structured-result:${result.id}`, async () => {
+          const node = await workspaceRepository.getNode(result.nodeId);
+          if (node?.workspaceId === result.workspaceId) {
+            for (const envelope of await controlCenterRepository.findEnvelopes(result.messageIds)) {
+              if (envelope.workspaceId !== result.workspaceId || envelope.toNodeId !== result.nodeId) continue;
+              if (envelope.kind === 'ask' && hasReplyRecipient(envelope)) await this.routeReply(envelope.id, result.body, { source: 'provider' });
+              else {
+                const source = envelope.kind === 'owner' || typeof envelope.metadata.botGroupId === 'string'
+                  ? envelope.metadata.channelMessageId ?? envelope.metadata.returnChannelMessageId : envelope.kind === 'reply' ? envelope.metadata.returnChannelMessageId : null;
+                if (typeof source === 'string') {
+                  const { channelService } = await import('./ChannelService.js');
+                  await channelService.postStructuredResult(result.workspaceId, result.nodeId, source, result.body, result.id);
+                }
+              }
+            }
+          }
+          await botResultRepository.finish(result.id);
+        }).catch(() => { failed = true; });
+        if (page.length < 50) break;
+        after = page[page.length - 1].id;
+      }
+    } catch { failed = true; }
+    if (failed || generation !== this.structuredSignals) { this.structuredPending = true; this.ensureTimer(); }
+    else this.structuredPending = false;
   }
 
   // -- Dispatcher ---------------------------------------------------------------
@@ -624,11 +692,13 @@ export class AgentInboxService {
       }
     }
     await this.recoverForwards();
+    await this.recoverStructuredResults();
     // Questions delivered before a restart still get their answer captured
     // from the transcript; the prompt is never typed again.
     const watchHorizon = new Date(Date.now() - REPLY_WATCH_MS).toISOString();
     const delivered = new Map<string, AgentMessageEnvelope[]>();
     for (const envelope of await controlCenterRepository.awaitingReplies(watchHorizon)) {
+      if (envelope.metadata.confirmation === 'provider') continue;
       const batchId = asString(envelope.metadata.batchId) ?? envelope.id;
       delivered.set(batchId, [...(delivered.get(batchId) ?? []), envelope]);
     }
@@ -670,7 +740,8 @@ export class AgentInboxService {
       }));
       await Promise.all([...this.replyWatches].map(([batchId, tracking]) => this.checkReply(batchId, tracking).catch(() => undefined)));
       if (this.forwardsPending) await this.recoverForwards();
-      if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size && !this.forwardsPending) this.stop();
+      if (this.structuredPending) await this.recoverStructuredResults();
+      if (!this.recipients.size && !this.confirmations.size && !this.replyWatches.size && !this.waiters.size && !this.forwardsPending && !this.structuredPending) this.stop();
     } catch {
       console.warn('[agent-inbox] Sweep failed; the next tick retries.');
     } finally {
@@ -783,7 +854,7 @@ export class AgentInboxService {
     if (!idle && !ptySessionManager.canAcceptAutomaticMessageDuringTurn(session.id)) return null;
     const context = await this.transcriptContext(workspaceId, nodeId, session);
     let duringTurn = !idle;
-    if (context.provider) {
+    if (context.provider && session.transport !== 'structured') {
       const boundary = await latestTurnBoundary(context.provider, context.cwd, context.agentSessionId, context.options);
       if (boundary.ready === false) {
         if (!ptySessionManager.canAcceptAutomaticMessageDuringTurn(session.id)) return null;
@@ -800,6 +871,7 @@ export class AgentInboxService {
       // One external return address per structured prompt. A combined final
       // answer must never be copied into another external caller's receipt.
       if (batch.length && (savedExternalReply(batch[0].metadata) || savedExternalReply(envelope.metadata))) break;
+      if (session.transport === 'structured' && batch.length) break;
       if (duringTurn && TURN_BOUNDARY_KINDS.has(envelope.kind)) continue;
       if (batch.length >= MAX_BATCH_ITEMS) break;
       if (batch.length && chars + envelope.content.length > MAX_BATCH_CHARS) break;
@@ -809,11 +881,11 @@ export class AgentInboxService {
     }
     if (!batch.length) return null;
     const titles = await this.titles(workspaceId);
-    const ownerBatch = batch.every(envelope => envelope.kind === 'owner' && !['telegram', 'slack'].includes(String(envelope.metadata.via)));
+    const ownerBatch = batch.every(envelope => envelope.kind === 'owner' && !['telegram', 'slack', 'whatsapp'].includes(String(envelope.metadata.via)));
     const learningContext = ownerBatch
       ? await agentLearningService.contextForDelivery(workspaceId, nodeId, batch.map(envelope => envelope.content).join('\n').slice(0, 4000))
       : '';
-    const prompt = [this.compose(batch, titles), learningContext].filter(Boolean).join('\n\n');
+    const prompt = [this.compose(batch, titles, session.transport === 'structured'), learningContext].filter(Boolean).join('\n\n');
     const batchId = uuidv7();
     const since = Date.now();
     for (const [index, envelope] of batch.entries()) {
@@ -851,6 +923,18 @@ export class AgentInboxService {
     let submissionWrites: Promise<unknown> = Promise.resolve();
     try {
       await agentTerminalDeliveryService.deliver({
+        conversationKey: structuredConversation(batch.envelopes[0]),
+        messageId: batch.batchId,
+        onAccepted: async () => {
+          await submissionWrites;
+          await this.markDelivered(batch.batchId, batch, 'provider');
+        },
+        onCompleted: text => this.keepStructuredResult(batch, text, batch.batchId),
+        onFailed: async () => {
+          await controlCenterService.recordActivity({ workspaceId: batch.workspaceId, nodeId: batch.nodeId,
+            state: 'error', action: 'system:structured_turn_failed', category: 'system', verb: 'failed',
+            sourceType: 'structured_agent', sourceId: batch.batchId });
+        },
         workspaceId: batch.workspaceId,
         nodeId: batch.nodeId,
         sessionId: batch.sessionId,
@@ -874,8 +958,9 @@ export class AgentInboxService {
         },
       });
       await submissionWrites;
-      const verified = batch.context.provider && hasAgentAdapter(batch.context.provider) && getAgentAdapter(batch.context.provider).sessionStorage;
-      await this.markDelivered(batch.batchId, batch, verified ? 'transcript' : 'unverified');
+      const verified = ptySessionManager.get(batch.sessionId)?.transport === 'structured'
+        || batch.context.provider && hasAgentAdapter(batch.context.provider) && getAgentAdapter(batch.context.provider).sessionStorage;
+      await this.markDelivered(batch.batchId, batch, ptySessionManager.get(batch.sessionId)?.transport === 'structured' ? 'provider' : verified ? 'transcript' : 'unverified');
     } catch (error) {
       await submissionWrites.catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
@@ -910,7 +995,7 @@ export class AgentInboxService {
     }
   }
 
-  private async markDelivered(batchId: string, batch: BatchTracking, confirmation: 'transcript' | 'unverified' = 'transcript'): Promise<void> {
+  private async markDelivered(batchId: string, batch: BatchTracking, confirmation: 'transcript' | 'provider' | 'unverified' = 'transcript'): Promise<void> {
     this.confirmations.delete(batchId);
     const envelopes: AgentMessageEnvelope[] = [];
     for (const messageId of batch.messageIds) {
@@ -918,11 +1003,11 @@ export class AgentInboxService {
       if (!current || current.state !== 'sent') continue;
       const delivered = await controlCenterService.recordInboxTransition(messageId, {
         state: 'delivered',
-        metadata: { ...current.metadata, unconfirmed: confirmation === 'unverified', confirmation, via: 'terminal' },
+        metadata: { ...current.metadata, unconfirmed: confirmation === 'unverified', confirmation, via: confirmation === 'provider' ? 'structured' : 'terminal' },
       });
       if (delivered) {
         envelopes.push(delivered);
-        if (typeof delivered.metadata.executionId === 'string') await taskExecutionRepository.accepted(delivered.metadata.executionId, confirmation === 'transcript');
+        if (typeof delivered.metadata.executionId === 'string') await taskExecutionRepository.accepted(delivered.metadata.executionId, confirmation !== 'unverified');
         await controlCenterService.recordActivity({
           workspaceId: delivered.workspaceId,
           nodeId: delivered.toNodeId,
@@ -943,7 +1028,7 @@ export class AgentInboxService {
     }
     // Only questions from agents expect an automatic answer. Replies,
     // handoffs and notices never do, which rules out reply ping-pong.
-    if (envelopes.some((envelope) => envelope.kind === 'ask' && hasReplyRecipient(envelope))) {
+    if (confirmation !== 'provider' && envelopes.some((envelope) => envelope.kind === 'ask' && hasReplyRecipient(envelope))) {
       this.replyWatches.set(batchId, { ...batch, deadline: Date.now() + REPLY_WATCH_MS });
       this.ensureTimer();
     }
@@ -951,6 +1036,10 @@ export class AgentInboxService {
 
   private async checkConfirmation(batchId: string, tracking: BatchTracking): Promise<void> {
     const session = ptySessionManager.get(tracking.sessionId);
+    if (session?.transport === 'structured' && ptySessionManager.structuredReceipt(tracking.sessionId, batchId)) {
+      await this.markDelivered(batchId, tracking, 'provider');
+      return;
+    }
     // Ctrl+C or replacement can remove the PTY after the provider saved the
     // prompt. Consult the saved conversation before deciding to send again.
     const context = await this.transcriptContext(tracking.workspaceId, tracking.nodeId, session);
@@ -1209,7 +1298,8 @@ export class AgentInboxService {
     return `${marker} Mensagem de ${from}${taskId ? ` (tarefa ${taskId})` : ''}: ${envelope.content}`;
   }
 
-  private compose(batch: AgentMessageEnvelope[], titles: Map<string, string>): string {
+  private compose(batch: AgentMessageEnvelope[], titles: Map<string, string>, structured = false): string {
+    if (structured) return `${this.itemPrompt(batch[0], titles)}\n\nFinal-answer delivery is automatic to this exact conversation. Do not post or reply the final answer again. Other native inbox messages are delivered as separate turns; do not poll inbox waiting for another chat.`;
     const asks = batch.filter((envelope) => envelope.kind === 'ask' && hasReplyRecipient(envelope));
     let footer = asks.length
       ? ` -- Para responder a uma pergunta: orkestrai reply ${asks.length === 1 ? asks[0].id : '<messageId>'} "<resposta>" (tool MCP reply). Sua resposta final neste turno também é encaminhada. Não peça reenvio.`

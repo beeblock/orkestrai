@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MessagesSquare, Network, SquareTerminal } from '@lucide/svelte';
+  import { Bot, MessagesSquare, Network, SquareTerminal } from '@lucide/svelte';
   import type { WorkspaceMode } from './workspace-context.svelte.js';
   import * as m from '$lib/paraglide/messages.js';
 
@@ -13,11 +13,11 @@
     nodeId?: string | null;
   } = $props();
 
-  function target(path: '/canvas' | '/terminal' | '/chat'): string {
+  function target(path: '/canvas' | '/terminal' | '/chat' | '/bots'): string {
     const params = new URLSearchParams();
     if (workspaceId) params.set('workspace', workspaceId);
-    let targetNodeId = nodeId;
-    if (!targetNodeId && active === 'canvas' && workspaceId && typeof location !== 'undefined') {
+    let targetNodeId = active === 'bots' || path === '/bots' ? null : nodeId;
+    if (!targetNodeId && active === 'canvas' && path !== '/bots' && workspaceId && typeof location !== 'undefined') {
       const current = new URLSearchParams(location.search);
       if (current.get('workspace') === workspaceId) targetNodeId = current.get('node');
     }
@@ -71,5 +71,14 @@
   >
     <MessagesSquare size={13} strokeWidth={1.8} class={active === 'chat' ? 'text-[var(--app-accent)]' : ''} />
     <span>{m['workspace_view.chat']()}</span>
+  </a>
+  <a
+    href={target('/bots')}
+    data-sveltekit-preload-data="hover"
+    class={itemClass(active === 'bots')}
+    aria-current={active === 'bots' ? 'page' : undefined}
+  >
+    <Bot size={13} strokeWidth={1.8} class={active === 'bots' ? 'text-[var(--app-accent)]' : ''} />
+    <span>{m['bots.title']()}</span>
   </a>
 </nav>

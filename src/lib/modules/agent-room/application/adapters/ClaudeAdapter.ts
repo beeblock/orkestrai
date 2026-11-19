@@ -2,6 +2,7 @@ import type { AgentModelOption, AgentRunRequest, ModelEffort } from '../../domai
 import { probeCliVersion } from '../../infrastructure/agent-path.js';
 import type { AgentAdapter, AgentCommandSpec, AgentDetection, ParsedAgentOutput } from './types.js';
 import { hasJsonLineError, parseJsonLinesOutput } from './json-lines.js';
+import { createClaudeStructuredProcess } from './claude-structured.js';
 
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -13,6 +14,8 @@ const CLAUDE_MODEL_OPTIONS: AgentModelOption[] = [
 ];
 
 export const claudeAdapter: AgentAdapter = {
+  createStructuredProcess: createClaudeStructuredProcess,
+  structuredTransportName: 'Claude Agent SDK',
   id: 'claude',
   displayName: 'Claude',
   supportsResume: false,

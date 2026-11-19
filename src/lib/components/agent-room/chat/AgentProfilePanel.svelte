@@ -24,6 +24,8 @@
     payload,
     onClose,
     onDirect,
+    embedded = false,
+    children,
   }: {
     workspaceId: string;
     nodeId: string;
@@ -31,6 +33,8 @@
     payload: TerminalNodePayload;
     onClose: () => void;
     onDirect: (nodeId: string) => void;
+    embedded?: boolean;
+    children?: import('svelte').Snippet;
   } = $props();
 
   let routineDraft = $state('');
@@ -65,6 +69,8 @@
 
   const status = $derived(agentStatus.agents[nodeId] ?? null);
   const activity = $derived(status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle');
+  const sleeping = $derived(embedded && payload.agentRuntimeMode === 'on_demand' && !status?.sessionAlive
+    && (!status || status.state === 'disconnected' || status.state === 'idle'));
   const since = $derived.by(() => {
     const parts = status ? elapsedParts(status.stateSince, statusClock.now) : null;
     return parts ? elapsedLabel(parts) : null;
@@ -122,21 +128,21 @@
   });
 </script>
 
-<aside class="profile" aria-label={m['chat.profile_label']({ name: title })}>
-  <header>
+<aside class="profile" class:embedded aria-label={m['chat.profile_label']({ name: title })}>
+  {#if !embedded}<header>
     <button type="button" class="close" onclick={onClose} aria-label={m['chat.profile_close']()}><X size={14} /></button>
-  </header>
+  </header>{/if}
   <div class="identity">
     <AgentAvatar {nodeId} {title} size={56} />
     <h2 class="headline">{title}</h2>
     {#if payload.role}<p class="role">{payload.role}</p>{/if}
-    <p class="status"><AgentGlyph tone={agentTone(activity)} label={agentStateLabel(activity)} /> {agentStateLabel(activity)}{#if since}{` · ${since}`}{/if}</p>
+    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
   </div>
-  <div class="actions">
+  {#if !embedded}<div class="actions">
     <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>
     <a href={`/canvas?${query}`}><Network size={13} />{m['workspace_view.canvas']()}</a>
     <a href={`/terminal?${query}`}><Focus size={13} />{m['node_quickbar.focus']()}</a>
-  </div>
+  </div>{/if}
   <dl class="facts">
     {#if payload.provider}
       <dt>{m['chat.profile_provider']()}</dt>
@@ -177,7 +183,8 @@
       <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
     </form>
   </section>
-  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} />
+  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} />
+  {@render children?.()}
   <section>
     <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>
     {#if memoryLoading}
@@ -196,6 +203,7 @@
 </aside>
 
 <style>
+  .profile.embedded { width: 100%; border-left: 0; padding: 0; overflow: visible; }
   .profile {
     width: 320px;
     flex: none;

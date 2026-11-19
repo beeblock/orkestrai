@@ -39,6 +39,7 @@ const globalRef = globalThis as unknown as {
   __orkestraiComputerObserver?: boolean;
   __orkestraiProfileAuthenticationKeys?: (providerId: string) => string[];
   __orkestraiValidateNodeProfile?: (workspaceId: string, nodeId: string, provider: string, profileId: string | null) => Promise<boolean>;
+  __orkestraiStructuredNodeSession?: (workspaceId: string, nodeId: string) => Promise<string | null>;
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
   __orkestraiPrepareWorkspaceBridge?: (workspaceId: string, nodeId?: string) => Promise<{ configPath: string } | void>;
@@ -49,6 +50,13 @@ globalRef.__orkestraiValidateNodeProfile = async (workspaceId, nodeId, provider,
   const payload = node?.payload as { provider?: string; profileId?: string | null } | undefined;
   return node?.workspaceId === workspaceId && node.type === 'terminal'
     && payload?.provider === provider && (payload.profileId ?? null) === profileId;
+};
+globalRef.__orkestraiStructuredNodeSession = async (workspaceId, nodeId) => {
+  const node = await workspaceRepository.getNode(nodeId);
+  if (node?.workspaceId !== workspaceId || node.type !== 'terminal') throw new Error('AGENT_NOT_FOUND');
+  if ((node.payload as TerminalNodePayload).agentTransport !== 'structured') return null;
+  const { agentSessionService } = await import('$lib/modules/agent-room/application/services/AgentSessionService.js');
+  return (await agentSessionService.ensure(workspaceId, nodeId)).sessionId;
 };
 globalRef.__orkestraiResolveProviderProfileEnv = (profileId, providerId, options) =>
   providerProfileService.resolveEnv(profileId, providerId, options);

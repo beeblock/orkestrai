@@ -14,13 +14,14 @@
   import { answersByQuestion, buildTimeline, mergeLoaded, upsertMessage } from './chat-timeline.js';
   import { directChannel, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { botMessageContent } from '../bots/bot-message-content.js';
 
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
    * messages as in Chat, without reading the terminal screen. With `voice`,
    * the microphone stays available alongside Send to continue a dictated draft.
    */
-  let { workspaceId, nodeId, title, voice = false }: { workspaceId: string; nodeId: string; title: string; voice?: boolean } = $props();
+  let { workspaceId, nodeId, title, voice = false, personalBot = false }: { workspaceId: string; nodeId: string; title: string; voice?: boolean; personalBot?: boolean } = $props();
 
   let messages = $state<ChannelMessage[]>([]);
   let draft = $state('');
@@ -126,7 +127,7 @@
               <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id).then((result) => result.delivered)} />
             {:else}
               <div class="bubble">
-                {#if message.meta.attachmentsOnly !== true}<MarkdownView content={message.body} compact {workspaceId} />{/if}
+                {#if message.meta.attachmentsOnly !== true}<MarkdownView content={personalBot ? botMessageContent(message.body, message.meta, workspaceId) : message.body} compact {workspaceId} />{/if}
                 {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
               </div>
             {/if}

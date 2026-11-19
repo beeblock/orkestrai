@@ -676,6 +676,15 @@ export type TerminalNodePayload = {
   shellStartupManaged?: boolean;
   /** Controls whether the provider process follows the UI or the background Core. */
   agentRuntimeMode?: 'interactive' | 'on_demand' | 'persistent';
+  /** Personal bots are presented in their own mode, independently of Chat. */
+  personalBot?: boolean;
+  botInstructions?: string;
+  agentTransport?: 'terminal' | 'structured';
+  /** Provider session identifiers only; never credentials or transcript bodies. */
+  structuredConversations?: Record<string, string>;
+  /** Explicit launch selection for opt-in structured personal bots. */
+  model?: string | null;
+  effort?: string | null;
   /** Idle time before an on-demand process is suspended, in minutes. */
   agentRuntimeIdleMinutes?: number;
   /** Maximum simultaneous durable runs targeting this agent. */

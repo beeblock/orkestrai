@@ -54,6 +54,9 @@ export type ParsedAgentOutput = {
  * sem tocar no runner.
  */
 export interface AgentAdapter {
+  /** Optional programmatic conversation transport; registered per provider. */
+  createStructuredProcess?: import('./structured-types.js').StructuredAgentFactory;
+  structuredTransportName?: string;
   /** The CLI is distributed with the app, without an external installer or login. */
   bundled?: boolean;
   /** Identificador unico do provider (ex.: 'claude', 'codex'). */

@@ -4,6 +4,7 @@ import { cliInvocation, probeCliVersion } from '../../infrastructure/agent-path.
 import type { AgentAdapter, AgentCommandSpec, AgentDetection, ParsedAgentOutput } from './types.js';
 import { parseJsonLinesOutput } from './json-lines.js';
 import { codexCompanion } from './codex-companion.js';
+import { createCodexStructuredProcess } from './codex-structured.js';
 
 const CODEX_FALLBACK_OPTIONS: AgentModelOption[] = [
   { provider: 'codex', value: 'gpt-5.5', label: 'GPT-5.5', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] },
@@ -15,6 +16,8 @@ function codexSandbox(request: AgentRunRequest) {
 }
 
 export const codexAdapter: AgentAdapter = {
+  createStructuredProcess: createCodexStructuredProcess,
+  structuredTransportName: 'Codex App Server',
   id: 'codex',
   displayName: 'Codex',
   supportsResume: false,

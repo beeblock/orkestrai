@@ -1,4 +1,4 @@
-export type WorkspaceMode = 'canvas' | 'terminals' | 'chat';
+export type WorkspaceMode = 'canvas' | 'terminals' | 'chat' | 'bots';
 
 /**
  * The workspace and node the current page is showing. Pages publish it so the

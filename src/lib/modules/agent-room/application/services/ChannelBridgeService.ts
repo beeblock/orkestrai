@@ -2,6 +2,11 @@ import { senderAllowed, type ChannelBinding } from '../../domain/channels.js';
 import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
 import { integrationExecutionService, type InboundChannelMessage } from './IntegrationExecutionService.js';
 import { channelService } from './ChannelService.js';
+import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
+import { directChannel } from '../../domain/channels.js';
+import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
+import { WorkspaceAttachmentDto, WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
+import type { WorkspaceAttachment } from '../../domain/types.js';
 
 const SLACK_INTERVAL_MS = 15_000;
 const RETRY_DELAY_MS = 60_000;
@@ -34,9 +39,13 @@ export class ChannelBridgeService {
 
   /** Starts loops for new bindings and stops loops whose bindings are gone or disabled. */
   async refresh(): Promise<void> {
+    // The new outbox has its own small indexed table; it never scans the
+    // existing conversation history or delays legacy polling loops.
+    void import('./BotExternalDeliveryService.js').then(({ botExternalDeliveryService }) => botExternalDeliveryService.flush()).catch(() => undefined);
     const bindings = await channelBindingRepository.listEnabled().catch(() => []);
     const wanted = new Map<string, Array<ChannelBinding & { cursor: string | null }>>();
     for (const binding of bindings) {
+      if (binding.kind === 'whatsapp') continue;
       const key = binding.kind === 'telegram' ? `telegram:${binding.integrationId}` : `slack:${binding.id}`;
       (wanted.get(key) ?? wanted.set(key, []).get(key)!).push(binding);
     }
@@ -48,6 +57,10 @@ export class ChannelBridgeService {
     }
     for (const [key, group] of wanted) {
       if (!this.loops.has(key)) this.loops.set(key, this.run(key, group[0]));
+    }
+    if (bindings.some(binding => binding.kind === 'whatsapp')) {
+      const { whatsappBotService } = await import('./WhatsAppBotService.js');
+      await whatsappBotService.restore();
     }
   }
 
@@ -112,13 +125,27 @@ export class ChannelBridgeService {
     for (const binding of group) {
       if (binding.externalChatId !== message.chatId) continue;
       if (!senderAllowed(binding, message.senderId, message.senderHandle)) continue;
-      await channelService.postExternal(binding.workspaceId, binding.nodeId, {
+      const previous = message.attachments?.length ? await channelRepository.findExternal(binding.workspaceId, directChannel(binding.nodeId), binding.id, message.externalId) : null;
+      const attachments: WorkspaceAttachment[] = Array.isArray(previous?.meta.attachments) ? previous.meta.attachments as WorkspaceAttachment[] : [];
+      const uploaded: WorkspaceAttachment[] = [];
+      try {
+        if (!previous) for (const media of message.attachments ?? []) {
+          const bytes = await integrationExecutionService.downloadInbound(binding.workspaceId, binding.integrationId, media);
+          const attachment = await workspaceAttachmentService.create(binding.workspaceId, WorkspaceAttachmentDto.fromFile(new File([new Uint8Array(bytes)], media.name, { type: media.mimeType })));
+          attachments.push(attachment); uploaded.push(attachment);
+        }
+        await channelService.postExternal(binding.workspaceId, binding.nodeId, {
         body: message.text,
         via: binding.kind,
         bindingId: binding.id,
         sender: message.senderName || message.senderId,
         externalId: message.externalId,
-      });
+        ...(attachments.length ? { attachments } : {}),
+        });
+      } finally {
+        // A committed message retains its files; only unclaimed uploads are removed.
+        for (const attachment of uploaded) await workspaceAttachmentService.remove(binding.workspaceId, WorkspaceAttachmentDeleteDto.fromAttachment(attachment)).catch(() => undefined);
+      }
       await channelBindingRepository.update(binding.id, { lastInboundAt: new Date().toISOString() });
     }
   }
@@ -132,6 +159,11 @@ export class ChannelBridgeService {
       .filter((binding) => binding.id === bindingId && binding.enabled);
     for (const binding of bindings) {
       try {
+        if (binding.kind === 'whatsapp') {
+          const { whatsappBotService } = await import('./WhatsAppBotService.js');
+          await whatsappBotService.send(workspaceId, nodeId, binding.id, body, messageId);
+          continue;
+        }
         await integrationExecutionService.execute(workspaceId, {
           integrationId: binding.integrationId,
           action: binding.kind === 'telegram' ? 'telegram.send_message' : 'slack.send_message',

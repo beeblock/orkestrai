@@ -92,7 +92,7 @@ export function postedImagePaths(body: string): Array<{ alt: string; path: strin
   return images;
 }
 
-export type ChannelBindingKind = 'telegram' | 'slack';
+export type ChannelBindingKind = 'telegram' | 'slack' | 'whatsapp';
 
 /** An agent listening to and answering in one external chat. */
 export type ChannelBinding = {

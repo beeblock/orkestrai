@@ -549,11 +549,14 @@ export class ControlCenterRepository {
    * one as `envelope:<id>`, after every channel message of the same instant,
    * so a page cursor on a channel message leaves out the asks of its instant.
    */
-  async listConversationEnvelopes(workspaceId: string, input: { before: string | null; beforeId?: string | null; limit: number }): Promise<AgentMessageEnvelopeData[]> {
+  async listConversationEnvelopes(workspaceId: string, input: { before: string | null; beforeId?: string | null; limit: number; excludeNodeIds?: string[] }): Promise<AgentMessageEnvelopeData[]> {
     const query = AgentMessageEnvelope.query()
       .where('workspace_id', workspaceId)
       .where('kind', 'ask')
       .whereNotNull('from_node_id');
+    if (input.excludeNodeIds?.length) {
+      query.whereNotIn('from_node_id', input.excludeNodeIds).whereNotIn('to_node_id', input.excludeNodeIds);
+    }
     const { before } = input;
     const envelopeId = input.beforeId?.startsWith('envelope:') ? input.beforeId.slice('envelope:'.length) : null;
     if (before && envelopeId) {

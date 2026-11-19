@@ -54,6 +54,9 @@ export function materializeInteractiveAgentCommand(
   payload: Record<string, unknown>,
   role: AgentRoleLaunchContext | null = null,
 ): { payload: Record<string, unknown>; changed: boolean } {
+  if (!role && payload.personalBot === true && typeof payload.botInstructions === 'string') {
+    role = { name: 'Personal bot', prompt: payload.botInstructions, instructionFile: '' };
+  }
   const provider = typeof payload.provider === 'string' ? payload.provider : null;
   if (!provider || !hasAgentAdapter(provider)) return { payload, changed: false };
   const adapter = getAgentAdapter(provider);

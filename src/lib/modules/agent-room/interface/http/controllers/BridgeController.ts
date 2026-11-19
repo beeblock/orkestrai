@@ -20,6 +20,8 @@ import { BridgeAskOwnerRequest } from '../requests/BridgeAskOwnerRequest.js';
 import { BridgeCloseQuestionRequest } from '../requests/BridgeCloseQuestionRequest.js';
 import { BridgeEscalateQuestionRequest } from '../requests/BridgeEscalateQuestionRequest.js';
 import { Controller } from '@beeblock/svelar/routing';
+import { personalBotService } from '../../../application/services/PersonalBotService.js';
+import { PersonalBotCommandDto } from '../../../application/dto/PersonalBotCommandDto.js';
 import { workspaceProjectContext } from '$lib/modules/agent-room/domain/runtime.js';
 import { AutonomyGatePendingError, autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 import { computerObservationService } from '$lib/modules/agent-room/application/services/ComputerObservationService.js';
@@ -124,6 +126,21 @@ import { bridgeCalendarOperationsSchema, bridgeChecklistOperationsSchema } from 
  * workspace, sem CSRF — ver hooks.server.ts csrfExcludePaths).
  */
 export class BridgeController extends Controller {
+  async bots(event: any) {
+    try {
+      const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
+      const actor = this.terminalAgent(event, workspace.id);
+      if (!actor) return this.json({ error: 'BOT_AGENT_IDENTITY_REQUIRED' }, 403);
+      if (event.request.method === 'GET') return this.json({ data: await personalBotService.list(workspace.id) });
+      const raw = z.object({ taskId: z.string().uuid().optional(), input: z.unknown() }).strict().parse(await event.request.json());
+      const dto = PersonalBotCommandDto.from(workspace.id, raw.input, actor);
+      if (!['group_post', 'group_send'].includes(dto.input.command)) {
+        const task = raw.taskId ? (await taskBoardService.list(workspace.id)).find(item => item.id === raw.taskId) : null;
+        if (!task || task.assigneeNodeId !== actor || task.status !== 'doing') return this.json({ error: 'BOT_ASSIGNED_TASK_REQUIRED' }, 403);
+      }
+      return this.json({ data: await personalBotService.execute(dto) });
+    } catch (error) { return this.errorResponse(error, 'PERSONAL_BOT_FAILED'); }
+  }
   constructor() {
     super();
     instrumentCodeGraphController(this, 'agent', ['codeGraphSearch', 'codeGraphSymbol', 'codeGraphGraph', 'codeGraphChanges', 'codeGraphContracts', 'codeGraphQuality', 'codeGraphSemantic', 'codeGraphEvidence', 'codeGraphContext', 'codeGraphOperations', 'codeGraphExplain', 'codeGraphLocate', 'codeGraphRevisions', 'codeGraphCompare']);

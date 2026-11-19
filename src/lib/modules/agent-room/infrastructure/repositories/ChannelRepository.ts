@@ -47,10 +47,16 @@ export type SaveChannelMessageInput = {
 };
 
 export class ChannelRepository {
-  async save(input: SaveChannelMessageInput): Promise<ChannelMessage> {
+  async findStructuredReply(workspaceId: string, nodeId: string, key: string, messageId: string): Promise<ChannelMessage | null> {
+    const message = await this.find(workspaceId, messageId);
+    if (!message) return null;
+    if (message.authorNodeId !== nodeId || message.meta.structuredReply !== key) throw new Error('BOT_REPLY_ID_CONFLICT');
+    return message;
+  }
+  async save(input: SaveChannelMessageInput, fixedId?: string): Promise<ChannelMessage> {
     const now = new Date().toISOString();
     const model = await AgentChannelMessage.create({
-      id: uuidv7(),
+      id: fixedId ?? uuidv7(),
       workspace_id: input.workspaceId,
       channel: input.channel,
       author_kind: input.authorKind,

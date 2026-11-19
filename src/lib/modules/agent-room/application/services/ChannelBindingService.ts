@@ -4,6 +4,7 @@ import { channelBindingRepository } from '../../infrastructure/repositories/Chan
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { channelBridgeService } from './ChannelBridgeService.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
+import { botConnectionRepository } from '../../infrastructure/repositories/BotConnectionRepository.js';
 
 /** Owner-managed links between an agent and an external chat. */
 export class ChannelBindingService {
@@ -15,6 +16,14 @@ export class ChannelBindingService {
     const node = await workspaceRepository.getNode(input.nodeId);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal' || !(node.payload as { provider?: string }).provider) {
       throw new Error('Agente não encontrado neste workspace.');
+    }
+    const linked = await botConnectionRepository.find(workspaceId, input.integrationId);
+    if (linked) {
+      if (!linked.enabled || !(node.payload as { personalBot?: boolean }).personalBot || !/^\d{5,22}(?:-\d{1,22})?@(?:s\.whatsapp\.net|g\.us|lid)$/.test(input.externalChatId)) throw new Error('BOT_CONNECTION_UNAVAILABLE');
+      const existing = await channelBindingRepository.list(workspaceId);
+      if (existing.some(binding => binding.integrationId === linked.id && binding.externalChatId === input.externalChatId)) throw new Error('BOT_CHAT_ALREADY_CONNECTED');
+      return channelBindingRepository.create({ workspaceId, nodeId: input.nodeId, integrationId: linked.id,
+        kind: 'whatsapp', externalChatId: input.externalChatId, allowedSenders: input.allowedSenders });
     }
     const integration = await integrationExecutionService.get(workspaceId, input.integrationId);
     if (integration.type !== 'telegram' && integration.type !== 'slack') throw new Error('Use uma integração do Telegram ou do Slack.');

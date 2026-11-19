@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handlePtyConnection, isAllowedPtyWsOrigin, MAX_PTY_SOCKET_BUFFER_BYTES, sendPtyFrame } from '$lib/modules/agent-room/infrastructure/pty/pty-ws.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
 import { agentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/AgentSessionTracker.ts';
+import { StructuredAgentProcess } from '$lib/modules/agent-room/infrastructure/pty/StructuredAgentProcess.ts';
 
 class FakeSocket extends EventEmitter {
   readonly OPEN = 1;
@@ -22,6 +23,20 @@ class FakeSocket extends EventEmitter {
 }
 
 describe('PTY WebSocket protocol', () => {
+  it('reattaches a native agent through the server-owned transport without starting a TUI', async () => {
+    const native = new StructuredAgentProcess({ run: async () => '', close() {} });
+    const session = ptySessionManager.create({ command: 'codex', cwd: tmpdir(), provider: 'codex', workspaceId: 'native-workspace', nodeId: 'native-node', structuredProcess: native });
+    const hook = vi.fn().mockResolvedValue(session.id);
+    vi.stubGlobal('__orkestraiStructuredNodeSession', hook);
+    const create = vi.spyOn(ptySessionManager, 'create');
+    const socket = new FakeSocket(); handlePtyConnection(socket as never);
+    try {
+      socket.emit('message', JSON.stringify({ type: 'create', command: 'codex', provider: 'codex', cwd: '/does-not-exist', workspaceId: 'native-workspace', nodeId: 'native-node' }));
+      await vi.waitFor(() => expect(socket.frames.some(frame => frame.type === 'created')).toBe(true));
+      expect(socket.frames.at(-1)).toMatchObject({ type: 'created', reused: true, session: { id: session.id, transport: 'structured' } });
+      expect(create).not.toHaveBeenCalled();
+    } finally { socket.emit('close'); ptySessionManager.kill(session.id); create.mockRestore(); vi.unstubAllGlobals(); }
+  });
   it('keeps both viewers connected and starts a healthy terminal while another directory probe is stalled', async () => {
     const dir = fs.mkdtempSync(join(tmpdir(), 'orkestrai-slow-pty-cwd-'));
     const slow = new FakeSocket(), healthy = new FakeSocket();

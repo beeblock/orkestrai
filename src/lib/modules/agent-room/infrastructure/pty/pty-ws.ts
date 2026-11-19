@@ -79,6 +79,7 @@ const wsGlobal = globalThis as unknown as {
   __orkestraiResolveProviderProfileEnv?: (profileId: string, providerId: string, options?: { runtimeHome?: string }) => Promise<Record<string, string>>;
   __orkestraiCanStartWorkspaceSession?: (workspaceId: string) => Promise<boolean>;
   __orkestraiPrepareWorkspaceBridge?: (workspaceId: string, nodeId?: string) => Promise<{ configPath: string } | void>;
+  __orkestraiStructuredNodeSession?: (workspaceId: string, nodeId: string) => Promise<string | null>;
 };
 const allSockets = (wsGlobal.__orkestraiWsClients ??= new Set<WebSocket>());
 const subscriptions = (wsGlobal.__orkestraiWsSubscriptions ??= new WeakMap());
@@ -199,6 +200,19 @@ export function handlePtyConnection(socket: WebSocket): void {
             if (wsGlobal.__orkestraiValidateNodeProfile && !(await wsGlobal.__orkestraiValidateNodeProfile(
               message.workspaceId, message.nodeId, message.provider, message.profileId ?? null))) {
               send({ type: 'error', code: 'AGENT_PROFILE_CHANGED', message: 'AGENT_PROFILE_CHANGED' });
+              break;
+            }
+          }
+
+          if (message.workspaceId && message.nodeId && wsGlobal.__orkestraiStructuredNodeSession) {
+            const id = await wsGlobal.__orkestraiStructuredNodeSession(message.workspaceId, message.nodeId);
+            if (id) {
+              const session = ptySessionManager.get(id);
+              if (!session || session.exited || session.transport !== 'structured'
+                || (session.provider ?? null) !== (message.provider ?? null)
+                || (session.profileId ?? null) !== (message.profileId ?? null)) throw new Error('AGENT_PROFILE_CHANGED');
+              const scrollback = attachSession(id, message.stream);
+              send({ type: 'created', session, scrollback, reused: true, streamingOutput: message.stream !== false });
               break;
             }
           }

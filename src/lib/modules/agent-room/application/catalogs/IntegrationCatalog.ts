@@ -64,6 +64,7 @@ export const integrationCatalog: Record<IntegrationType, IntegrationManifest> = 
     hosts: ['slack.com'],
     actions: [
       { id: 'slack.send_message', mutation: true, risk: 'external_publication', inputSchema: z.object({ channel: identifier.optional(), text: shortText, threadTs: identifier.optional() }).strict() },
+      { id: 'slack.send_file', mutation: true, risk: 'external_publication', inputSchema: z.object({ channel: identifier.optional(), path: attachment.shape.path, filename: attachment.shape.filename, sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(), caption: z.string().max(4_000).default('') }).strict() },
       { id: 'slack.list_channels', mutation: false, inputSchema: z.object({ limit: z.number().int().min(1).max(200).default(100), cursor: identifier.optional() }).strict() },
       { id: 'slack.read_messages', mutation: false, inputSchema: z.object({ channel: identifier, limit: z.number().int().min(1).max(100).default(25), cursor: identifier.optional() }).strict() },
     ],
@@ -73,7 +74,8 @@ export const integrationCatalog: Record<IntegrationType, IntegrationManifest> = 
     hosts: ['api.telegram.org'],
     actions: [
       { id: 'telegram.send_message', mutation: true, risk: 'external_publication', inputSchema: z.object({ chatId: identifier.optional(), text: shortText, disableNotification: z.boolean().default(false) }).strict() },
-      { id: 'telegram.send_document', mutation: true, risk: 'external_publication', inputSchema: z.object({ chatId: identifier.optional(), path: attachment.shape.path, filename: attachment.shape.filename, caption: z.string().max(1_024).default('') }).strict() },
+      { id: 'telegram.send_document', mutation: true, risk: 'external_publication', inputSchema: z.object({ chatId: identifier.optional(), path: attachment.shape.path, filename: attachment.shape.filename, sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(), caption: z.string().max(1_024).default('') }).strict() },
+      { id: 'telegram.send_photo', mutation: true, risk: 'external_publication', inputSchema: z.object({ chatId: identifier.optional(), path: attachment.shape.path, filename: attachment.shape.filename, sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(), caption: z.string().max(1_024).default('') }).strict() },
       { id: 'telegram.read_updates', mutation: false, inputSchema: z.object({ offset: z.number().int().min(0).optional(), timeout: z.number().int().min(0).max(25).default(0), limit: z.number().int().min(1).max(100).default(25) }).strict() },
     ],
   },

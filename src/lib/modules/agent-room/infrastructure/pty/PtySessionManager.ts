@@ -15,12 +15,14 @@ import { isTerminalReport, type TerminalInputSource } from '../../domain/termina
 import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
 import { workingDirectoryFromOsc, workingDirectoryFromWindowsOsc } from '../../domain/terminal-working-directory.ts';
+import type { StructuredAgentProcess, StructuredReceipt } from './StructuredAgentProcess.ts';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
 // e a deteccao de CLIs (application/adapters/*).
 
 export type PtySessionInfo = {
+  transport?: 'terminal' | 'structured';
   id: string;
   command: string;
   args: string[];
@@ -131,6 +133,8 @@ export function killPtyProcessTree(pty: IPty, owned: boolean): void {
 }
 
 type PtySession = PtySessionInfo & {
+  structuredProcess?: StructuredAgentProcess;
+  structuredOwnerKey?: string;
   pty: IPty;
   executionRuntime: WorkspaceExecutionRuntime;
   guestShellPid?: number;
@@ -260,6 +264,7 @@ export class ObsoletePtyDeliveryError extends Error {
 }
 
 export type CreatePtySessionInput = {
+  structuredProcess?: StructuredAgentProcess;
   command: string;
   args?: string[];
   cwd: string;
@@ -430,6 +435,16 @@ export function sanitizeComposerText(text: string): string {
  */
 export class PtySessionManager {
   private sessions = new Map<string, PtySession>();
+  private structuredShutdowns = new Map<string, Promise<void>>();
+
+  async waitForStructuredShutdown(workspaceId: string, nodeId: string): Promise<void> {
+    await this.structuredShutdowns.get(`${workspaceId}:${nodeId}`);
+  }
+
+  structuredRequest(workspaceId: string, nodeId: string): { conversationKey: string; messageId: string } | null {
+    const session = [...this.sessions.values()].find(item => item.workspaceId === workspaceId && item.nodeId === nodeId && !item.exited && item.structuredProcess);
+    return session?.structuredProcess?.activeRequest ?? null;
+  }
   private spawnPty: typeof import('node-pty').spawn;
   private killProcessTree: (pty: IPty, owned: boolean) => void;
 
@@ -475,7 +490,7 @@ export class PtySessionManager {
     const shellIntegration = !input.provider && input.runtime?.kind !== 'wsl'
       ? integrateNativeShellDirectory(input.command, target.args, target.env)
       : { args: target.args, env: target.env };
-    const ptyProcess = this.spawnPty(target.command, shellIntegration.args, {
+    const ptyProcess = input.structuredProcess?.asPty() ?? this.spawnPty(target.command, shellIntegration.args, {
       name: 'xterm-256color',
       cols,
       rows,
@@ -484,6 +499,9 @@ export class PtySessionManager {
     });
 
     const session: PtySession = {
+      transport: input.structuredProcess ? 'structured' : 'terminal',
+      structuredProcess: input.structuredProcess,
+      structuredOwnerKey: input.structuredProcess ? `${input.workspaceId}:${input.nodeId}` : undefined,
       id,
       command: input.command,
       args: input.args ?? [],
@@ -518,10 +536,10 @@ export class PtySessionManager {
       ownsProcessTree: Boolean(input.workspaceId && input.nodeId),
       initialIdleObserved: false,
       managedTurn: false,
-      startupGuard: interactiveStartupGuard(input.provider),
+      startupGuard: input.structuredProcess ? null : interactiveStartupGuard(input.provider),
       bracketedPaste: false,
       terminalModeTail: '',
-      scrollback: '',
+      scrollback: input.structuredProcess ? '[Orkestrai: structured agent transport]\r\n' : '',
       trimmedModes: new Map(),
       outputLength: 0,
       listeners: new Set(),
@@ -629,6 +647,19 @@ export class PtySessionManager {
 
     this.sessions.set(id, session);
     this.recordLifecycle(session, 'starting');
+    if (input.structuredProcess) {
+      session.initialIdleObserved = true;
+      session.nativeComposerState = 'idle';
+      this.setWaiting(session, true);
+      input.structuredProcess.onBusy(busy => {
+        if (session.exited) return;
+        session.managedTurn = busy;
+        session.nativeComposerState = busy ? 'working' : 'idle';
+        session.lastOutputAt = Date.now();
+        this.setWaiting(session, !busy);
+        this.recordLifecycle(session, busy ? 'working' : 'idle');
+      });
+    }
     if (!session.provider && session.workspaceId && session.nodeId) {
       const startup = (globalThis as { __orkestraiStartManagedShell?: (workspaceId: string, nodeId: string, sessionId: string) => Promise<boolean> }).__orkestraiStartManagedShell;
       void startup?.(session.workspaceId, session.nodeId, id).catch(() => {
@@ -682,6 +713,7 @@ export class PtySessionManager {
 
   requiresSubmitConfirmation(id: string): boolean {
     const session = this.requireSession(id);
+    if (session.structuredProcess) return false;
     return Boolean(session.provider && session.conptySubmitGuard);
   }
 
@@ -798,6 +830,10 @@ export class PtySessionManager {
   writeHumanInput(id: string, data: string, options: { imagePaste?: boolean; source?: TerminalInputSource } = {}): void {
     const session = this.requireSession(id);
     if (session.exited) throw new Error(`Sessão PTY ${id} já finalizada.`);
+    if (session.structuredProcess) {
+      if (!isTerminalReport(data, options.source === 'terminal')) this.writeHumanInputNow(session, data, false);
+      return;
+    }
     const imagePaste = options.imagePaste === true;
     // xterm sends focus/device/color reports through onData too. Those are
     // terminal protocol replies, not edits to the owner's draft.
@@ -914,7 +950,14 @@ export class PtySessionManager {
     if (session.deliveryTimer) clearTimeout(session.deliveryTimer);
     if (session.workingDirectoryTimer) clearTimeout(session.workingDirectoryTimer);
     this.rejectDeliveries(session, new Error(`Sessão PTY ${id} encerrada.`));
-    if (!session.exited) {
+    if (!session.exited && session.structuredProcess && session.structuredOwnerKey) {
+      const key = session.structuredOwnerKey;
+      const shutdown = session.structuredProcess.stop();
+      this.structuredShutdowns.set(key, shutdown);
+      void shutdown.then(() => {
+        if (this.structuredShutdowns.get(key) === shutdown) this.structuredShutdowns.delete(key);
+      }).catch(() => undefined);
+    } else if (!session.exited) {
       try {
         this.killProcessTree(session.pty, session.ownsProcessTree);
       } catch {
@@ -1267,6 +1310,15 @@ export class PtySessionManager {
       && session.humanComposerLength === 0
       && (!session.startupGuard || session.startupGuard.canAcceptMessages));
   }
+
+  /** An authoritative provider receipt, independent of Canvas attachment. */
+  submitStructured(id: string, prompt: string, conversationKey: string, messageId: string, signal?: AbortSignal): Promise<StructuredReceipt> {
+    const session = this.requireSession(id);
+    if (session.exited || !session.structuredProcess) throw new Error('STRUCTURED_SESSION_UNAVAILABLE');
+    return session.structuredProcess.submit(prompt, conversationKey, messageId, signal);
+  }
+
+  structuredReceipt(id: string, messageId: string) { return this.sessions.get(id)?.structuredProcess?.receipt(messageId) ?? null; }
 
   /**
    * Like `canAcceptAutomaticMessage`, but the provider's turn may be running:
@@ -1956,6 +2008,7 @@ export class PtySessionManager {
 
   private toInfo(session: PtySession): PtySessionInfo {
     return {
+      transport: session.transport,
       id: session.id,
       command: session.command,
       args: session.args,

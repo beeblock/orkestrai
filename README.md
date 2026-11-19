@@ -40,6 +40,32 @@ Code Intelligence is disabled by default, including legacy workspaces until expl
 
 Large asset checkouts do not require Code Intelligence: Canvas Git polling reads change metadata instead of hashing each asset, and workspace file operations are asynchronous. HTTP previews/downloads stream with bounded buffering; searches have explicit runtime budgets. Reviews and Git mutation guards still check exact file content.
 
+## Personal bots (local preview)
+
+The separate **Bots** mode creates personal assistants and collaboration groups;
+Conversation and existing development agents retain their current behavior.
+Choose the installed Claude/Codex account, model, effort and terminal or native
+transport. Native mode uses Codex App Server or the official Claude Agent SDK,
+without terminal paste/Enter delivery or a second bundled Claude executable.
+
+Connect an exact Telegram/Slack chat through a granted integration, or pair
+WhatsApp by QR in the desktop app and choose its chat/sender identities. Human
+messages from the linked phone (including self-chat) work; bot output IDs prevent
+reply loops. Bots use
+the existing workspace tools, memory, routines and creative workflows. Incoming
+PDFs/images and generated reports/creatives use bounded workspace files and
+channel-native delivery. Native finals and external output are persisted before
+forwarding; uncertain sends are never blindly repeated.
+
+The desktop Core, network and provider account must stay available. The phone
+cannot reach an offline computer. Subscription limits and configured policies
+still apply. Fully authorized provider shells are not isolated by bridge policy;
+use trusted senders and an appropriate workspace. Third-party account pairing
+still requires local owner testing. Active model turns interrupted by closing
+the app are not automatically replayed; already persisted final results recover
+without rerunning the model. See **How to use → Personal bots** and its
+guided tour. Openbot was a reference; none of its noncommercial code was copied.
+
 ## Autonomous workspace delivery
 
 A direct task authorizes its normal implementation, validation and integration

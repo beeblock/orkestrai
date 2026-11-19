@@ -6,7 +6,7 @@ export type IntegrationReceipt = {
   messageIds: string[];
 };
 
-const RECEIPT_ACTIONS = new Set(['slack.send_message', 'telegram.send_message', 'telegram.send_document', 'whatsapp.send_message', 'whatsapp.send_document', 'gmail.send_email', 'gmail.create_draft', 'webhook.send']);
+const RECEIPT_ACTIONS = new Set(['slack.send_message', 'slack.send_file', 'telegram.send_message', 'telegram.send_document', 'telegram.send_photo', 'whatsapp.send_message', 'whatsapp.send_document', 'gmail.send_email', 'gmail.create_draft', 'webhook.send']);
 
 export function integrationDeliveryState(event: { direction: string; kind: string; status: string; requestDigest: unknown; receipt: IntegrationReceipt | null }) {
   if (event.direction !== 'outbound' || !RECEIPT_ACTIONS.has(event.kind)) return null;
@@ -47,7 +47,8 @@ export function storedIntegrationReceipt(value: unknown): IntegrationReceipt | n
 export function integrationReceipt(action: string, result: Record<string, unknown>): IntegrationReceipt | null {
   let ids: unknown[];
   if (action === 'slack.send_message') ids = [result.ts];
-  else if (action === 'telegram.send_message' || action === 'telegram.send_document') ids = [result.messageId];
+  else if (action === 'slack.send_file') ids = [result.id];
+  else if (action === 'telegram.send_message' || action === 'telegram.send_document' || action === 'telegram.send_photo') ids = [result.messageId];
   else if (action === 'whatsapp.send_message' || action === 'whatsapp.send_document') ids = Array.isArray(result.messageIds) ? result.messageIds : [];
   else if (action === 'gmail.send_email' || action === 'gmail.create_draft') ids = [result.id];
   else if (action === 'webhook.send') {

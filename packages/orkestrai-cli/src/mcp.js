@@ -84,6 +84,8 @@ const DESIGN_PROTOTYPE_TRANSITION = { type: 'object', additionalProperties: fals
 /** Tools expostas (inputSchema JSON Schema). args -> bridge no callTool(). */
 /** @type {Array<{name: string, description: string, inputSchema: Record<string, any>}>} */
 const TOOLS = [
+  { name: 'bot_list', description: 'List personal bots, collaboration groups, external bindings and linked-device connection metadata in this workspace. Never returns WhatsApp QR codes or keys. Existing Conversation agents are separate. Never returns provider credentials.', inputSchema: { type: 'object', additionalProperties: false, properties: {} } },
+  { name: 'bot_command', description: 'Create, configure or remove a personal bot; create/update/archive/message a bot group; connect a bot to a granted external chat. Requires live agent identity. Configuration commands require an active assigned task; group_send/group_post are authenticated member communications and need no task. input.command: create/update/remove/group_create/group_update/group_archive/group_send/group_post/connect/set_binding/disconnect/whatsapp_start/whatsapp_disconnect. Bot settings: title,instructions,provider,model,effort,profileId,transport (terminal or structured). Group settings: title,instructions,memberIds,coordinatorId. Updates require sleeping bots; group updates require current revision. Canvas tools remain available through the same authenticated bridge.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string', format: 'uuid' }, input: { type: 'object' } }, required: ['input'] } },
   { name: 'model_access_status', description: 'List model-access grants and received connections on this computer. Does not reveal keys, invitations or provider credentials. Workspace sharing is separate.', inputSchema: { type: 'object', additionalProperties: false, properties: {} } },
   { name: 'model_access_propose', description: 'Propose a time-limited model-access grant for an active assigned owner task. The owner must still approve the guest device in Provider Center. This never approves a person automatically.', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, input: { type: 'object', description: 'Grant name, relayUrl, expiresInMinutes, offerings [{providerId,profileId,models,efforts,images}], concurrency, requestsPerMinute, maxRequests. Null models/efforts permit all; profileId null selects the default account.' } }, required: ['taskId','input'] } },
   { name: 'model_access_revoke', description: 'Revoke an owned grant for an active assigned owner task. Cancels its active and queued inference. Requires the current revision from model_access_status.', inputSchema: { type: 'object', additionalProperties: false, properties: { taskId: { type: 'string' }, grantId: { type: 'string' }, revision: { type: 'integer' } }, required: ['taskId','grantId','revision'] } },
@@ -552,6 +554,11 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'model_access_propose': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'propose', taskId: args.taskId, input: args.input });
     case 'model_access_revoke': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'revoke', taskId: args.taskId, grantId: args.grantId, revision: args.revision });
     case 'model_access_disconnect': return bridge('POST', '/api/agent-room/bridge/model-access', { operation: 'disconnect', taskId: args.taskId, connectionId: args.connectionId });
+    case 'bot_list': return bridge('GET', '/api/agent-room/bridge/bots');
+    case 'bot_command': {
+      const botArgs = /** @type {Record<string, any>} */ (args);
+      return bridge('POST', '/api/agent-room/bridge/bots', { taskId: botArgs.taskId, input: botArgs.input });
+    }
     case 'canvas_list': {
       const canvasArgs = /** @type {Record<string, any>} */ (args);
       const query = new URLSearchParams();

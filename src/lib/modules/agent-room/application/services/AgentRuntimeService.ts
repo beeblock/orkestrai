@@ -17,6 +17,7 @@ import { controlCenterService } from './ControlCenterService.js';
 import { usageService } from './UsageService.js';
 import { usageRoutingId } from '../../domain/usage-routing.js';
 import { attentionService } from './AttentionService.js';
+import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 
 const SUPERVISOR_INTERVAL_MS = 15_000;
 const MAX_PARALLEL_WAKES = 4;
@@ -49,6 +50,7 @@ export class AgentRuntimePolicyError extends Error {
 
 function config(payload: TerminalNodePayload): UpdateAgentRuntimeInput {
   return {
+    transport: payload.agentTransport ?? 'terminal',
     mode: ['interactive', 'on_demand', 'persistent'].includes(payload.agentRuntimeMode ?? '') ? payload.agentRuntimeMode! : DEFAULTS.mode,
     idleMinutes: Math.max(5, Math.min(720, Math.round(payload.agentRuntimeIdleMinutes ?? DEFAULTS.idleMinutes))),
     concurrency: Math.max(1, Math.min(8, Math.round(payload.agentRuntimeConcurrency ?? DEFAULTS.concurrency))),
@@ -100,6 +102,8 @@ export class AgentRuntimeService {
       workspaceId,
       nodeId,
       ...settings,
+      transport: payload.agentTransport ?? 'terminal',
+      structuredAvailable: Boolean(payload.provider && hasAgentAdapter(payload.provider) && getAgentAdapter(payload.provider).createStructuredProcess),
       sessionId: session && !session.exited ? session.id : null,
       state,
       lastActivityAt: session?.lastActivityAt ?? null,
@@ -113,9 +117,16 @@ export class AgentRuntimeService {
   async configure(workspaceId: string, nodeId: string, input: UpdateAgentRuntimeInput): Promise<AgentRuntimeData> {
     const node = await this.requireAgent(workspaceId, nodeId);
     const payload = node.payload as TerminalNodePayload;
+    const transport = input.transport ?? payload.agentTransport ?? 'terminal';
+    if (transport === 'structured' && (!payload.provider || !hasAgentAdapter(payload.provider)
+      || !getAgentAdapter(payload.provider).createStructuredProcess)) throw new Error('AGENT_STRUCTURED_TRANSPORT_UNSUPPORTED');
+    if (transport !== (payload.agentTransport ?? 'terminal') && ptySessionManager.listLiveForNode(workspaceId, nodeId).length) {
+      throw new Error('AGENT_TRANSPORT_REQUIRES_SLEEP');
+    }
     await workspaceRepository.updateNode(nodeId, {
       payload: {
         ...payload,
+        agentTransport: transport,
         agentRuntimeMode: input.mode,
         agentRuntimeIdleMinutes: input.idleMinutes,
         agentRuntimeConcurrency: input.concurrency,

@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'personal-bots-phone-support': 'personal-bots',
   'external-agent-messages': 'external-agent-messages',
   'attention-read-all': 'attention-read-all',
   'canvas-file-source': 'canvas-file-source',

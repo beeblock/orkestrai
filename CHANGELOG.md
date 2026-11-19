@@ -7,6 +7,17 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Added — 0.55.0-beta.1 local preview
+
+- Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.
+- Add opt-in Codex App Server and Claude Agent SDK transports using unchanged installed CLIs and selected profiles. Native prompts bypass TUI paste/Enter timing; provider receipts, per-conversation contexts, bounded output and verified process shutdown retain the existing bridge identity and Canvas tools.
+- Persist native final results before routing, deduplicate resumed forwarding and use a durable, exact-chat external outbox. Preserve complete long answers as owned text attachments and verify artifact paths/hashes before publication.
+- Preserve delegated chat return addresses, repair group membership when a bot is removed and keep failed external replies from starving later chats. Native viewers reattach to the same programmatic process rather than launching a second TUI.
+- Receive Telegram/Slack PDFs and images and send native documents/images with existing integration grants. Add WhatsApp linked-device QR with encrypted desktop credentials, signal keys and pending messages, explicit chat/sender binding, bounded media and uncertainty-aware delivery. No additional Chromium, Docker or bundled Claude CLI is required.
+- Accept human requests from the linked WhatsApp phone, including self-chat, while suppressing bot output loops. Check every media redirect and bound download size/time; a permanently rejected attachment does not block later messages. Independent linked chats progress concurrently while retaining their own message order.
+- Expose personal bot/group operations through the authenticated CLI/MCP, document a phone support/report use case in three languages and add a guided tour. Existing grants, workspace pauses and configured gates remain authoritative.
+
+
 ## 0.54.0 - 2026-11-18
 
 ### Added

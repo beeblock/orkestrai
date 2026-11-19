@@ -14,7 +14,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
 
-  let { workspaceId, nodeId, payload }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload } = $props();
+  let { workspaceId, nodeId, payload, botEvents = false }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload; botEvents?: boolean } = $props();
 
   let bindings = $state<ChannelBinding[]>([]);
   let integrations = $state<AutomationIntegration[]>([]);
@@ -40,12 +40,15 @@
 
   const base = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}`);
 
+  let loadGeneration = 0;
   async function load() {
+    const ticket = ++loadGeneration, workspace = workspaceId, node = nodeId;
     const [list, available, snapshot] = await Promise.all([
       api<ChannelBinding[]>(`${base}/channel-bindings?nodeId=${encodeURIComponent(nodeId)}`).catch(() => []),
       api<{ integrations: AutomationIntegration[] }>(`${base}/integrations`).then((data) => data.integrations ?? []).catch(() => []),
       api<ControlCenterSnapshot>(`${base}/control-center`).catch(() => null),
     ]);
+    if (ticket !== loadGeneration || workspace !== workspaceId || node !== nodeId) return;
     bindings = list;
     integrations = available;
     activity = recentAgentActivity(snapshot?.activity ?? [], nodeId);
@@ -55,6 +58,14 @@
     void nodeId;
     runtimeMode = payload.agentRuntimeMode ?? 'interactive';
     void load();
+    return () => { loadGeneration++; };
+  });
+
+  $effect(() => {
+    if (!botEvents) return;
+    const changed = () => void load();
+    window.addEventListener('orkestrai:bots-changed', changed);
+    return () => window.removeEventListener('orkestrai:bots-changed', changed);
   });
 
   async function connect() {
@@ -119,9 +130,9 @@
   {#each bindings as binding (binding.id)}
     <div class="binding" class:error={Boolean(binding.lastError)}>
       <div class="binding-main">
-        <b>{binding.kind === 'telegram' ? 'Telegram' : 'Slack'}</b>
+        <b>{binding.kind === 'telegram' ? 'Telegram' : binding.kind === 'whatsapp' ? 'WhatsApp' : 'Slack'}</b>
         <span class="mono">{binding.externalChatId}</span>
-        {#if binding.lastError}<span class="err" title={binding.lastError}>{binding.lastError}</span>
+        {#if binding.lastError}<span class="err" title={binding.lastError}>{binding.lastError === 'BOT_DELIVERY_PENDING' ? m['bots.delivery_pending']() : binding.lastError === 'BOT_DELIVERY_UNCERTAIN' ? m['bots.delivery_uncertain']() : binding.lastError}</span>
         {:else if binding.lastInboundAt}<span class="meta">{m['always_on.last_message']({ time: time(binding.lastInboundAt) })}</span>
         {:else}<span class="meta">{binding.allowedSenders.length ? m['always_on.allowed']({ names: binding.allowedSenders.join(', ') }) : m['always_on.anyone']()}</span>{/if}
       </div>

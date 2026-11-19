@@ -13,7 +13,8 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'reviewed-audit-')); roots.push(root);
   mkdirSync(join(root, 'src')); mkdirSync(join(root, 'node_modules/picomatch/lib'), { recursive: true });
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ ...JSON.parse(readFileSync('package.json', 'utf8')), type: 'module' }));
+  // The authorization is pinned to 0.54.0, independently of the version being developed.
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ ...JSON.parse(readFileSync('package.json', 'utf8')), version: '0.54.0', type: 'module' }));
   writeFileSync(join(root, 'package-lock.json'), readFileSync('package-lock.json'));
   writeFileSync(join(root, 'svelte.config.js'), 'export default { kit: { experimental: { remoteFunctions: false } } };');
   writeFileSync(join(root, 'node_modules/picomatch/lib/parse.js'), readFileSync(require.resolve('picomatch/lib/parse.js')));
@@ -46,6 +47,12 @@ describe('release-specific reviewed audit guards', () => {
     else if (reason === 'remote-module') writeFileSync(join(root, 'src/query.remote.ts'), 'export const query = {};');
     else if (reason === 'source') writeFileSync(join(root, 'node_modules/picomatch/lib/parse.js'), 'unverified');
     await expect(verifyReviewedGuards(root, reason === 'expired' ? new Date('2026-11-26') : now)).rejects.toThrow();
+  });
+  it.each(['0.55.0-beta.1', '0.55.0'])('does not carry the old release authorization into %s', async version => {
+    const root = fixture();
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version }));
+    await expect(verifyReviewedGuards(root, now)).rejects.toThrow();
   });
   it('runs the Picomatch amplification regressions outside the event loop with a hard deadline', () => {
     const result = spawnSync(process.execPath, ['--max-old-space-size=128', '-e', `
