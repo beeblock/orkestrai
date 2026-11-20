@@ -17,6 +17,8 @@ pt-BR, English, and Spanish translations.
 - Accept human requests from the linked WhatsApp phone, including self-chat, while suppressing bot output loops. Check every media redirect and bound download size/time; a permanently rejected attachment does not block later messages. Independent linked chats progress concurrently while retaining their own message order.
 - Expose personal bot/group operations through the authenticated CLI/MCP, document a phone support/report use case in three languages and add a guided tour. Existing grants, workspace pauses and configured gates remain authoritative.
 
+- Explain the personal-bot Instructions and rules field with a copyable support template, recurring-rule versus task guidance and a dedicated onboarding step in all three languages.
+
 
 ## 0.54.0 - 2026-11-18
 

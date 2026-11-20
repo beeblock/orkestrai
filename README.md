@@ -48,6 +48,20 @@ Choose the installed Claude/Codex account, model, effort and terminal or native
 transport. Native mode uses Codex App Server or the official Claude Agent SDK,
 without terminal paste/Enter delivery or a second bundled Claude executable.
 
+**Instructions and rules** defines that bot's recurring role, response style,
+language and delivery rules. Send individual tasks in its conversation instead.
+Keep passwords/tokens in the account and integration controls. These instructions
+guide the model; they do not grant permissions or sandbox its shell. For example:
+
+```text
+You are this project's support assistant.
+Read incoming messages and attachments, investigate, implement fixes and test.
+Work autonomously until delivery; continue independent tasks when one is blocked.
+Follow project instructions and never expose credentials.
+Reply in the originating channel with a summary and relevant files.
+Never claim completion or successful tests without verifying them.
+```
+
 Connect an exact Telegram/Slack chat through a granted integration, or pair
 WhatsApp by QR in the desktop app and choose its chat/sender identities. Human
 messages from the linked phone (including self-chat) work; bot output IDs prevent
