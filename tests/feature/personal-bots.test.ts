@@ -322,4 +322,30 @@ describe('personal bot boundaries and persistence', () => {
     expect((await integrationExecutionService.readBotArtifact(f.workspace.id, f.bot.id, file.path)).toString()).toBe(answer);
     expect(await channelRepository.referencesAttachment(f.workspace.id, file.id)).toBe(true);
   });
+  it('keeps messages without a configured command out of the WhatsApp queue', async () => {
+    const f = await fixture(), service = new WhatsAppBotService();
+    const chat = '5511999999999@s.whatsapp.net';
+    const create = await import('$lib/modules/agent-room/infrastructure/repositories/BotConnectionRepository.js');
+    const account = await create.botConnectionRepository.create(f.workspace.id, 'WhatsApp');
+    const binding = await channelBindingService.create(f.workspace.id, { nodeId: f.bot.id, integrationId: account.id, externalChatId: chat, allowedSenders: [], replyPrefixes: ['@Assistant', '#Assistant'] });
+    expect(binding.replyPrefixes).toEqual(['@Assistant', '#Assistant']);
+    const dispatch = vi.spyOn(service as any, 'dispatch').mockResolvedValue(undefined);
+    vi.spyOn(service as any, 'persistPending').mockResolvedValue(undefined);
+    const link: any = { connection: { ...account, workspaceId: f.workspace.id }, chats: new Map(), pending: [], stopped: false, draining: false, saveTail: Promise.resolve(), socket: { user: { id: chat } } };
+    await (service as any).receive(link, { key: { id: 'ignored', remoteJid: chat }, message: { conversation: 'ordinary group message' } });
+    expect(link.pending).toEqual([]); expect(dispatch).not.toHaveBeenCalled();
+    await (service as any).receive(link, { key: { id: 'accepted', remoteJid: chat }, message: { conversation: '@Assistant investigate' } });
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce());
+    expect((dispatch.mock.calls[0][1] as { key: { id: string } }).key.id).toBe('accepted');
+  });
+
+  it('shows a native startup failure on the saved owner message and clears it on retry receipt', async () => {
+    const f = await fixture();
+    const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'owner', body: 'Hello' });
+    await channelService.modelFailure(f.workspace.id, source.id, 'start');
+    expect((await channelRepository.find(f.workspace.id, source.id))!.meta.modelFailure).toBe('start');
+    await channelRepository.markDelivered(f.workspace.id, source.id, new Date().toISOString(), f.bot.id);
+    expect((await channelRepository.find(f.workspace.id, source.id))!.meta.modelFailure).toBeNull();
+  });
+
 });

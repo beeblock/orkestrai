@@ -31,8 +31,14 @@ export class ClaudeStructuredDriver implements StructuredAgentDriver {
       allowDangerouslySkipPermissions: true,
       settingSources: ['user', 'project', 'local'],
       includePartialMessages: true,
-      mcpServers: { orkestrai: { type: 'stdio', ...this.options.bridgeMcp } },
-      mcpServersDelivery: 'initialize',
+      // The CLI and its MCP children already inherit the authenticated bridge
+      // environment from spawnStructuredAgent. Never serialize those secrets
+      // into --mcp-config. This secret-free config also supports installed CLIs
+      // older than the SDK's initialize-delivery extension.
+      mcpServers: { orkestrai: { type: 'stdio', command: this.options.bridgeMcp.command,
+        args: this.options.bridgeMcp.args,
+        ...(this.options.bridgeMcp.env?.ELECTRON_RUN_AS_NODE === '1' ? { env: { ELECTRON_RUN_AS_NODE: '1' } } : {}) } },
+      mcpServersDelivery: 'argv',
       systemPrompt: { type: 'preset', preset: 'claude_code', append: this.options.instructions },
       ...(previous ? { resume: previous } : {}),
       ...(this.options.model ? { model: this.options.model } : {}),

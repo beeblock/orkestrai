@@ -44,4 +44,15 @@ describe('personal bot CLI/MCP parity', () => {
     expect(await run(['bot', 'group_send', '--input', JSON.stringify(input)], options())).toBe(0);
     expect(requests.at(-1).body).toEqual({ input: { command: 'group_send', ...input } });
   });
+  it('exposes guided setup discovery and prefix rules through the same agent bridge', async () => {
+    expect(await run(['bot', 'slack_manifest', '--task', 'task-id', '--input', '{}'], options())).toBe(0);
+    expect(requests.at(-1).body).toEqual({ taskId: 'task-id', input: { command: 'slack_manifest' } });
+    const input = { binding: { nodeId: 'bot-id', integrationId: 'account-id', externalChatId: 'chat-id', allowedSenders: [], replyPrefixes: ['@Helper', '#Helper'] } };
+    expect(await run(['bot', 'connect', '--task', 'task-id', '--input', JSON.stringify(input)], options())).toBe(0);
+    expect(requests.at(-1).body.input.binding.replyPrefixes).toEqual(['@Helper', '#Helper']);
+    const bridge = vi.fn().mockResolvedValue([]);
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: null }, 'bot_command', { taskId: 'task-id', input: { command: 'channel_targets', nodeId: 'bot-id', integrationId: 'account-id' } });
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', expect.objectContaining({ input: expect.objectContaining({ command: 'channel_targets' }) }));
+  });
+
 });

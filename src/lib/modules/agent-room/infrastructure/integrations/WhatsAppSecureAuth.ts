@@ -1,5 +1,5 @@
 import { BufferJSON, initAuthCreds, proto, type AuthenticationState, type AuthenticationCreds, type SignalDataSet } from '@whiskeysockets/baileys';
-import { desktopSecretService } from '../secrets/DesktopSecretService.js';
+import { desktopSecretService, type SecretRequestOptions } from '../secrets/DesktopSecretService.js';
 
 type Vault = Pick<typeof desktopSecretService, 'get' | 'set' | 'delete'>;
 const MAX_AUTH_BYTES = 4 * 1024 * 1024;
@@ -11,9 +11,9 @@ export class WhatsAppSecureAuth {
   private disposed = false;
   private constructor(private readonly key: string, private stored: StoredState, private readonly vault: Vault) {}
 
-  static async open(workspaceId: string, connectionId: string, vault: Vault = desktopSecretService) {
+  static async open(workspaceId: string, connectionId: string, vault: Vault = desktopSecretService, options?: SecretRequestOptions) {
     const key = `automation:whatsapp:${workspaceId}:${connectionId}`;
-    const previous = await vault.get(key);
+    const previous = await vault.get(key, options);
     let stored: StoredState;
     if (previous) {
       if (Buffer.byteLength(previous) > MAX_AUTH_BYTES) throw new Error('WHATSAPP_AUTH_TOO_LARGE');
@@ -22,18 +22,18 @@ export class WhatsAppSecureAuth {
     } else stored = { version: 1, creds: initAuthCreds(), keys: Object.create(null) };
     const auth = new WhatsAppSecureAuth(key, stored, vault);
     if (!previous) {
-      await auth.persist(stored);
+      await auth.persist(stored, options);
       // The development server has no secure-storage IPC. It must fail closed,
       // rather than display a QR whose keys cannot survive the next restart.
-      if (!(await vault.get(key))) throw new Error('WHATSAPP_SECURE_STORAGE_REQUIRED');
+      if (!(await vault.get(key, options))) throw new Error('WHATSAPP_SECURE_STORAGE_REQUIRED');
     }
     return auth;
   }
 
-  private persist(value: StoredState) {
+  private persist(value: StoredState, options?: SecretRequestOptions) {
     const json = JSON.stringify(value, BufferJSON.replacer);
     if (Buffer.byteLength(json) > MAX_AUTH_BYTES) throw new Error('WHATSAPP_AUTH_TOO_LARGE');
-    return this.vault.set(this.key, json);
+    return this.vault.set(this.key, json, options);
   }
   private exclusive(operation: () => Promise<void>) {
     const run = this.tail.then(() => { if (this.disposed) throw new Error('WHATSAPP_AUTH_CLOSED'); return operation(); });

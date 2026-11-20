@@ -26,6 +26,7 @@
     onDirect,
     embedded = false,
     children,
+    onSetupChannel,
   }: {
     workspaceId: string;
     nodeId: string;
@@ -35,6 +36,7 @@
     onDirect: (nodeId: string) => void;
     embedded?: boolean;
     children?: import('svelte').Snippet;
+    onSetupChannel?: (provider: 'telegram' | 'slack') => void;
   } = $props();
 
   let routineDraft = $state('');
@@ -183,7 +185,7 @@
       <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
     </form>
   </section>
-  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} />
+  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} botTitle={title} {onSetupChannel} />
   {@render children?.()}
   <section>
     <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>

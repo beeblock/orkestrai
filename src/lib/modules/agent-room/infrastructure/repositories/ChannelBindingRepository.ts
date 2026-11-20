@@ -26,6 +26,7 @@ export function mapBinding(model: AgentChannelBinding): ChannelBinding {
     kind: model.getAttribute('kind') as ChannelBindingKind,
     externalChatId: model.getAttribute('external_chat_id'),
     allowedSenders: parseSenders(model.getAttribute('allowed_senders_json')),
+    replyPrefixes: parseSenders(model.getAttribute('reply_prefixes_json')),
     enabled: Boolean(model.getAttribute('enabled')),
     lastError: model.getAttribute('last_error') ?? null,
     lastInboundAt: inbound ? toIso(inbound) : null,
@@ -34,7 +35,7 @@ export function mapBinding(model: AgentChannelBinding): ChannelBinding {
 }
 
 export class ChannelBindingRepository {
-  async create(input: { workspaceId: string; nodeId: string; integrationId: string; kind: ChannelBindingKind; externalChatId: string; allowedSenders: string[] }): Promise<ChannelBinding> {
+  async create(input: { workspaceId: string; nodeId: string; integrationId: string; kind: ChannelBindingKind; externalChatId: string; allowedSenders: string[]; replyPrefixes?: string[] }): Promise<ChannelBinding> {
     const now = new Date().toISOString();
     const model = await AgentChannelBinding.create({
       id: uuidv7(),
@@ -44,6 +45,7 @@ export class ChannelBindingRepository {
       kind: input.kind,
       external_chat_id: input.externalChatId,
       allowed_senders_json: JSON.stringify(input.allowedSenders),
+      reply_prefixes_json: JSON.stringify(input.replyPrefixes ?? []),
       cursor: null,
       enabled: true,
       last_error: null,

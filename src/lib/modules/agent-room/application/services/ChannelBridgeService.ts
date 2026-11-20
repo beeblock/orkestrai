@@ -1,4 +1,4 @@
-import { senderAllowed, type ChannelBinding } from '../../domain/channels.js';
+import { senderAllowed, channelPrefixAllowed, type ChannelBinding } from '../../domain/channels.js';
 import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
 import { integrationExecutionService, type InboundChannelMessage } from './IntegrationExecutionService.js';
 import { channelService } from './ChannelService.js';
@@ -6,6 +6,7 @@ import { channelRepository } from '../../infrastructure/repositories/ChannelRepo
 import { directChannel } from '../../domain/channels.js';
 import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
 import { WorkspaceAttachmentDto, WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
+import { uuidv7 } from '@beeblock/svelar/support';
 import type { WorkspaceAttachment } from '../../domain/types.js';
 
 const SLACK_INTERVAL_MS = 15_000;
@@ -23,6 +24,48 @@ type Loop = { stop: () => void };
 export class ChannelBridgeService {
   private loops = new Map<string, Loop>();
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private observedChats = new Map<string, Map<string, string>>();
+  private discoveryReads = new Map<string, Promise<void>>();
+
+  private observe(workspaceId: string, integrationId: string, messages: InboundChannelMessage[]) {
+    const key = `${workspaceId}:${integrationId}`;
+    const chats = this.observedChats.get(key) ?? new Map<string, string>();
+    for (const message of messages.slice(0, 200)) {
+      if (chats.size >= 1000 && !chats.has(message.chatId)) continue;
+      chats.set(message.chatId, (message.chatName || (message.chatId === message.senderId ? message.senderName : '') || message.chatId).slice(0, 120));
+    }
+    this.observedChats.set(key, chats);
+    if (this.observedChats.size > 50) this.observedChats.delete(this.observedChats.keys().next().value!);
+  }
+
+  async discoverTargets(workspaceId: string, integrationId: string, actorNodeId: string | null) {
+    const integration = await integrationExecutionService.get(workspaceId, integrationId);
+    if (!integration.enabled || integration.status !== 'connected') throw new Error('BOT_CONNECTION_UNAVAILABLE');
+    if (integration.type === 'slack') {
+      const result = await integrationExecutionService.execute(workspaceId, { integrationId, action: 'slack.list_channels', input: { limit: 200 }, idempotencyKey: uuidv7() }, { actorType: actorNodeId ? 'agent' : 'user', actorId: actorNodeId });
+      const channels = Array.isArray(result.channels) ? result.channels : [];
+      return channels.slice(0, 200).flatMap((value: unknown) => {
+        const item = value as Record<string, unknown> | null;
+        return item && typeof item.id === 'string' && /^[A-Z0-9]{1,80}$/.test(item.id)
+          ? [{ id: item.id, name: typeof item.name === 'string' ? item.name.slice(0, 120) : item.id }] : [];
+      });
+    }
+    if (integration.type !== 'telegram' || !integration.permissions.includes('telegram.read_updates')) throw new Error('BOT_CONNECTION_UNAVAILABLE');
+    const bindings = (await channelBindingRepository.list(workspaceId)).filter(item => item.integrationId === integrationId);
+    // Never compete with a live getUpdates reader or acknowledge its cursor.
+    if (!bindings.some(item => item.enabled)) {
+      let read = this.discoveryReads.get(integrationId);
+      if (!read) {
+        read = integrationExecutionService.pollInbound(workspaceId, integrationId, { cursor: null, chatId: null, waitSeconds: 0 })
+          .then(result => { this.observe(workspaceId, integrationId, result.messages); });
+        this.discoveryReads.set(integrationId, read);
+      }
+      try { await read; } finally { if (this.discoveryReads.get(integrationId) === read) this.discoveryReads.delete(integrationId); }
+    }
+    const chats = new Map(this.observedChats.get(`${workspaceId}:${integrationId}`) ?? []);
+    for (const binding of bindings) if (!chats.has(binding.externalChatId)) chats.set(binding.externalChatId, binding.externalChatId);
+    return [...chats].map(([id, name]) => ({ id, name }));
+  }
 
   start(): void {
     if (this.refreshTimer) return;
@@ -35,6 +78,7 @@ export class ChannelBridgeService {
     this.refreshTimer = null;
     for (const loop of this.loops.values()) loop.stop();
     this.loops.clear();
+    this.observedChats.clear();
   }
 
   /** Starts loops for new bindings and stops loops whose bindings are gone or disabled. */
@@ -74,6 +118,8 @@ export class ChannelBridgeService {
           .filter((binding) => (first.kind === 'telegram' ? binding.integrationId === first.integrationId && binding.kind === 'telegram' : binding.id === first.id));
         if (!group.length) return;
         try {
+          await this.discoveryReads.get(first.integrationId);
+          if (stopped) return;
           const result = await integrationExecutionService.pollInbound(first.workspaceId, first.integrationId, {
             cursor,
             chatId: first.kind === 'slack' ? first.externalChatId : null,
@@ -82,6 +128,7 @@ export class ChannelBridgeService {
           // Turned off (or replaced by a newer loop) while this read waited: the
           // messages belong to whichever loop reads the chat from now on.
           if (stopped) return;
+          this.observe(first.workspaceId, first.integrationId, result.messages);
           cursor = await this.consume(first, group, cursor, result, () => stopped);
           for (const binding of group) if (binding.lastError) await channelBindingRepository.update(binding.id, { lastError: null });
           if (first.kind === 'slack') await delay(SLACK_INTERVAL_MS, () => stopped);
@@ -125,6 +172,7 @@ export class ChannelBridgeService {
     for (const binding of group) {
       if (binding.externalChatId !== message.chatId) continue;
       if (!senderAllowed(binding, message.senderId, message.senderHandle)) continue;
+      if (!channelPrefixAllowed(binding, message.text)) continue;
       const previous = message.attachments?.length ? await channelRepository.findExternal(binding.workspaceId, directChannel(binding.nodeId), binding.id, message.externalId) : null;
       const attachments: WorkspaceAttachment[] = Array.isArray(previous?.meta.attachments) ? previous.meta.attachments as WorkspaceAttachment[] : [];
       const uploaded: WorkspaceAttachment[] = [];

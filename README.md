@@ -71,6 +71,15 @@ PDFs/images and generated reports/creatives use bounded workspace files and
 channel-native delivery. Native finals and external output are persisted before
 forwarding; uncertain sends are never blindly repeated.
 
+The profile's Telegram/Slack buttons guide credential setup and conversation
+selection. Slack includes an importable app manifest. WhatsApp lists available
+contacts/groups after pairing, without importing chat history. Choose all
+messages or case-sensitive literal prefixes (for example `@MyBot`, `#MyBot`,
+`/support`); ignored messages never call the model. Put a command in a file's
+caption when filtering. Existing chat/sender grants remain required. Agents use
+`orkestrai bot channel_targets --task <id> --input '{"nodeId":"...","integrationId":"..."}'`
+and `orkestrai bot slack_manifest --task <id> --input '{}'` through the same bridge.
+
 The desktop Core, network and provider account must stay available. The phone
 cannot reach an offline computer. Subscription limits and configured policies
 still apply. Fully authorized provider shells are not isolated by bridge policy;

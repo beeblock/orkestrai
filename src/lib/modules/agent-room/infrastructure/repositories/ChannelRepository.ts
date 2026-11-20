@@ -209,7 +209,7 @@ export class ChannelRepository {
         ? message.meta.deliveryReceipts as Record<string, unknown> : {};
       if (message.authorKind !== 'owner' || message.meta.deliveredAt && (!nodeId || deliveredNodes.includes(nodeId))) return null;
       await AgentChannelMessage.query().where('id', id).update({ meta_json: JSON.stringify({ ...message.meta,
-        deliveredAt: message.meta.deliveredAt ?? at, ...(nodeId ? {
+        deliveredAt: message.meta.deliveredAt ?? at, ...(message.meta.modelFailure ? { modelFailure: null } : {}), ...(nodeId ? {
           deliveredNodes: [...deliveredNodes, nodeId], deliveryReceipts: { ...deliveryReceipts, [nodeId]: at },
         } : {}),
       }), updated_at: new Date().toISOString() });

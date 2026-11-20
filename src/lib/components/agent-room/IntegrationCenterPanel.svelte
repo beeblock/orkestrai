@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+  import { slackBotManifest } from '$lib/modules/agent-room/domain/bot-channel-setup.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import {
@@ -28,13 +30,18 @@
     connectGoogleOAuth?: (input: { clientId: string; permissions: string[]; storageKey: string }) => Promise<{ stored: boolean; accountEmail: string | null }>;
   };
 
-  let { workspaceId, compact = false, onChanged }: { workspaceId: string; compact?: boolean; onChanged?: () => void | Promise<void> } = $props();
+  let { workspaceId, compact = false, onChanged, setupProvider, onConnected, onCloseSetup }: {
+    workspaceId: string; compact?: boolean; onChanged?: () => void | Promise<void>;
+    setupProvider?: 'telegram' | 'slack'; onConnected?: (integration: AutomationIntegration) => void;
+    onCloseSetup?: () => void;
+  } = $props();
   const desktop = typeof window === 'undefined' ? undefined : (window as typeof window & { orkestraiDesktop?: DesktopBridge }).orkestraiDesktop;
   const types: IntegrationType[] = ['gmail', 'slack', 'telegram', 'whatsapp', 'github', 'webhook'];
   const messages = m as unknown as Record<string, (input?: Record<string, string | number>) => string>;
 
   let loading = $state(true);
   let busy = $state(false);
+  let setupError = $state('');
   let dialogOpen = $state(false);
   let integrations = $state<AutomationIntegration[]>([]);
   let catalog = $state<Manifest[]>([]);
@@ -61,6 +68,33 @@
   const selected = $derived(integrations.find((item) => item.id === selectedId) ?? integrations[0] ?? null);
   const selectedEvents = $derived(selected ? events.filter((event) => event.integrationId === selected.id) : events);
   const currentManifest = $derived(catalog.find((item) => item.id === type) ?? null);
+  function downloadSlackSetup() {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(slackBotManifest(), null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'orkestrai-slack-app.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const setupReady = $derived(!setupProvider || permissions.includes(`${setupProvider}.send_message`) && permissions.includes(setupProvider === 'telegram' ? 'telegram.read_updates' : 'slack.read_messages'));
+  let connectedSetup: AutomationIntegration | null = null;
+  function closeCreate() {
+    if (busy) return;
+    dialogOpen = false;
+    if (setupProvider) onCloseSetup?.();
+  }
+  let setupInitialized = $state(false);
+  $effect(() => {
+    const provider = setupProvider;
+    if (!provider || setupInitialized) return;
+    untrack(() => { dialogOpen = true; });
+    if (!catalog.some(item => item.id === provider)) return;
+    setupInitialized = true;
+    untrack(() => {
+      resetCreate(provider);
+      // The owner explicitly connects a chat bot: present its read/reply/file
+      // permissions together, instead of creating a read-only dead end.
+      permissions = catalog.find(item => item.id === provider)!.actions.map(item => item.id);
+      dialogOpen = true;
+    });
+  });
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const csrf = getCsrfToken();
@@ -164,6 +198,7 @@
   async function connect(): Promise<void> {
     if (!currentManifest || permissions.length === 0 || !name.trim()) return;
     busy = true;
+    setupError = ''; connectedSetup = null;
     let created: SecretRefCreated | null = null;
     try {
       const requiresSecret = type !== 'webhook' || authScheme !== 'none';
@@ -176,34 +211,42 @@
           if (!result.stored) throw new Error(m['integrations.oauth_failed']());
           const gmailConfig = config();
           gmailConfig.accountEmail = result.accountEmail;
-          await persist(created.ref, gmailConfig);
+          connectedSetup = await persist(created.ref, gmailConfig);
         } else {
           if (!secretValue) throw new Error(m['integrations.credential_required']());
           await desktop.saveAutomationSecret(created.storageKey, secretValue);
-          await persist(created.ref, config());
+          connectedSetup = await persist(created.ref, config());
         }
       } else {
-        await persist(null, config());
+        connectedSetup = await persist(null, config());
+      }
+      if (setupProvider && connectedSetup && connectedSetup.status !== 'connected') {
+        await api(`/api/agent-room/workspaces/${workspaceId}/integrations/${connectedSetup.id}`, { method: 'DELETE' });
+        connectedSetup = null;
+        throw new Error(m['bots.setup_failed']());
       }
       dialogOpen = false;
       secretValue = '';
       toast.success(m['integrations.connected']({ provider: providerLabel(type) }));
       await refresh();
       await onChanged?.();
+      if (setupProvider && connectedSetup) onConnected?.(connectedSetup);
     } catch (error) {
       if (created) await api(`/api/agent-room/workspaces/${workspaceId}/secret-refs/${created.id}`, { method: 'DELETE' }).catch(() => undefined);
       secretValue = '';
+      if (setupProvider) setupError = error instanceof Error ? error.message : m['bots.setup_failed']();
       toast.error(error instanceof Error ? error.message : m['integrations.error']());
     } finally {
       busy = false;
     }
   }
 
-  async function persist(secretRef: string | null, integrationConfig: Record<string, unknown>): Promise<void> {
-    await api(`/api/agent-room/workspaces/${workspaceId}/integrations`, {
+  async function persist(secretRef: string | null, integrationConfig: Record<string, unknown>): Promise<AutomationIntegration> {
+    const created = await api<AutomationIntegration>(`/api/agent-room/workspaces/${workspaceId}/integrations`, {
       method: 'POST',
       body: JSON.stringify({ type, name, config: integrationConfig, secretRefs: secretRef ? [secretRef] : [], permissions, enabled: true }),
     });
+    return created;
   }
 
   async function check(integration: AutomationIntegration): Promise<void> {
@@ -234,6 +277,7 @@
   $effect(() => { workspaceId; void refresh(); });
 </script>
 
+{#if !setupProvider}
 {#if loading}
   <div class="grid h-full min-h-52 place-items-center">
     <span class="inline-flex items-center gap-2 rounded-full bg-[var(--app-surface)] px-3 py-1.5 text-ui-sm text-[var(--app-text-muted)] shadow-border" role="status"><LoaderCircle size={13} class="animate-spin text-[var(--app-accent)]" aria-hidden="true" />{m['creative.loading']()}</span>
@@ -330,27 +374,43 @@
   </div>
 {/if}
 
-<Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content class="max-h-[min(760px,calc(100vh-2rem))] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0" showCloseButton={false}>
-    <Dialog.Header class="border-b border-[var(--app-border)] px-5 py-4"><Dialog.Title>{m['integrations.add_title']()}</Dialog.Title><Dialog.Description>{m['integrations.add_description']()}</Dialog.Description></Dialog.Header>
+{/if}
+
+<Dialog.Root bind:open={dialogOpen} onOpenChange={value => { if (!value && setupProvider && !busy) onCloseSetup?.(); }}>
+  <Dialog.Content class="max-h-[min(760px,calc(100dvh-2rem))] max-w-2xl sm:max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0" showCloseButton={false} onInteractOutside={(event: Event) => { if (busy) event.preventDefault(); }} onEscapeKeyDown={(event: Event) => { if (busy) event.preventDefault(); }}>
+    <Dialog.Header class="border-b border-[var(--app-border)] px-5 py-4"><Dialog.Title>{setupProvider ? m['bots.setup_title']({ provider: providerLabel(setupProvider) }) : m['integrations.add_title']()}</Dialog.Title><Dialog.Description>{setupProvider ? m['bots.setup_description']() : m['integrations.add_description']()}</Dialog.Description></Dialog.Header>
     <div class="min-h-0 overflow-y-auto px-5 py-4">
+      {#if setupProvider && !setupInitialized}
+        <p class="flex items-center gap-2 text-sm" role="status">{#if loading}<LoaderCircle class="animate-spin" size={15} />{/if}{loading ? m['bots.loading']() : m['bots.setup_failed']()}</p>
+        {#if !loading}<Button type="button" variant="outline" size="sm" onclick={() => void refresh()}>{m['chat.profile_memory_retry']()}</Button>{/if}
+      {:else}
+      {#if setupError}<p class="mb-4 text-sm text-[var(--app-danger)]" role="alert">{setupError}</p>{/if}
+      {#if setupProvider}
+        <div class="mb-4 grid gap-3 text-sm leading-relaxed" data-testid="bot-channel-setup">
+          <p>{setupProvider === 'telegram' ? m['bots.telegram_setup']() : m['bots.slack_setup']()}</p>
+          <a class="w-fit text-[var(--app-accent)] underline underline-offset-4" href={setupProvider === 'telegram' ? 'https://t.me/BotFather' : 'https://api.slack.com/apps'} target="_blank" rel="noopener noreferrer">{m['bots.setup_open_provider']({ provider: providerLabel(setupProvider) })}</a>
+          {#if setupProvider === 'slack'}<Button type="button" variant="outline" size="sm" onclick={downloadSlackSetup}>{m['bots.slack_download_setup']()}</Button>{/if}
+          <p class="text-xs text-[var(--app-text-muted)]">{m['bots.setup_permissions']()}</p>
+        </div>
+      {/if}
       <div class="grid gap-4 sm:grid-cols-2">
-        <label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.provider']()}</span><Select.Root type="single" value={type} onValueChange={(value) => resetCreate(value as IntegrationType)}><Select.Trigger class="w-full">{providerLabel(type)}</Select.Trigger><Select.Content>{#each types as candidate}<Select.Item value={candidate}>{providerLabel(candidate)}</Select.Item>{/each}</Select.Content></Select.Root></label>
-        <label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.name']()}</span><Input bind:value={name} autocomplete="off" /></label>
+        <label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.provider']()}</span><Select.Root type="single" disabled={busy || Boolean(setupProvider)} value={type} onValueChange={(value) => resetCreate(value as IntegrationType)}><Select.Trigger class="w-full">{providerLabel(type)}</Select.Trigger><Select.Content>{#each types as candidate}<Select.Item value={candidate}>{providerLabel(candidate)}</Select.Item>{/each}</Select.Content></Select.Root></label>
+        <label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.name']()}</span><Input bind:value={name} autocomplete="off" disabled={busy} /></label>
 
         {#if type === 'gmail'}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.google_client_id']()}</span><Input bind:value={clientId} autocomplete="off" placeholder="000000000000-....apps.googleusercontent.com" /><span class="mt-1.5 block text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.google_client_help']()}</span></label>{/if}
         {#if type === 'github'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.github_owner']()}</span><Input bind:value={owner} /></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['automation.github_repo']()}</span><Input bind:value={repo} /></label>{/if}
-        {#if type === 'slack'}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.default_channel']()}</span><Input bind:value={defaultChannel} placeholder="C0123456789" /></label>{/if}
-        {#if type === 'telegram'}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.default_chat']()}</span><Input bind:value={defaultChatId} /></label>{/if}
+        {#if type === 'slack' && !setupProvider}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.default_channel']()}</span><Input bind:value={defaultChannel} placeholder="C0123456789" /></label>{/if}
+        {#if type === 'telegram' && !setupProvider}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.default_chat']()}</span><Input bind:value={defaultChatId} /></label>{/if}
         {#if type === 'whatsapp'}<label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.phone_number_id']()}</span><Input bind:value={phoneNumberId} /></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.business_account_id']()}</span><Input bind:value={businessAccountId} /></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.api_version']()}</span><Input bind:value={apiVersion} /></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.default_recipient']()}</span><Input bind:value={defaultRecipient} placeholder="+5511999999999" /></label>{/if}
         {#if type === 'webhook'}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.webhook_url']()}</span><Input bind:value={webhookUrl} placeholder="https://example.com/hooks/orkestrai" /></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.method']()}</span><Select.Root type="single" value={webhookMethod} onValueChange={(value) => (webhookMethod = value as typeof webhookMethod)}><Select.Trigger class="w-full">{webhookMethod}</Select.Trigger><Select.Content>{#each ['POST','PUT','PATCH'] as method}<Select.Item value={method}>{method}</Select.Item>{/each}</Select.Content></Select.Root></label><label><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.authentication']()}</span><Select.Root type="single" value={authScheme} onValueChange={(value) => (authScheme = value as typeof authScheme)}><Select.Trigger class="w-full">{messages[`integrations.auth_${authScheme}`]()}</Select.Trigger><Select.Content><Select.Item value="none">{m['integrations.auth_none']()}</Select.Item><Select.Item value="bearer">Bearer</Select.Item><Select.Item value="header">{m['integrations.auth_header']()}</Select.Item></Select.Content></Select.Root></label>{#if authScheme === 'header'}<label class="sm:col-span-2"><span class="mb-1.5 block text-ui-md font-medium">{m['integrations.header_name']()}</span><Input bind:value={authHeader} /></label>{/if}{/if}
 
-        {#if type !== 'gmail' && (type !== 'webhook' || authScheme !== 'none')}<label class="sm:col-span-2"><span class="mb-1.5 flex items-center gap-1.5 text-ui-md font-medium"><KeyRound size={13} class="text-[var(--app-text-muted)]" />{m['integrations.credential']()}</span><Input type="password" bind:value={secretValue} autocomplete="new-password" /><span class="mt-1.5 block text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.credential_help']()}</span></label>{/if}
+        {#if type !== 'gmail' && (type !== 'webhook' || authScheme !== 'none')}<label class="sm:col-span-2"><span class="mb-1.5 flex items-center gap-1.5 text-ui-md font-medium"><KeyRound size={13} class="text-[var(--app-text-muted)]" />{m['integrations.credential']()}</span><Input type="password" bind:value={secretValue} autocomplete="new-password" disabled={busy} /><span class="mt-1.5 block text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.credential_help']()}</span></label>{/if}
       </div>
 
-      <section class="mt-6 border-t border-[var(--app-border)] pt-5"><h3 class="font-display text-[14px] font-semibold">{m['integrations.permissions']()}</h3><p class="mt-1 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.permissions_help']()}</p><div class="mt-3 grid gap-2 sm:grid-cols-2">{#each currentManifest?.actions ?? [] as action (action.id)}<label class="permission-option flex cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 shadow-border"><Checkbox class="mt-0.5" checked={permissions.includes(action.id)} onCheckedChange={(checked: boolean) => togglePermission(action.id, checked)} /><span class="min-w-0"><span class="block text-ui-md font-medium">{actionLabel(action.id)}</span><span class={`mt-0.5 block text-ui-sm ${action.mutation ? 'text-[var(--app-warning)]' : 'text-[var(--app-text-muted)]'}`}>{action.mutation ? m['integrations.mutation']() : m['integrations.read_only']()}</span></span></label>{/each}</div></section>
+      <section class="mt-6 border-t border-[var(--app-border)] pt-5"><h3 class="font-display text-[14px] font-semibold">{m['integrations.permissions']()}</h3><p class="mt-1 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.permissions_help']()}</p><div class="mt-3 grid gap-2 sm:grid-cols-2">{#each currentManifest?.actions ?? [] as action (action.id)}<label class="permission-option flex cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 shadow-border"><Checkbox class="mt-0.5" disabled={busy} checked={permissions.includes(action.id)} onCheckedChange={(checked: boolean) => togglePermission(action.id, checked)} /><span class="min-w-0"><span class="block text-ui-md font-medium">{actionLabel(action.id)}</span><span class={`mt-0.5 block text-ui-sm ${action.mutation ? 'text-[var(--app-warning)]' : 'text-[var(--app-text-muted)]'}`}>{action.mutation ? m['integrations.mutation']() : m['integrations.read_only']()}</span></span></label>{/each}</div></section>
+      {/if}
     </div>
-    <Dialog.Footer class="border-t border-[var(--app-border)] px-5 py-3"><Button variant="ghost" onclick={() => (dialogOpen = false)}>{m['automation.cancel']()}</Button><Button disabled={busy || permissions.length === 0 || !name.trim()} onclick={connect}>{#if busy}<LoaderCircle class="animate-spin" />{:else if type === 'gmail'}<Mail />{:else}<ShieldCheck />{/if}{type === 'gmail' ? m['integrations.connect_google']() : m['integrations.connect']()}</Button></Dialog.Footer>
+    <Dialog.Footer class="border-t border-[var(--app-border)] px-5 py-3"><Button variant="ghost" disabled={busy} onclick={closeCreate}>{m['automation.cancel']()}</Button><Button disabled={busy || loading || !setupReady || permissions.length === 0 || !name.trim() || Boolean(setupProvider) && !secretValue.trim()} onclick={connect}>{#if busy}<LoaderCircle class="animate-spin" />{:else if type === 'gmail' && !setupProvider}<Mail />{:else}<ShieldCheck />{/if}{type === 'gmail' && !setupProvider ? m['integrations.connect_google']() : m['integrations.connect']()}</Button></Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
 

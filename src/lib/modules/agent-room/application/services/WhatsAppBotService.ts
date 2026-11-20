@@ -3,7 +3,7 @@ import { botConnectionRepository, type BotConnection } from '../../infrastructur
 import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
 import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
-import { directChannel, senderAllowed } from '../../domain/channels.js';
+import { directChannel, senderAllowed, channelPrefixAllowed } from '../../domain/channels.js';
 import { WorkspaceAttachmentDto, WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
 import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
 import { channelService } from './ChannelService.js';
@@ -43,7 +43,7 @@ export class WhatsAppBotService {
   async create(workspaceId: string, name: string) {
     if ((await botConnectionRepository.list(workspaceId)).length >= 5) throw new Error('BOT_CONNECTION_LIMIT');
     const connection = await botConnectionRepository.create(workspaceId, name);
-    try { await this.open(connection); return { id: connection.id }; }
+    try { await this.open(connection, true); return { id: connection.id }; }
     catch (error) {
       await botConnectionRepository.remove(workspaceId, connection.id);
       throw error;
@@ -54,7 +54,7 @@ export class WhatsAppBotService {
       if (connection.enabled) void this.open(connection).catch(() => undefined);
     }
   }
-  private open(connection: BotConnection): Promise<Link> {
+  private open(connection: BotConnection, allowInteractiveUnlock = false): Promise<Link> {
     const current = this.links.get(connection.id);
     if (current && !current.stopped) return Promise.resolve(current);
     const starting = this.starts.get(connection.id);
@@ -62,7 +62,7 @@ export class WhatsAppBotService {
     const run = (async () => {
       await this.require(connection.workspaceId, connection.id);
       const { WhatsAppSecureAuth } = await import('../../infrastructure/integrations/WhatsAppSecureAuth.js');
-      const auth = await WhatsAppSecureAuth.open(connection.workspaceId, connection.id);
+      const auth = await WhatsAppSecureAuth.open(connection.workspaceId, connection.id, desktopSecretService, { allowInteractiveUnlock });
       const link: Link = { connection, auth, socket: null, state: 'connecting', qr: null, error: null,
         chats: new Map(), stopped: false, retry: null, drainRetry: null, pending: [], saveTail: Promise.resolve(), draining: false, attempts: 0, epoch: 0 };
       const previous = await desktopSecretService.get(this.pendingKey(link));
@@ -90,13 +90,30 @@ export class WhatsAppBotService {
   private async connect(link: Link) {
     await this.require(link.connection.workspaceId, link.connection.id);
     if (link.stopped) return;
-    const { default: makeWASocket, DisconnectReason } = await import('@whiskeysockets/baileys');
+    const { default: makeWASocket, DisconnectReason, proto } = await import('@whiskeysockets/baileys');
     const epoch = ++link.epoch;
     const isCurrent = () => !link.stopped && link.epoch === epoch;
     const socket = makeWASocket({ auth: link.auth.forSession(isCurrent), logger, markOnlineOnConnect: false, syncFullHistory: false,
-      shouldSyncHistoryMessage: () => false, browser: ['Orkestrai', 'Desktop', '1.0.0'],
+      // Import contact names, never past conversations or their attachments.
+      shouldSyncHistoryMessage: message => message.syncType === proto.HistorySync.HistorySyncType.PUSH_NAME,
+      browser: ['Orkestrai', 'Desktop', '1.0.0'], defaultQueryTimeoutMs: 15_000,
       getMessage: async () => undefined, connectTimeoutMs: 30_000 });
     link.socket = socket;
+    const remember = (id: unknown, name: unknown) => {
+      if (!isCurrent() || typeof id !== 'string' || !validJid(id)) return;
+      if (!link.chats.has(id) && link.chats.size >= 1000) return;
+      link.chats.set(id, (typeof name === 'string' && name.trim() ? name.trim() : link.chats.get(id) ?? id).slice(0, 120));
+    };
+    const contacts = (items: Array<{ id?: string; name?: string; notify?: string }>) => {
+      if (!isCurrent()) return;
+      for (const item of items.slice(0, 1000)) remember(item.id, item.name ?? item.notify);
+      this.changed(link.connection.workspaceId);
+    };
+    socket.ev.on('contacts.upsert', contacts);
+    socket.ev.on('contacts.update', contacts);
+    socket.ev.on('messaging-history.set', history => contacts(history.contacts));
+    socket.ev.on('chats.upsert', chats => { for (const chat of chats.slice(0, 1000)) remember(chat.id, chat.name); this.changed(link.connection.workspaceId); });
+    socket.ev.on('groups.upsert', groups => { for (const group of groups.slice(0, 1000)) remember(group.id, group.subject); this.changed(link.connection.workspaceId); });
     socket.ev.on('creds.update', () => {
       if (!isCurrent()) return;
       void link.auth.saveCreds(socket.authState.creds, isCurrent).catch(() => { if (isCurrent()) this.fail(link, 'WHATSAPP_CREDENTIAL_WRITE_FAILED'); });
@@ -104,7 +121,14 @@ export class WhatsAppBotService {
     socket.ev.on('connection.update', update => {
       if (link.stopped || link.socket !== socket) return;
       if (update.qr) { link.qr = update.qr.slice(0, 4096); link.state = 'qr'; }
-      if (update.connection === 'open') { link.qr = null; link.state = 'connected'; link.error = null; link.attempts = 0; void this.drain(link); }
+      if (update.connection === 'open') {
+        link.qr = null; link.state = 'connected'; link.error = null; link.attempts = 0; void this.drain(link);
+        void socket.groupFetchAllParticipating().then(groups => {
+          if (!isCurrent()) return;
+          for (const group of Object.values(groups).slice(0, 1000)) remember(group.id, group.subject);
+          this.changed(link.connection.workspaceId);
+        }).catch(() => { if (isCurrent()) { link.error = 'WHATSAPP_CONTACTS_UNAVAILABLE'; this.changed(link.connection.workspaceId); } });
+      }
       if (update.connection === 'close') {
         link.epoch++;
         link.qr = null; link.state = 'offline'; link.socket = null;
@@ -152,10 +176,11 @@ export class WhatsAppBotService {
     const { normalizeMessageContent } = await import('@whiskeysockets/baileys');
     const content = normalizeMessageContent(message.message);
     if (!content?.conversation && !content?.extendedTextMessage && !content?.imageMessage && !content?.documentMessage) return;
-    link.chats.set(chat, (message.pushName || chat).slice(0, 120));
-    while (link.chats.size > 100) link.chats.delete(link.chats.keys().next().value!);
+    const discovered = link.chats.size < 1000 && !link.chats.has(chat);
+    if (discovered) link.chats.set(chat, (message.pushName || chat).slice(0, 120));
     const bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat);
-    if (!bindings.some(binding => senderAllowed(binding, sender, null))) { this.changed(link.connection.workspaceId); return; }
+    const body = String(content?.conversation ?? content?.extendedTextMessage?.text ?? content?.imageMessage?.caption ?? content?.documentMessage?.caption ?? '');
+    if (!bindings.some(binding => senderAllowed(binding, sender, null) && channelPrefixAllowed(binding, body))) { if (discovered) this.changed(link.connection.workspaceId); return; }
     await this.mutatePending(link, async () => {
       if (link.pending.some(item => item.key.id === message.key.id && item.key.remoteJid === chat)) return;
       if (link.pending.length >= PENDING_LIMIT) throw new Error('WHATSAPP_PENDING_LIMIT');
@@ -225,7 +250,7 @@ export class WhatsAppBotService {
     const content = normalizeMessageContent(message.message);
     const media = content?.imageMessage ?? content?.documentMessage;
     const body = String(content?.conversation ?? content?.extendedTextMessage?.text ?? media?.caption ?? '').slice(0, 8000);
-    const bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat && senderAllowed(binding, sender, null));
+    const bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat && senderAllowed(binding, sender, null) && channelPrefixAllowed(binding, body));
     for (const binding of bindings) {
       await this.require(binding.workspaceId, link.connection.id);
       const externalId = `${chat}:${message.key.id}`;
@@ -243,7 +268,7 @@ export class WhatsAppBotService {
           attachments.push(attachment); uploaded.push(attachment);
         }
         const latest = await channelBindingRepository.find(binding.workspaceId, binding.id);
-        if (link.stopped || !latest?.enabled || latest.integrationId !== link.connection.id || latest.nodeId !== binding.nodeId || latest.externalChatId !== chat || !senderAllowed(latest, sender, null)) continue;
+        if (link.stopped || !latest?.enabled || latest.integrationId !== link.connection.id || latest.nodeId !== binding.nodeId || latest.externalChatId !== chat || !senderAllowed(latest, sender, null) || !channelPrefixAllowed(latest, body)) continue;
         await channelService.postExternal(binding.workspaceId, binding.nodeId, { body, via: 'whatsapp', bindingId: binding.id, sender: (message.pushName || sender).slice(0, 120), externalId, attachments });
         await channelBindingRepository.update(binding.id, { lastInboundAt: new Date().toISOString(), lastError: null });
       } finally {

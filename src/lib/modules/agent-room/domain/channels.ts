@@ -103,11 +103,17 @@ export type ChannelBinding = {
   kind: ChannelBindingKind;
   externalChatId: string;
   allowedSenders: string[];
+  replyPrefixes?: string[];
   enabled: boolean;
   lastError: string | null;
   lastInboundAt: string | null;
   createdAt: string;
 };
+
+/** Literal, case-sensitive prefixes; never execute user-supplied regexes. */
+export function channelPrefixAllowed(binding: Pick<ChannelBinding, 'replyPrefixes'>, body: string): boolean {
+  return !binding.replyPrefixes?.length || binding.replyPrefixes.some(prefix => body.trimStart().startsWith(prefix));
+}
 
 /**
  * Whether an inbound sender may talk to the agent: an empty list allows the

@@ -141,6 +141,12 @@ export class PersonalBotService {
         this.changed(workspaceId);
         return binding;
       }
+      case 'slack_manifest': return (await import('../../domain/bot-channel-setup.js')).slackBotManifest();
+      case 'channel_targets': {
+        await this.requireBot(workspaceId, input.nodeId);
+        const { channelBridgeService } = await import('./ChannelBridgeService.js');
+        return channelBridgeService.discoverTargets(workspaceId, input.integrationId, dto.actorNodeId);
+      }
       case 'set_binding':
       case 'disconnect': {
         const binding = (await channelBindingService.list(workspaceId)).find(item => item.id === input.bindingId);

@@ -12,6 +12,7 @@
   import WhatsAppConnections from '$lib/components/agent-room/bots/WhatsAppConnections.svelte';
   import BotGroupChat from '$lib/components/agent-room/bots/BotGroupChat.svelte';
   import AutomationWorkspace from '$lib/components/agent-room/AutomationWorkspace.svelte';
+  import IntegrationCenterPanel from '$lib/components/agent-room/IntegrationCenterPanel.svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import AgentRuntimeDialog from '$lib/components/agent-room/canvas/AgentRuntimeDialog.svelte';
@@ -30,6 +31,8 @@
   let profileOpen = $state(true);
   let generation = 0;
   let automationOpen = $state(false), groupEditing = $state<PersonalBotGroup | null>(null), confirmRemove = $state(false);
+  let viewportWidth = $state(1200);
+  let channelSetup = $state<{ provider: 'telegram' | 'slack'; workspaceId: string; nodeId: string } | null>(null);
   const selected = $derived(bots.find(bot => bot.id === selectedId) ?? null);
   const group = $derived(groups.find(item => item.id === groupId) ?? null);
   const selectedPayload = $derived(selected ? ({ provider: selected.provider, model: selected.model, effort: selected.effort,
@@ -127,6 +130,7 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
 <div class="bots-mode" data-testid="bots-mode">
   <aside class="bot-sidebar">
     <div class="sidebar-heading"><div><h1>{m['bots.title']()}</h1><p>{m['bots.subtitle']()}</p></div><Button size="icon-sm" aria-label={m['bots.create']()} disabled={!workspaceId} onclick={() => edit(null)}><Plus size={16} /></Button></div>
@@ -158,7 +162,7 @@
     {:else}<div class="bot-empty"><span class="empty-avatar"><Bot size={34} strokeWidth={1.4} /></span><h2>{m['bots.empty']()}</h2><p>{failed ? m['bots.error']() : m['bots.empty_hint']()}</p><Button disabled={!workspaceId} onclick={() => edit(null)}><Plus size={16} />{m['bots.create']()}</Button></div>{/if}
   </main>
   {#if selected && profileOpen && selectedPayload}
-    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded {workspaceId} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
+    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
   {/if}
 </div>
 {#if editorOpen}<BotEditor {workspaceId} {providers} bot={editing} onSaved={saved} onClose={() => (editorOpen = false)} />{/if}
@@ -188,6 +192,7 @@
   .bot-instructions { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; color: var(--app-text-soft); }
   .bot-instructions, .profile-heading, .tools-card { flex-shrink: 0; }
   .bot-error { padding: 12px 24px; color: var(--app-danger); font-size: 13px; }
+  .bot-automations-body > :global([data-testid="automation-workspace"]) { width: 100%; border-left: 0; }
   .group-conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; } .group-conversation article { max-width: 780px; margin: 0 auto 22px; } .group-conversation small { display: block; margin-bottom: 7px; color: var(--app-text-muted); font-size: 11px; } .group-conversation article.owner { padding: 13px 16px; background: var(--app-accent-soft); border-radius: 14px; }
   .group-composer { display: flex; align-items: flex-end; gap: 10px; margin: 12px 24px 22px; } .group-composer :global(textarea) { flex: 1; resize: vertical; }
   @media (max-width: 1150px) { .bot-profile { width: 274px; padding: 16px; } .bot-sidebar { width: 224px; } }
@@ -195,5 +200,24 @@
   @media (max-width: 640px) { .bot-sidebar { width: 168px; min-width: 150px; padding: 16px 8px; } .sidebar-heading p { display: none; } .bot-row { padding: 8px 5px; gap: 7px; } .bot-avatar { width: 30px; height: 30px; border-radius: 9px; } .chat-heading { padding: 14px; } .bot-conversation { padding: 8px; } }
 </style>
 
-<Dialog.Root bind:open={automationOpen}><Dialog.Content class="h-[85dvh] w-[94vw] max-w-[1100px] overflow-auto"><Dialog.Header><Dialog.Title>{m['bots.automations']()}</Dialog.Title><Dialog.Description>{m['bots.automations_hint']()}</Dialog.Description></Dialog.Header><AutomationWorkspace {workspaceId} terminals={bots.map(bot => ({ id: bot.id, title: bot.title }))} compact /></Dialog.Content></Dialog.Root>
+<Dialog.Root bind:open={automationOpen}>
+  <Dialog.Content class="flex h-[85dvh] max-h-[900px] w-[94vw] max-w-[1100px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1100px]" data-testid="bot-automations-dialog">
+    <Dialog.Header class="shrink-0 px-5 pt-5 pb-4 pr-12">
+      <Dialog.Title>{m['bots.automations']()}</Dialog.Title>
+      <Dialog.Description>{m['bots.automations_hint']()}</Dialog.Description>
+    </Dialog.Header>
+    <div class="bot-automations-body min-h-0 min-w-0 flex-1 overflow-hidden">
+      <AutomationWorkspace {workspaceId} terminals={bots.map(bot => ({ id: bot.id, title: bot.title }))} compact={viewportWidth < 760} />
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 <AlertDialog.Root bind:open={confirmRemove}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{group ? m['bots.archive_group']() : m['bots.remove']()}</AlertDialog.Title><AlertDialog.Description>{m['bots.confirm_remove']()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['bots.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void removeSelected()}>{m['bots.remove']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
+
+{#if channelSetup}
+  <IntegrationCenterPanel workspaceId={channelSetup.workspaceId} setupProvider={channelSetup.provider} onCloseSetup={() => (channelSetup = null)} onConnected={integration => {
+    const context = channelSetup;
+    channelSetup = null;
+    if (context) window.dispatchEvent(new CustomEvent('orkestrai:bot-integration-ready', { detail: { nodeId: context.nodeId, integrationId: integration.id } }));
+    window.dispatchEvent(new CustomEvent('orkestrai:bots-changed'));
+  }} />
+{/if}

@@ -23,7 +23,7 @@ export class ChannelBindingService {
       const existing = await channelBindingRepository.list(workspaceId);
       if (existing.some(binding => binding.integrationId === linked.id && binding.externalChatId === input.externalChatId)) throw new Error('BOT_CHAT_ALREADY_CONNECTED');
       return channelBindingRepository.create({ workspaceId, nodeId: input.nodeId, integrationId: linked.id,
-        kind: 'whatsapp', externalChatId: input.externalChatId, allowedSenders: input.allowedSenders });
+        kind: 'whatsapp', externalChatId: input.externalChatId, allowedSenders: input.allowedSenders, replyPrefixes: input.replyPrefixes });
     }
     const integration = await integrationExecutionService.get(workspaceId, input.integrationId);
     if (integration.type !== 'telegram' && integration.type !== 'slack') throw new Error('Use uma integração do Telegram ou do Slack.');
@@ -43,6 +43,7 @@ export class ChannelBindingService {
       kind: integration.type,
       externalChatId: input.externalChatId,
       allowedSenders: [...new Set(input.allowedSenders.map((sender) => sender.trim()).filter(Boolean))],
+      replyPrefixes: input.replyPrefixes,
     });
     await channelBridgeService.refresh();
     return binding;

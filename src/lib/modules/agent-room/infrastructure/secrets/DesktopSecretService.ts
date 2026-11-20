@@ -7,6 +7,8 @@ type SecretResponse = {
   error?: string;
 };
 
+export type SecretRequestOptions = { allowInteractiveUnlock?: boolean };
+
 type PendingSecret = {
   resolve: (value: string | null) => void;
   reject: (error: Error) => void;
@@ -35,7 +37,7 @@ if (!state.__orkestraiSecretListenerReady && typeof process.on === 'function') {
 }
 
 export class DesktopSecretService {
-  private async request(type: 'orkestrai:secret:get' | 'orkestrai:secret:set' | 'orkestrai:secret:delete', key: string, value?: string): Promise<string | null> {
+  private async request(type: 'orkestrai:secret:get' | 'orkestrai:secret:set' | 'orkestrai:secret:delete', key: string, value?: string, options?: SecretRequestOptions): Promise<string | null> {
     if (!/^automation:[a-z0-9:_-]{1,240}$/i.test(key)) throw new Error('Invalid automation secret key.');
     if (typeof process.send !== 'function') {
       if (type !== 'orkestrai:secret:get') return null;
@@ -47,16 +49,16 @@ export class DesktopSecretService {
     return new Promise<string | null>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(requestId);
-        reject(new Error('Secure credential request timed out.'));
-      }, 5_000);
+        reject(new Error(options?.allowInteractiveUnlock ? 'SECURE_STORAGE_UNLOCK_TIMEOUT' : 'Secure credential request timed out.'));
+      }, options?.allowInteractiveUnlock ? 120_000 : 5_000);
       timer.unref?.();
       pending.set(requestId, { resolve, reject, timer });
       process.send?.({ type, requestId, key, ...(value === undefined ? {} : { value }) });
     });
   }
 
-  get(key: string): Promise<string | null> { return this.request('orkestrai:secret:get', key); }
-  async set(key: string, value: string): Promise<void> { await this.request('orkestrai:secret:set', key, value); }
+  get(key: string, options?: SecretRequestOptions): Promise<string | null> { return this.request('orkestrai:secret:get', key, undefined, options); }
+  async set(key: string, value: string, options?: SecretRequestOptions): Promise<void> { await this.request('orkestrai:secret:set', key, value, options); }
   async delete(key: string): Promise<void> { await this.request('orkestrai:secret:delete', key); }
 }
 

@@ -120,3 +120,77 @@ test('bot groups keep attachments and expose the microphone separately from Send
     await expect(chat.getByRole('button', { name: labels['composer.voice_label'] })).toBeVisible();
   } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
 });
+
+test('bot channel setup stays inside the viewport and opens Telegram setup directly', async ({ page, request }) => {
+  const root = await mkdtemp(join(tmpdir(), 'orkestrai-bot-setup-'));
+  const created = await request.post('/api/agent-room/workspaces', { data: { name: 'Bot setup layout QA', workingDir: root } });
+  expect(created.ok()).toBe(true);
+  const workspace = (await created.json()).data, base = `/api/agent-room/workspaces/${workspace.id}`;
+  try {
+    const bot = await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'Setup helper', provider: 'codex', instructions: 'Help with support.', transport: 'structured' } } });
+    expect(bot.ok(), await bot.text()).toBe(true);
+    await page.goto(`/bots?workspace=${workspace.id}`);
+    const profile = page.locator('.bot-profile');
+    await expect(profile).toBeVisible();
+    await profile.getByRole('button', { name: labels['bots.setup_title'].replace('{provider}', 'Telegram'), exact: true }).click();
+    const setup = page.getByRole('dialog');
+    await expect(setup.getByTestId('bot-channel-setup')).toContainText('BotFather');
+    await expect(setup.getByRole('link', { name: labels['bots.setup_open_provider'].replace('{provider}', 'Telegram'), exact: true })).toHaveAttribute('href', 'https://t.me/BotFather');
+    await expect(setup).toContainText(labels['integrations.credential']);
+    await setup.getByRole('button', { name: labels['automation.cancel'], exact: true }).click();
+    await expect(setup).not.toBeVisible();
+    await page.evaluate(() => { (window as any).orkestraiDesktop = { saveAutomationSecret: async () => ({ stored: true }) }; });
+    let connected: any = null;
+    let submitted: any = null;
+    await page.route(`**${base}/integrations`, async route => {
+      if (route.request().method() === 'POST') {
+        submitted = route.request().postDataJSON();
+        connected = { ...submitted, id: '00000000-0000-7000-8000-000000000001', status: 'connected', error: null };
+        return route.fulfill({ status: 201, json: { data: connected } });
+      }
+      const response = await route.fetch();
+      const payload = await response.json();
+      if (connected) payload.data.integrations.push(connected);
+      return route.fulfill({ response, json: payload });
+    });
+    await page.route(`**${base}/bots`, route => route.request().method() === 'POST' && route.request().postDataJSON().command === 'channel_targets'
+      ? route.fulfill({ json: { data: [{ id: '100001', name: 'Test owner' }] } }) : route.continue());
+    await profile.getByRole('button', { name: labels['bots.setup_title'].replace('{provider}', 'Telegram'), exact: true }).click();
+    await expect(setup.getByTestId('bot-channel-setup')).toBeVisible();
+    await setup.locator('input[type=password]').fill('TEST_ONLY_NOT_A_REAL_TOKEN');
+    await setup.getByRole('button', { name: labels['integrations.connect'], exact: true }).click();
+    await expect(setup).not.toBeVisible();
+    expect(submitted.permissions).toContain('telegram.read_updates');
+    expect(submitted.permissions).toContain('telegram.send_message');
+    expect(JSON.stringify(submitted)).not.toContain('TEST_ONLY_NOT_A_REAL_TOKEN');
+    await expect(profile.getByRole('button', { name: labels['bots.find_chats'], exact: true })).toBeVisible();
+    await profile.getByRole('combobox', { name: labels['always_on.chat'], exact: true }).click();
+    await page.getByRole('option', { name: 'Test owner', exact: true }).click();
+    await expect(profile.getByRole('textbox', { name: labels['always_on.chat'], exact: true })).toHaveValue('100001');
+    await expect(profile.getByRole('textbox', { name: labels['bots.prefixes'], exact: true })).toHaveValue('@Setuphelper');
+    for (const [width, height] of [[1280, 800], [960, 600], [560, 480]]) {
+      await page.setViewportSize({ width, height });
+      await profile.getByRole('button', { name: labels['bots.automations'], exact: true }).click();
+      const dialog = page.getByTestId('bot-automations-dialog');
+      await expect(dialog).toBeVisible();
+      const box = await dialog.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.y).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+      expect(box!.y + box!.height).toBeLessThanOrEqual(height + 1);
+      const panel = dialog.getByTestId('automation-workspace');
+      const bounds = await panel.boundingBox();
+      expect(bounds!.width).toBeGreaterThan(box!.width - 4);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+      for (const name of [labels['automation.integrations'], labels['autonomy.title'], labels['automation.overview']]) {
+        await dialog.getByRole('tab', { name, exact: true }).click();
+        await expect(dialog.getByRole('tablist').first().getByRole('tab', { name, exact: true })).toHaveAttribute('aria-selected', 'true');
+      }
+      await dialog.getByRole('button', { name: labels['ui.close'], exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+    }
+  } finally {
+    await request.delete(base);
+    await rm(root, { recursive: true, force: true });
+  }
+});

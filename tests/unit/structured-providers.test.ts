@@ -61,6 +61,7 @@ describe('structured provider transports', () => {
 
   it('uses the Claude SDK with the selected profile, native MCP tools and saved sessions', async () => {
     const { options, sessions } = setup();
+    options.bridgeMcp.env = { ORKESTRAI_AGENT_TOKEN: 'PRIVATE_MCP_SENTINEL', ELECTRON_RUN_AS_NODE: '1' };
     const close = vi.fn();
     const query = vi.fn(() => Object.assign((async function* () {
       yield { type: 'system', subtype: 'init', session_id: 'claude-session' };
@@ -79,6 +80,10 @@ describe('structured provider transports', () => {
     } });
     expect(accepted).toHaveBeenCalledTimes(2);
     expect(close).toHaveBeenCalledTimes(2);
+    const sdkOptions = (query.mock.calls as unknown as Array<[any]>)[0][0].options;
+    expect(sdkOptions.mcpServersDelivery).toBe('argv');
+    expect(JSON.stringify(sdkOptions.mcpServers)).not.toContain(options.bridgeMcp.env.ORKESTRAI_AGENT_TOKEN);
+    expect(sdkOptions.mcpServers.orkestrai.env ?? {}).not.toHaveProperty('ORKESTRAI_AGENT_TOKEN');
   });
 
   it('observes Codex exit after an output failure before releasing the native writer', async () => {

@@ -219,12 +219,19 @@ function writeSecureSecrets(secrets) {
 }
 
 function readAutomationSecret(key) {
-  if (!validAutomationSecretKey(key) || !protectedSecretStorageAvailable()) return null;
-  const encrypted = readSecureSecrets()[key];
+  const strict = validAutomationSecretKey(key) && key.startsWith('automation:whatsapp:');
+  if (!validAutomationSecretKey(key) || !protectedSecretStorageAvailable()) {
+    if (strict) throw new Error('WHATSAPP_SECURE_STORAGE_REQUIRED');
+    return null;
+  }
+  // Missing keys and unreadable keys are different. Treating a cancelled
+  // Keychain unlock as "missing" would replace a linked account's identity.
+  const encrypted = readSecureSecrets(strict)[key];
   if (typeof encrypted !== 'string' || !encrypted) return null;
   try {
     return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
   } catch {
+    if (strict) throw new Error('WHATSAPP_AUTH_DECRYPT_FAILED');
     return null;
   }
 }

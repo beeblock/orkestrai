@@ -931,6 +931,10 @@ export class AgentInboxService {
         },
         onCompleted: text => this.keepStructuredResult(batch, text, batch.batchId),
         onFailed: async () => {
+          const { channelService } = await import('./ChannelService.js');
+          for (const envelope of batch.envelopes) {
+            if (typeof envelope.metadata.channelMessageId === 'string') await channelService.modelFailure(batch.workspaceId, envelope.metadata.channelMessageId, 'turn');
+          }
           await controlCenterService.recordActivity({ workspaceId: batch.workspaceId, nodeId: batch.nodeId,
             state: 'error', action: 'system:structured_turn_failed', category: 'system', verb: 'failed',
             sourceType: 'structured_agent', sourceId: batch.batchId });
@@ -1122,6 +1126,13 @@ export class AgentInboxService {
   private async fail(envelope: AgentMessageEnvelope, error: string): Promise<void> {
     await controlCenterService.recordInboxTransition(envelope.id, { state: 'failed', error, metadata: envelope.metadata });
     this.resolveWaiters(envelope.id, { state: 'failed', error, cancelled: false });
+    if (typeof envelope.metadata.channelMessageId === 'string') {
+      const node = await workspaceRepository.getNode(envelope.toNodeId);
+      if ((node?.payload as TerminalNodePayload | undefined)?.personalBot) {
+        const { channelService } = await import('./ChannelService.js');
+        await channelService.modelFailure(envelope.workspaceId, envelope.metadata.channelMessageId, 'start');
+      }
+    }
   }
 
   private async cancel(envelope: AgentMessageEnvelope, reason: string): Promise<void> {

@@ -61,11 +61,12 @@ export const createChannelBindingSchema = z.object({
   integrationId: z.string().uuid(),
   externalChatId: z.string().trim().min(1, 'Informe o chat ou canal.').max(120).regex(/^[A-Za-z0-9_@:.-]+$/, 'Use o id do chat ou canal.'),
   allowedSenders: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
+  replyPrefixes: z.array(z.string().trim().min(1).max(80).refine(value => !/[\r\n\x00-\x1f]/.test(value))).max(10).default([]),
 });
 
 export const updateChannelBindingSchema = z.object({
   enabled: z.boolean(),
 });
 
-export type CreateChannelBindingInput = z.infer<typeof createChannelBindingSchema>;
+export type CreateChannelBindingInput = Omit<z.infer<typeof createChannelBindingSchema>, 'replyPrefixes'> & { replyPrefixes?: string[] };
 export type UpdateChannelBindingInput = z.infer<typeof updateChannelBindingSchema>;

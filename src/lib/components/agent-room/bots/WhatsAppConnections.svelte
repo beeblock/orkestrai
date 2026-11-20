@@ -6,12 +6,15 @@
   import * as Select from '$lib/components/ui/select';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { botApi } from './bot-api.js';
+  import ModelCombobox from '../canvas/ModelCombobox.svelte';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
   import * as m from '$lib/paraglide/messages.js';
 
   type Connection = { id: string; name: string; state: string; enabled: boolean; error: string | null; chats: Array<{ id: string; name: string }> };
-  let { workspaceId, nodeId, onChanged }: { workspaceId: string; nodeId: string; onChanged: () => void } = $props();
+  let { workspaceId, nodeId, title = 'Bot', onChanged }: { workspaceId: string; nodeId: string; title?: string; onChanged: () => void } = $props();
   let connections = $state<Connection[]>([]), selectedId = $state(''), qr = $state<string | null>(null), connectionState = $state('offline');
   let busy = $state(false), failed = $state(false), chatId = $state(''), senders = $state(''), removing = $state(false);
+  let replyMode = $state<'all' | 'prefix'>('prefix'), prefixes = $state(''), failureCode = $state('');
   const selected = $derived(connections.find(item => item.id === selectedId));
   const base = $derived(`/api/agent-room/workspaces/${workspaceId}/bots`);
   let generation = 0;
@@ -27,7 +30,7 @@
     } catch { if (workspace === workspaceId) failed = true; }
   }
   $effect(() => { void workspaceId; void nodeId; return untrack(() => {
-    selectedId = ''; qr = null; chatId = ''; senders = ''; void load();
+    selectedId = ''; qr = null; chatId = ''; senders = ''; prefixes = `@${title.replace(/\s+/g, '')}`; void load();
     const changed = () => void load();
     window.addEventListener('orkestrai:bots-changed', changed);
     return () => { generation++; window.removeEventListener('orkestrai:bots-changed', changed); };
@@ -41,7 +44,7 @@
       try {
         const result = await botApi<{ state: string; qr: string | null; error: string | null }>(`/api/agent-room/workspaces/${workspace}/bots?connectionId=${id}`, undefined, controller.signal);
         if (controller.signal.aborted) return;
-        qr = result.qr; connectionState = result.state; failed = Boolean(result.error);
+        qr = result.qr; connectionState = result.state; failed = Boolean(result.error); failureCode = result.error ?? '';
         if (result.state === 'qr' || result.state === 'connecting' || result.state === 'offline') timer = setTimeout(poll, 2500);
       } catch { if (!controller.signal.aborted) { failed = true; connectionState = 'error'; } }
     }
@@ -50,8 +53,8 @@
   });
   async function start() {
     if (busy) return; busy = true; failed = false;
-    try { const result = await botApi<{ id: string }>(base, { command: 'whatsapp_start', name: 'WhatsApp' }); selectedId = result.id; await load(); }
-    catch { failed = true; } finally { busy = false; }
+    try { const result = await botApi<{ id: string }>(base, { command: 'whatsapp_start', name: 'WhatsApp' }, AbortSignal.timeout(130_000)); selectedId = result.id; await load(); }
+    catch (error) { failed = true; failureCode = error instanceof Error ? error.message : ''; } finally { busy = false; }
   }
   async function bind() {
     if (!selectedId || !chatId.trim() || busy) return;
@@ -59,7 +62,8 @@
     busy = true; failed = false;
     try {
       await botApi(base, { command: 'connect', binding: { nodeId, integrationId: selectedId, externalChatId: /^\d+$/.test(raw) ? `${raw}@s.whatsapp.net` : raw,
-        allowedSenders: senders.split(',').map(value => value.trim()).filter(Boolean) } });
+        allowedSenders: senders.split(',').map(value => value.trim().replace(/^\+/, '')).filter(Boolean).map(value => /^\d+$/.test(value) ? `${value}@s.whatsapp.net` : value),
+        replyPrefixes: replyMode === 'prefix' ? prefixes.split(',').map(value => value.trim()).filter(Boolean) : [] } });
       chatId = ''; onChanged();
     } catch { failed = true; } finally { busy = false; }
   }
@@ -80,15 +84,19 @@
     {:else if connectionState === 'connected'}<p class="text-xs text-[var(--app-success)]" role="status">{m['bots.connected']()}</p>{/if}
     {#if connectionState === 'connected'}
       <form class="grid gap-2 rounded-xl border border-[var(--app-border)] p-3" onsubmit={(event: SubmitEvent) => { event.preventDefault(); void bind(); }}>
-        {#if selected?.chats.length}<Select.Root type="single" value={chatId} onValueChange={value => (chatId = value)}><Select.Trigger aria-label={m['bots.whatsapp_chat']()}><span class="truncate">{selected.chats.find(item => item.id === chatId)?.name ?? m['bots.whatsapp_chat']()}</span></Select.Trigger><Select.Content>{#each selected.chats as chat}<Select.Item value={chat.id}>{chat.name} · {chat.id}</Select.Item>{/each}</Select.Content></Select.Root>{/if}
+        {#if selected?.chats.length}
+          <ModelCombobox value={chatId} options={selected.chats.map(chat => ({ value: chat.id, label: `${chat.name} · ${chat.id.endsWith('@g.us') ? m['bots.whatsapp_group']() : m['bots.whatsapp_contact']()}` }))} defaultLabel={m['bots.whatsapp_chat']()} searchPlaceholder={m['bots.whatsapp_search']()} emptyLabel={m['bots.whatsapp_no_contacts']()} ariaLabel={m['bots.whatsapp_chat']()} onValueChange={value => (chatId = value)} />
+        {:else}<p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_no_contacts']()}</p>{/if}
         <label class="grid gap-1 text-xs">{m['bots.whatsapp_chat_id']()}<Input bind:value={chatId} maxlength={120} required placeholder="5511999999999" /></label>
         <label class="grid gap-1 text-xs">{m['bots.allowed_senders']()}<Input bind:value={senders} maxlength={6000} /></label>
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.allowed_senders_hint']()}</p>
-        <Button size="sm" type="submit" disabled={busy || !chatId.trim()}><Link2 size={14} />{m['bots.connect']()}</Button>
+        <SegmentedControl fill label={m['bots.reply_when']()} value={replyMode} onValueChange={value => (replyMode = value)} options={[{ value: 'prefix', label: m['bots.reply_prefix']() }, { value: 'all', label: m['bots.reply_all']() }]} />
+        {#if replyMode === 'prefix'}<label class="grid gap-1 text-xs">{m['bots.prefixes']()}<Input bind:value={prefixes} maxlength={809} required /></label><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.prefixes_hint']()}</p>{/if}
+        <Button size="sm" type="submit" disabled={busy || !chatId.trim() || replyMode === 'prefix' && !prefixes.trim()}><Link2 size={14} />{m['bots.connect']()}</Button>
       </form>
     {/if}
     <Button size="sm" variant="ghost" disabled={busy} onclick={() => (removing = true)}><Trash2 size={13} />{m['bots.disconnect']()}</Button>
   {:else}<Button size="sm" variant="outline" disabled={busy} onclick={() => void start()}><Plus size={14} />{m['bots.whatsapp_add']()}</Button>{/if}
-  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['chat.profile_memory_retry']()}</Button>{/if}
+  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{failureCode === 'SECURE_STORAGE_UNLOCK_TIMEOUT' || failureCode === 'Secure credential request timed out.' ? m['bots.whatsapp_unlock_timeout']() : m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['chat.profile_memory_retry']()}</Button>{/if}
 </section>
 <AlertDialog.Root bind:open={removing}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['bots.disconnect']()}</AlertDialog.Title><AlertDialog.Description>{m['bots.whatsapp_disconnect_hint']()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['bots.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void disconnect()}>{m['bots.disconnect']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

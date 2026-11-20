@@ -63,6 +63,7 @@ function quoteFilename(value: string): string {
 export type InboundChannelMessage = {
   externalId: string;
   chatId: string;
+  chatName?: string;
   senderId: string;
   /** A username the platform reserves for the sender (Telegram @handle); null when there is none. */
   senderHandle: string | null;
@@ -616,6 +617,7 @@ export class IntegrationExecutionService {
         messages.push({
           externalId: String(updateId),
           chatId: String(record(message.chat).id ?? ''),
+          chatName: String(record(message.chat).title ?? displayName ?? '').slice(0, 120),
           senderId: String(from.id ?? ''),
           senderHandle: handle,
           senderName: (handle ? `@${handle}` : displayName || String(from.id ?? '')).slice(0, 120),

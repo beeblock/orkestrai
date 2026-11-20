@@ -1255,7 +1255,7 @@ async function runCommand(argv, options, sink) {
         out(JSON.stringify(await bridge(config, 'GET', '/api/agent-room/bridge/bots'), null, 2));
         return 0;
       }
-      if ((!botFlags.task && !['group_post', 'group_send'].includes(action)) || !botFlags.input) throw new Error('Use: orkestrai bot <create|update|remove|group_create|group_update|group_archive|group_send|group_post|connect|set_binding|disconnect|whatsapp_start|whatsapp_disconnect> --task <id> --input <json>');
+      if ((!botFlags.task && !['group_post', 'group_send'].includes(action)) || !botFlags.input) throw new Error('Use: orkestrai bot <create|update|remove|group_create|group_update|group_archive|group_send|group_post|connect|set_binding|disconnect|whatsapp_start|whatsapp_disconnect|channel_targets|slack_manifest> --task <id> --input <json>');
       const input = JSON.parse(String(botFlags.input));
       out(JSON.stringify(await bridge(config, 'POST', '/api/agent-room/bridge/bots', { ...(botFlags.task ? { taskId: String(botFlags.task) } : {}), input: { ...input, command: action } }), null, 2));
       return 0;

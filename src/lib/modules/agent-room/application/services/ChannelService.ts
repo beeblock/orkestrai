@@ -120,6 +120,14 @@ function envelopeMessage(envelope: AgentMessageEnvelope): ChannelMessage {
  * boundary); agents post and ask the owner through the bridge.
  */
 export class ChannelService {
+  async modelFailure(workspaceId: string, messageId: string, phase: 'start' | 'turn'): Promise<void> {
+    const updated = await Connection.transaction(async () => {
+      const current = await channelRepository.find(workspaceId, messageId);
+      if (!current || !['owner', 'external'].includes(current.authorKind)) return null;
+      return channelRepository.mergeMeta(workspaceId, messageId, { modelFailure: phase });
+    });
+    if (updated) broadcast(updated);
+  }
   /** Persist a native turn's final reply once and retain its exact return address. */
   async postStructuredResult(workspaceId: string, nodeId: string, sourceId: string, body: string, turnId: string): Promise<ChannelMessage | null> {
     const original = await channelRepository.find(workspaceId, sourceId);

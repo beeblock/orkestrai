@@ -7,7 +7,7 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.1 local preview
+### Added — 0.55.0-beta.2 local preview
 
 - Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.
 - Add opt-in Codex App Server and Claude Agent SDK transports using unchanged installed CLIs and selected profiles. Native prompts bypass TUI paste/Enter timing; provider receipts, per-conversation contexts, bounded output and verified process shutdown retain the existing bridge identity and Canvas tools.
@@ -18,6 +18,13 @@ pt-BR, English, and Spanish translations.
 - Expose personal bot/group operations through the authenticated CLI/MCP, document a phone support/report use case in three languages and add a guided tour. Existing grants, workspace pauses and configured gates remain authoritative.
 
 - Explain the personal-bot Instructions and rules field with a copyable support template, recurring-rule versus task guidance and a dedicated onboarding step in all three languages.
+
+
+### Fixed in the local preview
+
+- Support installed Claude Code 2.1.325 through secret-free MCP configuration and inherited authenticated environment; show model-start and turn failures on the saved bot message.
+- Keep the Bots automation modal inside the viewport with full-width, independently scrolling content. Add direct, guided Telegram/Slack connection, conversation discovery and a downloadable Slack app manifest.
+- Wait for an explicit WhatsApp secure-store unlock without extending background secret timeouts. List available WhatsApp contacts/groups without importing message history, and filter literal owner-defined reply prefixes before downloading files or invoking models.
 
 
 ## 0.54.0 - 2026-11-18

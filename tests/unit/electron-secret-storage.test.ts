@@ -12,6 +12,20 @@ function fixture(platform: string, content: string | Error, backend = 'gnome_lib
   return { api, fs, safeStorage };
 }
 describe('desktop credential vault', () => {
+  it('preserves a linked WhatsApp identity when unlocking or decrypting fails', () => {
+    const key = 'automation:whatsapp:workspace:connection';
+    const f = fixture('darwin', JSON.stringify({ [key]: 'encrypted-existing-identity' }));
+    f.safeStorage.decryptString.mockImplementation(() => { throw new Error('unlock cancelled'); });
+    expect(() => f.api.readAutomationSecret(key)).toThrow('WHATSAPP_AUTH_DECRYPT_FAILED');
+    expect(f.fs.writeFileSync).not.toHaveBeenCalled();
+    expect(f.api.readAutomationSecret('automation:other')).toBeNull();
+    const missing = fixture('darwin', '{}');
+    expect(missing.api.readAutomationSecret(key)).toBeNull();
+    const corrupt = fixture('darwin', '{broken');
+    expect(() => corrupt.api.readAutomationSecret(key)).toThrow('not changed');
+    const unprotected = fixture('linux', '{}', 'basic_text');
+    expect(() => unprotected.api.readAutomationSecret(key)).toThrow('WHATSAPP_SECURE_STORAGE_REQUIRED');
+  });
   it.each(['basic_text', 'unknown'])('refuses the unprotected Linux backend %s', backend => {
     const f = fixture('linux', '{}', backend);
     expect(() => f.api.saveAutomationSecret('automation:creative-profile:test', 'secret')).toThrow('unavailable');

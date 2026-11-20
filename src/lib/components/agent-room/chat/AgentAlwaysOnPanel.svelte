@@ -13,8 +13,11 @@
   import type { AgentActivity, AutomationIntegration, ControlCenterSnapshot, TerminalNodePayload } from '$lib/modules/agent-room/domain/types.js';
   import * as m from '$lib/paraglide/messages.js';
   import { getLocale } from '$lib/paraglide/runtime.js';
+  import { botApi } from '../bots/bot-api.js';
+  import ModelCombobox from '../canvas/ModelCombobox.svelte';
+  import { SegmentedControl } from '$lib/components/ui/segmented';
 
-  let { workspaceId, nodeId, payload, botEvents = false }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload; botEvents?: boolean } = $props();
+  let { workspaceId, nodeId, payload, botEvents = false, botTitle = 'Bot', onSetupChannel }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload; botEvents?: boolean; botTitle?: string; onSetupChannel?: (provider: 'telegram' | 'slack') => void } = $props();
 
   let bindings = $state<ChannelBinding[]>([]);
   let integrations = $state<AutomationIntegration[]>([]);
@@ -26,8 +29,26 @@
   let chatId = $state('');
   let senders = $state('');
   let saving = $state(false);
+  let targets = $state<Array<{ id: string; name: string }>>([]), finding = $state(false), targetError = $state(false);
+  let replyMode = $state<'all' | 'prefix'>('prefix'), prefixes = $state('');
 
-  const chatIntegrations = $derived(integrations.filter((integration) => (integration.type === 'telegram' || integration.type === 'slack') && integration.enabled));
+  async function discover() {
+    if (!integrationId || finding) return;
+    const id = integrationId, node = nodeId, workspace = workspaceId;
+    finding = true; targetError = false;
+    try {
+      const result = await botApi<Array<{ id: string; name: string }>>(`/api/agent-room/workspaces/${workspace}/bots`, { command: 'channel_targets', nodeId: node, integrationId: id });
+      if (id === integrationId && node === nodeId && workspace === workspaceId) targets = result;
+    } catch { if (node === nodeId && workspace === workspaceId) targetError = true; }
+    finally { finding = false; }
+  }
+  function chooseChannel(provider: 'telegram' | 'slack') {
+    const account = chatIntegrations.find(item => item.type === provider);
+    if (!account) { onSetupChannel?.(provider); return; }
+    integrationId = account.id; adding = true; targets = []; void discover();
+  }
+
+  const chatIntegrations = $derived(integrations.filter((integration) => (integration.type === 'telegram' || integration.type === 'slack') && integration.enabled && (!botEvents || integration.status === 'connected' && integration.permissions.includes(`${integration.type}.send_message`) && integration.permissions.includes(integration.type === 'telegram' ? 'telegram.read_updates' : 'slack.read_messages'))));
   const chosen = $derived(chatIntegrations.find((integration) => integration.id === integrationId) ?? null);
 
   async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -63,9 +84,18 @@
 
   $effect(() => {
     if (!botEvents) return;
+    void workspaceId; void nodeId;
+    integrationId = ''; chatId = ''; senders = ''; targets = []; adding = false; replyMode = 'prefix';
     const changed = () => void load();
+    const ready = (event: Event) => {
+      const data = (event as CustomEvent<{ nodeId: string; integrationId: string }>).detail;
+      if (data?.nodeId !== nodeId) return;
+      integrationId = data.integrationId; adding = true; void load(); void discover();
+    };
     window.addEventListener('orkestrai:bots-changed', changed);
-    return () => window.removeEventListener('orkestrai:bots-changed', changed);
+    window.addEventListener('orkestrai:bot-integration-ready', ready);
+    prefixes = `@${botTitle.replace(/\s+/g, '')}`;
+    return () => { window.removeEventListener('orkestrai:bots-changed', changed); window.removeEventListener('orkestrai:bot-integration-ready', ready); };
   });
 
   async function connect() {
@@ -74,7 +104,7 @@
     try {
       const created = await api<ChannelBinding>(`${base}/channel-bindings`, {
         method: 'POST',
-        body: JSON.stringify({ nodeId, integrationId, externalChatId: chatId.trim(), allowedSenders: senders.split(',').map((value) => value.trim()).filter(Boolean) }),
+        body: JSON.stringify({ nodeId, integrationId, externalChatId: chatId.trim(), allowedSenders: senders.split(',').map((value) => value.trim()).filter(Boolean), replyPrefixes: botEvents && replyMode === 'prefix' ? prefixes.split(',').map(value => value.trim()).filter(Boolean) : [] }),
       });
       bindings = [...bindings, created];
       adding = false;
@@ -127,11 +157,13 @@
 
 <section class="block">
   <h3><Link2 size={13} />{m['always_on.channels']()}</h3>
+  {#if botEvents && onSetupChannel}<div class="grid gap-2"><Button size="sm" variant="outline" onclick={() => chooseChannel('telegram')}>{m['bots.setup_title']({ provider: 'Telegram' })}</Button><Button size="sm" variant="outline" onclick={() => chooseChannel('slack')}>{m['bots.setup_title']({ provider: 'Slack' })}</Button></div>{/if}
   {#each bindings as binding (binding.id)}
     <div class="binding" class:error={Boolean(binding.lastError)}>
       <div class="binding-main">
         <b>{binding.kind === 'telegram' ? 'Telegram' : binding.kind === 'whatsapp' ? 'WhatsApp' : 'Slack'}</b>
         <span class="mono">{binding.externalChatId}</span>
+        {#if botEvents}<span class="meta">{binding.replyPrefixes?.length ? binding.replyPrefixes.join(', ') : m['bots.reply_all']()}</span>{/if}
         {#if binding.lastError}<span class="err" title={binding.lastError}>{binding.lastError === 'BOT_DELIVERY_PENDING' ? m['bots.delivery_pending']() : binding.lastError === 'BOT_DELIVERY_UNCERTAIN' ? m['bots.delivery_uncertain']() : binding.lastError}</span>
         {:else if binding.lastInboundAt}<span class="meta">{m['always_on.last_message']({ time: time(binding.lastInboundAt) })}</span>
         {:else}<span class="meta">{binding.allowedSenders.length ? m['always_on.allowed']({ names: binding.allowedSenders.join(', ') }) : m['always_on.anyone']()}</span>{/if}
@@ -147,18 +179,24 @@
           <Select.Trigger class="w-full" aria-label={m['always_on.integration']()}><span class="truncate">{chosen?.name ?? m['always_on.integration']()}</span></Select.Trigger>
           <Select.Content>{#each chatIntegrations as integration (integration.id)}<Select.Item value={integration.id}>{integration.name} · {integration.type === 'telegram' ? 'Telegram' : 'Slack'}</Select.Item>{/each}</Select.Content>
         </Select.Root>
+        {#if botEvents}
+          <p class="hint">{chosen?.type === 'telegram' ? m['bots.telegram_find_chat']() : m['bots.slack_find_chat']()}</p>
+          <Button type="button" size="sm" variant="outline" disabled={finding || !integrationId} onclick={() => void discover()}>{finding ? m['bots.loading']() : m['bots.find_chats']()}</Button>
+          {#if targets.length}<ModelCombobox value={chatId} options={targets.map(item => ({ value: item.id, label: item.name }))} defaultLabel={m['always_on.chat']()} searchPlaceholder={m['bots.whatsapp_search']()} emptyLabel={m['bots.no_chats']()} ariaLabel={m['always_on.chat']()} onValueChange={value => (chatId = value)} />{:else if targetError}<p class="hint" role="alert">{m['bots.find_chats_error']()}</p>{:else if !finding}<p class="hint">{m['bots.no_chats']()}</p>{/if}
+        {/if}
         <Input bind:value={chatId} placeholder={chosen?.type === 'slack' ? m['always_on.chat_slack']() : m['always_on.chat_telegram']()} aria-label={m['always_on.chat']()} />
         <Input bind:value={senders} placeholder={m['always_on.senders']()} aria-label={m['always_on.senders']()} />
+        {#if botEvents}<SegmentedControl fill label={m['bots.reply_when']()} value={replyMode} onValueChange={value => (replyMode = value)} options={[{ value: 'prefix', label: m['bots.reply_prefix']() }, { value: 'all', label: m['bots.reply_all']() }]} />{#if replyMode === 'prefix'}<Input bind:value={prefixes} maxlength={809} required aria-label={m['bots.prefixes']()} /><p class="hint">{m['bots.prefixes_hint']()}</p>{/if}{/if}
         <p class="hint">{m['always_on.reply_policy']()}</p>
         <div class="row">
           <Button size="sm" variant="ghost" type="button" onclick={() => (adding = false)}>{m['always_on.cancel']()}</Button>
-          <Button size="sm" type="submit" disabled={!integrationId || !chatId.trim() || saving}>{m['always_on.connect']()}</Button>
+          <Button size="sm" type="submit" disabled={!integrationId || !chatId.trim() || saving || botEvents && replyMode === 'prefix' && !prefixes.trim()}>{m['always_on.connect']()}</Button>
         </div>
       {:else}
-        <p class="hint">{m['always_on.no_integrations']()}</p>
+        <p class="hint">{botEvents ? m['bots.setup_description']() : m['always_on.no_integrations']()}</p>
       {/if}
     </form>
-  {:else}
+  {:else if !botEvents}
     <Button size="sm" variant="ghost" class="h-7 justify-start gap-1.5 text-ui-sm" onclick={() => (adding = true)}><Plus size={13} />{m['always_on.add_channel']()}</Button>
   {/if}
 </section>

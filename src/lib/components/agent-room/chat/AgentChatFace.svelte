@@ -129,6 +129,9 @@
               <div class="bubble">
                 {#if message.meta.attachmentsOnly !== true}<MarkdownView content={personalBot ? botMessageContent(message.body, message.meta, workspaceId) : message.body} compact {workspaceId} />{/if}
                 {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
+                {#if personalBot && message.meta.modelFailure}
+                  <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{message.meta.modelFailure === 'start' ? m['bots.model_start_failed']() : m['bots.model_turn_failed']()}</p>
+                {/if}
               </div>
             {/if}
           {/each}

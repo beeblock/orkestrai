@@ -48,7 +48,7 @@ describe('release-specific reviewed audit guards', () => {
     else if (reason === 'source') writeFileSync(join(root, 'node_modules/picomatch/lib/parse.js'), 'unverified');
     await expect(verifyReviewedGuards(root, reason === 'expired' ? new Date('2026-11-26') : now)).rejects.toThrow();
   });
-  it.each(['0.55.0-beta.1', '0.55.0'])('does not carry the old release authorization into %s', async version => {
+  it.each(['0.55.0-beta.1', '0.55.0-beta.2', '0.55.0'])('does not carry the old release authorization into %s', async version => {
     const root = fixture();
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version }));
