@@ -11,7 +11,11 @@ test('create a native bot, collaborate in a group and keep the development conve
   expect(created.ok(), await created.text()).toBe(true);
   const workspace = (await created.json()).data, base = `/api/agent-room/workspaces/${workspace.id}`;
   try {
-    await page.route(`**${base}/bots?providerId=*`, route => route.fulfill({ json: { data: { installed: true, models: [{ value: 'fixture-model', label: 'Fixture model' }], efforts: ['low', 'medium', 'high'] } } }));
+    let metadataRequests = 0;
+    await page.route(`**${base}/bots?providerId=*`, route => {
+      metadataRequests++;
+      return route.fulfill({ json: { data: { installed: true, models: [{ value: 'fixture-model', label: 'Fixture model' }], efforts: ['low', 'medium', 'high'] } } });
+    });
     const developer = await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Existing developer', payload: { provider: 'codex', maestro: true, command: '/bin/cat', args: [] } } });
     expect(developer.ok()).toBe(true);
     await page.goto(`/bots?workspace=${workspace.id}`);
@@ -62,6 +66,22 @@ test('create a native bot, collaborate in a group and keep the development conve
     await directChat.getByRole('button', { name: labels['composer.send'], exact: true }).click();
     await expect(directChat).toContainText('BOT_UI_GROUP_OK', { timeout: 20_000 });
     await expect(directChat.getByRole('link', { name: 'Report', exact: true })).toHaveAttribute('href', `${base}/fs/raw?path=report.pdf`);
+    const beforeRename = (await (await request.get(`${base}/nodes`)).json()).data.find((item: any) => item.id === bot.id);
+    expect(beforeRename.payload.sessionId).toBeTruthy();
+    await page.getByRole('button', { name: labels['bots.edit'], exact: true }).click();
+    await expect(editor.getByRole('button', { name: labels['bots.save'], exact: true })).toBeEnabled();
+    const metadataBeforeRename = metadataRequests;
+    await editor.locator('input[name=title]').fill('Personal helper renamed');
+    const renameResponse = page.waitForResponse(response => response.url().endsWith(`${base}/bots`) && response.request().method() === 'POST', { timeout: 5000 });
+    await editor.getByRole('button', { name: labels['bots.save'], exact: true }).click();
+    const renamed = await renameResponse;
+    expect(renamed.ok(), JSON.stringify({ submitted: renamed.request().postDataJSON(), response: await renamed.text() })).toBe(true);
+    await expect(editor).not.toBeVisible();
+    await expect(page.locator('.chat-heading')).toContainText('Personal helper renamed');
+    expect(metadataRequests).toBe(metadataBeforeRename);
+    const afterRename = (await (await request.get(`${base}/nodes`)).json()).data.find((item: any) => item.id === bot.id);
+    expect(afterRename.payload).toEqual(beforeRename.payload);
+    await expect(directChat).toContainText('BOT_UI_GROUP_OK');
     const peerResponse = await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'Report reviewer', provider: 'codex', instructions: 'Review reports', transport: 'structured' } } });
     expect(peerResponse.ok(), await peerResponse.text()).toBe(true);
     await expect(page.locator('.bot-row').filter({ hasText: 'Report reviewer' })).toBeVisible();

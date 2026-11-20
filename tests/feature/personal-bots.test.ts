@@ -49,13 +49,54 @@ describe('personal bot boundaries and persistence', () => {
     await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, env: { SECRET: 'PRIVATE_CREDENTIAL' } } as never });
     const settings = { title: 'Calendar', instructions: 'Help with calendar', provider: 'claude', model: null, effort: null, profileId: null, transport: 'structured' };
     const created = await f.command({ command: 'create', settings }) as PersonalBotSummary;
-    expect(created).toMatchObject({ title: 'Calendar', transport: 'structured', instructions: 'Help with calendar' });
+    expect(created).toMatchObject({ title: 'Calendar', transport: 'structured', instructions: 'Help with calendar', runtimeMode: 'on_demand' });
     expect((await workspaceRepository.getNode(f.developer.id))!.payload).toEqual(f.developer.payload);
     expect(JSON.stringify(await personalBotService.list(f.workspace.id))).not.toContain('PRIVATE_CREDENTIAL');
     const chats = await channelService.listChannels(f.workspace.id);
     expect(chats.agents.map(agent => agent.id)).toEqual([f.developer.id]);
     expect(shownOnFloor(f.bot, null)).toBe(false);
     expect(shownOnFloor(f.developer, null)).toBe(true);
+  });
+
+  it.each(['structured', 'terminal'] as const)('renames a live %s bot without changing its execution or runtime settings', async transport => {
+    const f = await fixture();
+    const payload = { ...f.bot.payload, agentTransport: transport, agentRuntimeMode: 'persistent',
+      agentRuntimeIdleMinutes: 45, agentRuntimeConcurrency: 3, agentRuntimeUsageLimit: 100,
+      sessionId: uuidv7(), agentSessionId: uuidv7(), structuredConversations: { owner: uuidv7() } } as never;
+    await workspaceRepository.updateNode(f.bot.id, { payload });
+    const before = (await workspaceRepository.getNode(f.bot.id))!;
+    const live = vi.spyOn(ptySessionManager, 'listLiveForNode').mockReturnValue([{ id: (payload as any).sessionId }] as never);
+    const shutdown = vi.spyOn(ptySessionManager, 'waitForStructuredShutdown');
+    const result = await f.command({ command: 'update', nodeId: f.bot.id, settings: {
+      title: 'Renamed assistant', instructions: 'Owner rules', provider: 'codex', transport,
+    } }) as PersonalBotSummary;
+    expect(result).toMatchObject({ title: 'Renamed assistant', transport, runtimeMode: 'persistent', sessionId: (payload as any).sessionId });
+    expect((await workspaceRepository.getNode(f.bot.id))!.payload).toEqual(before.payload);
+    expect(live).not.toHaveBeenCalled();
+    expect(shutdown).not.toHaveBeenCalled();
+  });
+
+  it('keeps execution edits blocked while a bot has a live session', async () => {
+    const f = await fixture();
+    vi.spyOn(ptySessionManager, 'listLiveForNode').mockReturnValue([{ id: uuidv7() }] as never);
+    await expect(f.command({ command: 'update', nodeId: f.bot.id, settings: {
+      title: 'Changed title', instructions: 'Changed instructions', provider: 'codex', transport: 'structured',
+    } })).rejects.toThrow('AGENT_TRANSPORT_REQUIRES_SLEEP');
+    expect((await workspaceRepository.getNode(f.bot.id))!.title).toBe('Assistant');
+  });
+
+  it('preserves the chosen runtime mode and limits when editing a sleeping bot execution', async () => {
+    const f = await fixture();
+    await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, agentRuntimeMode: 'persistent',
+      agentRuntimeIdleMinutes: 45, agentRuntimeConcurrency: 3, agentRuntimeUsageLimit: 100 } as never });
+    vi.spyOn(ptySessionManager, 'listLiveForNode').mockReturnValue([]);
+    await f.command({ command: 'update', nodeId: f.bot.id, settings: {
+      title: 'Assistant', instructions: 'Updated owner rules', provider: 'codex', transport: 'structured',
+    } });
+    expect((await workspaceRepository.getNode(f.bot.id))!.payload).toMatchObject({
+      agentRuntimeMode: 'persistent', agentRuntimeIdleMinutes: 45, agentRuntimeConcurrency: 3,
+      agentRuntimeUsageLimit: 100, botInstructions: 'Updated owner rules',
+    });
   });
 
   it('preserves bot instructions in the selectable terminal fallback', async () => {

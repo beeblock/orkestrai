@@ -6205,7 +6205,7 @@
   "bots.message": "Escreva para o grupo…",
   "bots.all_tools": "Ferramentas do Canvas disponíveis",
   "bots.all_tools_hint": "Imagens, criativos, arquivos, Portais, dispositivos, código, dados e integrações usam a mesma ponte e as regras deste espaço.",
-  "bots.sleep_before_edit": "Aguarde o trabalho terminar e coloque o bot em repouso antes de editar sua execução.",
+  "bots.sleep_before_edit": "Para alterar instruções, conta, modelo ou transporte, primeiro coloque o bot em repouso em Configurar bot. O nome pode ser alterado com a sessão aberta.",
   "bots.account_change": "Para preservar o contexto, troque a conta pelo controle de perfil do agente.",
   "bots.loading": "Carregando bots…",
   "bots.connected": "Conectado",

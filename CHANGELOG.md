@@ -22,6 +22,10 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Keep Save responsive while editing a bot: refresh model/account metadata only when its provider changes, instead of on every form-field update.
+
+- Allow personal-bot display-name edits while a session is open, preserving its conversation and runtime configuration. Keep the sleep requirement for execution changes and preserve the chosen mode and limits when saving them. Clarify on-demand WhatsApp activation and routine concurrency in the guides.
+
 - Support installed Claude Code 2.1.325 through secret-free MCP configuration and inherited authenticated environment; show model-start and turn failures on the saved bot message.
 - Keep the Bots automation modal inside the viewport with full-width, independently scrolling content. Add direct, guided Telegram/Slack connection, conversation discovery and a downloadable Slack app manifest.
 - Wait for an explicit WhatsApp secure-store unlock without extending background secret timeouts. List available WhatsApp contacts/groups without importing message history, and filter literal owner-defined reply prefixes before downloading files or invoking models.

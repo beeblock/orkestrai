@@ -112,3 +112,47 @@ Remove packaging intermediates, temporary browser/test state and this
 worktree's generated dependencies/build output after verification. Do not
 remove owner projects, generated assets, Docker volumes, live databases,
 provider profiles or the installed app's embedded voice models.
+
+## Follow-up: editing an idle bot
+
+The reported bot had an open native session with no active routine. Its saved
+runtime configuration was `persistent`, the default Claude account and a 100%
+usage limit at inspection time. These settings were preserved. New bots are
+created in `on_demand` mode; WhatsApp does not require persistent mode.
+
+Two service defects were confirmed: the update command required every live
+session to end even for a display-name change, and execution edits reapplied
+the creation defaults for runtime mode and limits. Display-name-only updates
+now write only the title, retaining sessions and concurrent runtime state.
+Execution edits still require sleep and preserve the selected mode, idle
+timeout, concurrency and usage limit. The existing validated CLI/MCP update
+command uses the same service.
+
+The production browser test exposed a third defect: Superforms publishes a
+whole form store when text changes, which restarted provider metadata reads and
+could disable Save during the click. The editor now depends on a derived scalar
+provider id, so changing a name does not refetch accounts/models. The browser
+test checks an actual Save click after a native fixture response, unchanged
+session/conversation payload and unchanged metadata-request count.
+
+Focused verification: **96 tests passed**, including live native and terminal
+renaming, execution-change rejection and runtime preservation. An initial
+4 GiB heap-limited build exhausted that limit; the regular project build passed.
+The browser diagnostic confirmed the metadata fix before the final source
+build. Disposable bundle instrumentation was restored before that build.
+The final standard production build passed, including the Computer host and
+desktop messages. All **3 Bots browser tests passed in 7.9 seconds**, with no
+retries. The **18 documentation/tour tests** passed after the final text edits.
+The full type check still reports the existing 1,818 errors; none are in the
+new or changed lines of this follow-up.
+Results are recorded in the local `rename-*` QA logs.
+
+This follow-up is source work and does **not** replace the installed app or
+restart the owner's running sessions. The installed preview remains the build
+from `24646910` until another local replacement.
+
+For disk hygiene, the latest verified database/graph backup pair was compressed
+into `~/Library/Caches/Orkestrai/data-rollback/before-bot-rename-20261120.zip`.
+The archive includes both original filenames and a SHA-256 manifest. Verify ZIP
+CRCs, file sizes and unchanged source identities before removing the raw copies:
+2,764,300,288 bytes became 951,166,486 bytes. The backups are preserved.

@@ -6205,7 +6205,7 @@
   "bots.message": "Write to the group…",
   "bots.all_tools": "Canvas tools available",
   "bots.all_tools_hint": "Images, creative work, files, Portals, devices, code, data and integrations use the same bridge and this workspace’s rules.",
-  "bots.sleep_before_edit": "Wait for the work to finish and put the bot to sleep before editing its execution.",
+  "bots.sleep_before_edit": "Changing instructions, account, model or transport requires putting the bot to sleep in Configure bot first. You can change its name while the session is open.",
   "bots.account_change": "To preserve context, change the account through the agent’s profile control.",
   "bots.loading": "Loading bots…",
   "bots.connected": "Connected",

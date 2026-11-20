@@ -56,8 +56,7 @@ export class PersonalBotService {
     const command = adapter.interactiveCommand({ model: settings.model ?? undefined, effort: settings.effort as never });
     return { ...command, initialRoleArgs: adapter.initialRoleArgs?.({ name: settings.title, prompt: settings.instructions, instructionFile: '' }) ?? [],
       personalBot: true, botInstructions: settings.instructions, agentTransport: settings.transport,
-      provider: settings.provider, model: settings.model, effort: settings.effort, profileId: settings.profileId,
-      agentRuntimeMode: 'on_demand', agentRuntimeIdleMinutes: 30, agentRuntimeConcurrency: 1, agentRuntimeUsageLimit: 95 };
+      provider: settings.provider, model: settings.model, effort: settings.effort, profileId: settings.profileId };
   }
 
   async execute(dto: PersonalBotCommandDto): Promise<unknown> {
@@ -67,17 +66,30 @@ export class PersonalBotService {
     if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
     switch (input.command) {
       case 'create': {
-        const payload = await this.command(input.settings);
+        const payload = { ...await this.command(input.settings), agentRuntimeMode: 'on_demand',
+          agentRuntimeIdleMinutes: 30, agentRuntimeConcurrency: 1, agentRuntimeUsageLimit: 95 };
         const node = await workspaceService.createNode(CreateCanvasNodeDto.from(workspaceId, { type: 'terminal', title: input.settings.title,
           payload: payload as never, width: 560, height: 360 }));
         return summary(node);
       }
       case 'update': {
         const node = await this.requireBot(workspaceId, input.nodeId);
+        const old = node.payload as TerminalNodePayload;
+        const current = summary(node);
+        // A display-name edit never changes a running provider's configuration
+        // or conversation. Update only the title, preserving concurrent runtime
+        // changes and receipt/session state rather than rewriting the payload.
+        const sameExecution = (['provider', 'model', 'effort', 'profileId', 'instructions', 'transport'] as const)
+          .every(key => current[key] === input.settings[key]);
+        if (sameExecution) {
+          const updated = await workspaceRepository.updateNode(node.id, { title: input.settings.title });
+          if (!updated) throw new Error('PERSONAL_BOT_NOT_FOUND');
+          this.changed(workspaceId);
+          return summary(updated);
+        }
         if (ptySessionManager.listLiveForNode(workspaceId, node.id).length) throw new Error('AGENT_TRANSPORT_REQUIRES_SLEEP');
         await ptySessionManager.waitForStructuredShutdown(workspaceId, node.id);
         const payload = await this.command(input.settings);
-        const old = node.payload as TerminalNodePayload;
         if (old.provider !== input.settings.provider || (old.profileId ?? null) !== input.settings.profileId) {
           if (old.agentSessionId || Object.keys(old.structuredConversations ?? {}).length) throw new Error('BOT_ACCOUNT_CHANGE_USE_PROFILE_SWITCH');
         }

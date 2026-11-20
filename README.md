@@ -80,6 +80,12 @@ caption when filtering. Existing chat/sender grants remain required. Agents use
 `orkestrai bot channel_targets --task <id> --input '{"nodeId":"...","integrationId":"..."}'`
 and `orkestrai bot slack_manifest --task <id> --input '{}'` through the same bridge.
 
+For chat bots, On demand receives authorized channel messages and wakes the bot
+as needed. Persistent keeps its session available. Max executions limits running
+automatic routines; native model turns remain sequential per bot. Renaming a bot
+keeps its live session and context; changing execution settings requires sleep
+and preserves the selected runtime mode and limits.
+
 The desktop Core, network and provider account must stay available. The phone
 cannot reach an offline computer. Subscription limits and configured policies
 still apply. Fully authorized provider shells are not isolated by bridge policy;

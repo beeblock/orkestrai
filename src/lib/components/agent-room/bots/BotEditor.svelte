@@ -47,11 +47,15 @@
     data.set({ title: bot?.title ?? '', instructions: bot?.instructions ?? '', provider: bot?.provider ?? providers[0]?.id ?? '',
       model: bot?.model ?? null, effort: bot?.effort ?? null, profileId: bot?.profileId ?? null, transport: bot?.transport ?? 'structured' });
   });
-  const provider = $derived(providers.find(item => item.id === $data.provider));
+  // Superforms publishes the whole form store when any field changes. Depend
+  // on the scalar provider value so editing a name cannot reload metadata and
+  // disable Save between pointerdown and click.
+  const providerId = $derived($data.provider);
+  const provider = $derived(providers.find(item => item.id === providerId));
   const selectedModel = $derived(models.find(item => item.value === $data.model));
   const efforts = $derived(selectedModel?.efforts ?? providerEfforts);
   $effect(() => {
-    const id = $data.provider;
+    const id = providerId;
     const workspace = workspaceId;
     if (!id) return;
     const controller = new AbortController();
