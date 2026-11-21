@@ -21,6 +21,7 @@ const { createRuntimeDiagnostics } = require('./runtime-diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
+const { createPortalSurfaceHandler } = require('./portal-surface-request.cjs');
 const { createAdventureWindowController } = require('./adventure-window.cjs');
 const { performGoogleDesktopOauth } = require('./google-oauth.cjs');
 const { createAudioDecoder } = require('./audio-decoder.cjs');
@@ -1197,15 +1198,9 @@ async function portalSurfaceRequest(event, input) {
       paused: payload.portalPaused === true, allowBackground: payload.portalAllowBackground ?? true } };
 }
 
-ipcMain.handle('orkestrai:portal-surface', async (event, input) => {
-  if (['attach', 'detach'].includes(input?.method) && (typeof input.lease !== 'string' || !/^[0-9a-f-]{36}$/i.test(input.lease))) throw new Error('Invalid Portal surface lease.');
-  const request = await portalSurfaceRequest(event, input);
-  if (input.method === 'attach') return managedPortalExecutor.surface(request, mainWindow, input.lease);
-  if (input.method === 'detach') return managedPortalExecutor.detach(request.workspaceId, request.nodeId, input.lease);
-  if (!['navigate', 'inspectScript', 'capture', 'preview', 'state', 'close', 'activate', 'pause', 'resume', 'devtools'].includes(input.method)) throw new Error('Unsupported Portal surface method.');
-  if (JSON.stringify(input.args || {}).length > 500000) throw new Error('Portal surface input is too large.');
-  return managedPortalExecutor.userCommand(request, input.method, input.args || {});
-});
+ipcMain.handle('orkestrai:portal-surface', createPortalSurfaceHandler({
+  getMainWindow: () => mainWindow, getExecutor: () => managedPortalExecutor, requestFor: portalSurfaceRequest,
+}));
 
 ipcMain.on('orkestrai:portal-layout', (event, input) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return;

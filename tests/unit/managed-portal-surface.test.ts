@@ -6,6 +6,7 @@ import { portalProfileFromPayload } from '../../src/lib/modules/agent-room/contr
 
 const require = createRequire(import.meta.url);
 const { createManagedPortalExecutor } = require('../../electron/managed-portal.cjs');
+const { createPortalSurfaceHandler } = require('../../electron/portal-surface-request.cjs');
 
 type FakeImage = {
   toPNG: () => Buffer;
@@ -111,6 +112,68 @@ async function setup(BrowserWindow?: unknown) {
 }
 
 describe('embedded Portal surface lifecycle', () => {
+  it.each(['frame', 'window'])('rejects a replaced %s after the asynchronous authorization read', async changed => {
+    const { executor, parent, request, lease } = await setup();
+    const webContents = { mainFrame: {} };
+    const owner = Object.assign(parent, { webContents });
+    let currentWindow = owner;
+    const surface = vi.spyOn(executor, 'surface');
+    const command = vi.spyOn(executor, 'userCommand');
+    for (const method of ['attach', 'preview']) {
+      const event = { sender: webContents, senderFrame: webContents.mainFrame };
+      let finish!: (request: unknown) => void;
+      const requestFor = vi.fn(() => new Promise(resolve => { finish = resolve; }));
+      currentWindow = owner;
+      const handler = createPortalSurfaceHandler({ getMainWindow: () => currentWindow, getExecutor: () => executor, requestFor });
+      const pending = handler(event, { workspaceId: request.workspaceId, nodeId: request.nodeId, lease, method });
+      expect(requestFor).toHaveBeenCalledOnce();
+      if (changed === 'frame') webContents.mainFrame = {};
+      else currentWindow = Object.assign(new EventEmitter(), { contentView: parent.contentView, webContents,
+        isVisible: () => true, isDestroyed: () => false });
+      finish(request);
+      await expect(pending).rejects.toThrow('current trusted app frame');
+      expect(surface).not.toHaveBeenCalled();
+      expect(command).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['deleted Portal node', 'Core unavailable'])('releases the view after %s without any database authorization request', async reason => {
+    const { executor, parent, request, lease } = await setup();
+    const webContents = { mainFrame: {} };
+    const owner = Object.assign(parent, { webContents });
+    const requestFor = vi.fn(async () => { throw new Error(reason); });
+    const handler = createPortalSurfaceHandler({ getMainWindow: () => owner, getExecutor: () => executor, requestFor });
+    const input = { workspaceId: request.workspaceId, nodeId: request.nodeId, lease, method: 'detach' };
+    await handler({ sender: webContents, senderFrame: webContents.mainFrame }, input);
+    expect(requestFor).not.toHaveBeenCalled();
+    expect(parent.contentView.children.size).toBe(0);
+    expect(parent.listenerCount('closed')).toBe(0);
+    await expect(handler({ sender: webContents, senderFrame: webContents.mainFrame }, { ...input, method: 'attach' })).rejects.toThrow(reason);
+    expect(requestFor).toHaveBeenCalledOnce();
+    expect(parent.contentView.children.size).toBe(0);
+  });
+
+  it('refuses another sender, subframe, malformed identity or stale lease without releasing the current view', async () => {
+    const { executor, parent, request, lease } = await setup();
+    const webContents = { mainFrame: {} };
+    const owner = Object.assign(parent, { webContents });
+    const requestFor = vi.fn();
+    const handler = createPortalSurfaceHandler({ getMainWindow: () => owner, getExecutor: () => executor, requestFor });
+    const input = { workspaceId: request.workspaceId, nodeId: request.nodeId, lease, method: 'detach' };
+    const event = { sender: webContents, senderFrame: webContents.mainFrame };
+    await expect(handler({ ...event, sender: {} }, input)).rejects.toThrow('trusted app window');
+    await expect(handler({ ...event, senderFrame: {} }, input)).rejects.toThrow('trusted app window');
+    await expect(handler(event, { ...input, nodeId: 'invalid' })).rejects.toThrow('identity');
+    await expect(handler(event, { ...input, lease: 'invalid' })).rejects.toThrow('lease');
+    await handler(event, { ...input, lease: randomUUID() });
+    expect(parent.contentView.children.size).toBe(1);
+    expect(parent.listenerCount('closed')).toBe(1);
+    expect(requestFor).not.toHaveBeenCalled();
+    await handler(event, input);
+    expect(parent.contentView.children.size).toBe(0);
+    expect(parent.listenerCount('closed')).toBe(0);
+  });
+
   it('releases window listeners through repeated Canvas detach and close', async () => {
     const { executor, parent, request, lease } = await setup();
     for (let round = 0; round < 50; round++) {

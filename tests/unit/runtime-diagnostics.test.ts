@@ -18,13 +18,17 @@ function harness() {
   });
   const contents = { id: 7, isDestroyed: () => false, getOSProcessId: () => 4321,
     getURL: () => 'http://localhost:4173/canvas?workspace=abc-123&token=private#secret', debugger: dbg };
-  const window = { isDestroyed: () => false, isVisible: () => true, webContents: contents };
+  const window = { isDestroyed: () => false, isVisible: () => true, webContents: contents,
+    isEnabled: () => false, isModal: () => false, isFocused: () => true,
+    getBounds: () => ({ x: 10, y: 20, width: 1905, height: 900, privatePayload: 'secret' }) };
   const app = { getAppMetrics: () => [{ pid: 4321, type: 'Tab', serviceName: 'secret', cpu: { percentCPUUsage: 100 },
     memory: { workingSetSize: 2048 }, arbitrary: 'private' }] };
   const wait = vi.fn(async () => { time += 5000; });
   const diagnostics = createRuntimeDiagnostics({ app, getMainWindow: () => window,
     getPortalRenderers: () => [{ webContentsId: 20, osProcessId: 9876, workspaceId: 'workspace', nodeId: 'node',
-      tabId: 'tab', visible: false, paused: false, url: 'https://private?credential=secret' }], now: () => time, wait });
+      tabId: 'tab', visible: false, paused: false, url: 'https://private?credential=secret', parentWebContentsId: 7,
+      clipBounds: { x: 0, y: 0, width: 1905, height: 900, privatePayload: 'secret' }, tabBounds: { x: Infinity },
+      clipVisible: true, geometryVisible: false, geometryMoving: false }], now: () => time, wait });
   return { diagnostics, dbg, wait, setTime: (value: number) => { time = value; } };
 }
 
@@ -35,7 +39,10 @@ describe('private runtime diagnostics', () => {
     const { diagnostics, setTime } = harness();
     const result = await diagnostics.execute('metrics');
     expect(result).toMatchObject({ status: 'ok', mainRendererPid: 4321,
-      renderers: [{ kind: 'main', route: '/canvas', workspaceId: 'abc-123', osProcessId: 4321 }, { kind: 'portal', osProcessId: 9876 }] });
+      renderers: [{ kind: 'main', route: '/canvas', workspaceId: 'abc-123', osProcessId: 4321,
+        enabled: false, modal: false, focused: true, bounds: { x: 10, y: 20, width: 1905, height: 900 } },
+      { kind: 'portal', osProcessId: 9876, parentWebContentsId: 7, clipVisible: true, geometryVisible: false,
+        clipBounds: { x: 0, y: 0, width: 1905, height: 900 }, tabBounds: null }] });
     expect(JSON.stringify(result)).not.toMatch(/"private"|secret|token|credential|serviceName/);
     expect(await diagnostics.execute('metrics')).toEqual({ status: 'rate_limited' });
     setTime(1001);

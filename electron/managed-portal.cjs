@@ -818,7 +818,10 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
       rows.push({ workspaceId: managed.workspaceId, nodeId: managed.nodeId, tabId: tab.id,
         webContentsId: contents.id, osProcessId: contents.getOSProcessId(),
         visible: Boolean(managed.parent?.isVisible()) && managed.visible && managed.activeTabId === tab.id,
-        paused: managed.pauseLocked || managed.profile.paused });
+        paused: managed.pauseLocked || managed.profile.paused, parentWebContentsId: managed.parent?.webContents?.id ?? null,
+        clipBounds: managed.clip.getBounds?.() ?? null, tabBounds: tab.view.getBounds?.() ?? null,
+        clipVisible: managed.clip.getVisible?.() ?? null, tabVisible: tab.view.getVisible?.() ?? null,
+        geometryVisible: managed.geometry?.visible ?? null, geometryMoving: managed.geometry?.moving ?? null });
       if (rows.length >= 256) return rows;
     }
     return rows;

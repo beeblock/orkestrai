@@ -7,6 +7,13 @@ const PROFILE_MS = 5_000;
 
 function number(value) { return Number.isFinite(value) && value >= 0 ? value : 0; }
 function identifier(value) { return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(value) ? value : null; }
+function rect(value) {
+  if (!value || !['x', 'y', 'width', 'height'].every(key => Number.isFinite(value[key]) && Math.abs(value[key]) <= 1_000_000)
+    || value.width < 0 || value.height < 0) return null;
+  return { x: value.x, y: value.y, width: value.width, height: value.height };
+}
+function observed(target, method) { try { return target[method]?.(); } catch { return undefined; } }
+function boolean(value) { return typeof value === 'boolean' ? value : null; }
 function route(contents) {
   try {
     const url = new URL(contents.getURL());
@@ -58,7 +65,10 @@ function createRuntimeDiagnostics({ app, getMainWindow, getPortalRenderers = () 
   function windowRenderer(window, kind) {
     if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return null;
     const contents = window.webContents;
-    return { kind, webContentsId: contents.id, osProcessId: contents.getOSProcessId(), visible: Boolean(window.isVisible()), ...route(contents) };
+    return { kind, webContentsId: contents.id, osProcessId: contents.getOSProcessId(), visible: Boolean(window.isVisible()),
+      enabled: boolean(observed(window, 'isEnabled')), modal: boolean(observed(window, 'isModal')),
+      focused: boolean(observed(window, 'isFocused')), bounds: rect(observed(window, 'getBounds')),
+      contentBounds: rect(observed(window, 'getContentBounds')), ...route(contents) };
   }
   function metrics() {
     if (now() - lastMetrics < 1_000) return { status: 'rate_limited' };
@@ -73,7 +83,10 @@ function createRuntimeDiagnostics({ app, getMainWindow, getPortalRenderers = () 
     const portals = getPortalRenderers();
     for (const value of portals.slice(0, 256)) renderers.push({ kind: 'portal', webContentsId: number(value.webContentsId),
       osProcessId: number(value.osProcessId), workspaceId: identifier(value.workspaceId), nodeId: identifier(value.nodeId),
-      tabId: identifier(value.tabId), visible: value.visible === true, paused: value.paused === true });
+      tabId: identifier(value.tabId), visible: value.visible === true, paused: value.paused === true,
+      parentWebContentsId: Number.isSafeInteger(value.parentWebContentsId) && value.parentWebContentsId > 0 ? value.parentWebContentsId : null,
+      clipBounds: rect(value.clipBounds), tabBounds: rect(value.tabBounds), clipVisible: boolean(value.clipVisible),
+      tabVisible: boolean(value.tabVisible), geometryVisible: boolean(value.geometryVisible), geometryMoving: boolean(value.geometryMoving) });
     const processes = app.getAppMetrics().slice(0, 256).map(value => ({ pid: number(value.pid),
       type: ['Browser', 'Tab', 'GPU', 'Utility', 'Zygote', 'Sandbox helper', 'Pepper Plugin', 'Pepper Plugin Broker'].includes(value.type) ? value.type : 'other',
       cpu: { percentCPUUsage: number(value.cpu?.percentCPUUsage), cumulativeCPUUsage: number(value.cpu?.cumulativeCPUUsage) },

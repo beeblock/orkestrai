@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { createManagedPortalExecutor } = require('../electron/managed-portal.cjs');
+const { createPortalSurfaceHandler } = require('../electron/portal-surface-request.cjs');
 
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'orkestrai-portal-regression-'));
 app.setPath('userData', profile);
@@ -48,6 +49,7 @@ async function main() {
   // Visual acceptance belongs in an actual Canvas Portal, not this isolated host.
   parent = new BrowserWindow({ width: 1200, height: 900, show: showWindow, webPreferences: { sandbox: true } });
   await parent.loadURL('data:text/html,<body style="margin:0;background:white"><h1>Host QA</h1></body>');
+  const initialHostViews = parent.contentView.children.length;
   executor = createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, session });
   const request = { requestId: randomUUID(), workspaceId: randomUUID(), nodeId: randomUUID(), initialUrl: url,
     profile: { profileId: 'qa', profileScope: 'private', allowedHosts: ['127.0.0.1'], paused: false, allowBackground: !showWindow },
@@ -140,7 +142,14 @@ async function main() {
   executor.detach(request.workspaceId, request.nodeId, lease);
   assert.equal((await executor.inspect(request)).visible, showWindow, 'stale mount must not hide current surface');
   assert.equal((await executor.inspect(request)).webContentsId, initial.webContentsId);
-  executor.detach(request.workspaceId, request.nodeId, replacementLease);
+  let detachedDatabaseReads = 0;
+  const detachSurface = createPortalSurfaceHandler({ getMainWindow: () => parent, getExecutor: () => executor,
+    requestFor: async () => { detachedDatabaseReads++; throw new Error('Portal does not belong to this workspace.'); } });
+  await detachSurface({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame }, {
+    method: 'detach', workspaceId: request.workspaceId, nodeId: request.nodeId, lease: replacementLease,
+  });
+  assert.equal(detachedDatabaseReads, 0, 'a removed node/Core outage must not prevent releasing an existing surface');
+  assert.equal(parent.contentView.children.length, initialHostViews, 'the real Electron host must release the native view');
   assert.equal((await executor.execute({ ...request, profile: { ...request.profile, allowBackground: false } })).ok, false, 'an explicit visibility-only restriction must still be enforced');
   const background = { ...request, profile: { ...request.profile, allowBackground:true } };
   assert.equal((await executor.execute(background)).ok, true);

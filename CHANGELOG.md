@@ -24,6 +24,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Detach removed Portal surfaces using the trusted app window and existing surface lease even when their database node is gone or the Core is unavailable. Prevent orphan native views from remaining above app controls; keep attachment and page commands database-authorized.
+
 - Keep xterm mode-query replies working after production minification. Apply a version/hash-guarded dependency patch that preserves its local enum variable; verify the minified code and a real terminal response instead of disabling bundle minification globally.
 
 - Add private Core-token-authenticated renderer metrics and a bounded five-second main-renderer CPU profile to diagnose Canvas stalls. Never open a debugger port, evaluate arbitrary scripts, expose Portal contents or replace an attached debugger session.
