@@ -6263,5 +6263,9 @@
   "bots.no_chats": "No conversations found yet. Send the bot a message in the service, then search again.",
   "bots.find_chats_error": "Could not list conversations. Check the account permissions and try again.",
   "bots.slack_download_setup": "Download Slack configuration",
-  "bots.setup_failed": "Could not verify the connection. Check the credential and setup steps above; the bot is not connected yet."
+  "bots.setup_failed": "Could not verify the connection. Check the credential and setup steps above; the bot is not connected yet.",
+  "control_center.history_summary": "Showing {shown} of {count} events",
+  "control_center.history_summary_help": "Repeated event bodies and metadata are omitted from this view. The message, reply and error remain above; the complete audit stays saved.",
+  "control_center.history_expand": "Show all events",
+  "control_center.history_collapse": "Show recent events"
 }

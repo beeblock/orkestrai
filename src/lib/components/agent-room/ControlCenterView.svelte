@@ -48,6 +48,9 @@
 
   let now = $state(Date.now());
   let secondaryView = $state<'activity' | 'communications'>('activity');
+  let expandedHistory = $state<Record<string, boolean>>({});
+  const historyWorkspaceId = $derived(snapshot?.workspaceId);
+  $effect(() => { void historyWorkspaceId; expandedHistory = {}; });
 
   const attentionCount = $derived(
     (snapshot?.counts.waiting_input ?? 0)
@@ -320,6 +323,7 @@
         {:else if snapshot?.communications.length}
           <div class="divide-y divide-[var(--app-border)]">
             {#each snapshot.communications as thread (thread.messageId)}
+              {@const history = expandedHistory[thread.messageId] ? thread.events : thread.events.slice(-24)}
               <article class="px-4 py-3 transition-colors hover:bg-[var(--app-surface-subtle)]">
                 <div class="flex min-w-0 items-center gap-2">
                   {#if thread.state === 'replied'}<Check size={13} class="shrink-0 text-[var(--app-success)]" />
@@ -331,18 +335,24 @@
                 <p class="mt-2 line-clamp-2 text-ui-xs leading-4 text-[var(--app-text-soft)]">{thread.content}</p>
                 {#if thread.reply}<p class="mt-2 border-l-2 border-[var(--app-success)] pl-2 text-ui-xs leading-4 text-[var(--app-text-muted)]">{thread.reply}</p>{/if}
                 {#if thread.error}<p class="mt-2 text-ui-xs text-[var(--app-danger)]">{thread.error}</p>{/if}
-                <div class="mt-2 flex items-center gap-1" aria-label={m['control_center.delivery_history']()}>
-                  {#each thread.events as deliveryEvent, index (deliveryEvent.id)}
+                <div class="mt-2 flex flex-wrap items-center gap-1" aria-label={m['control_center.delivery_history']()} data-testid="control-center-delivery-history">
+                  {#each history as deliveryEvent, index (deliveryEvent.id)}
                     <Tooltip.Root>
                       <Tooltip.Trigger>
-                        {#snippet child({ props })}<span {...props} class={`size-1.5 rounded-full ${deliveryEvent.state === 'failed' ? 'bg-[var(--app-danger)]' : deliveryEvent.state === 'replied' ? 'bg-[var(--app-success)]' : 'bg-[var(--app-accent)]'}`}></span>{/snippet}
+                        {#snippet child({ props })}<span {...props} data-history-event class={`size-1.5 rounded-full ${deliveryEvent.state === 'failed' ? 'bg-[var(--app-danger)]' : deliveryEvent.state === 'replied' ? 'bg-[var(--app-success)]' : 'bg-[var(--app-accent)]'}`}></span>{/snippet}
                       </Tooltip.Trigger>
                       <Tooltip.Content>{deliveryLabel(deliveryEvent.state)}</Tooltip.Content>
                     </Tooltip.Root>
-                    {#if index < thread.events.length - 1}<span class="h-px w-3 bg-[var(--app-border-strong)]"></span>{/if}
+                    {#if index < history.length - 1}<span class="h-px w-3 bg-[var(--app-border-strong)]"></span>{/if}
                   {/each}
                   <span class="ml-auto text-ui-xs tabular-nums text-[var(--app-text-muted)]">#{thread.messageId.slice(0, 8)}</span>
                 </div>
+                {#if thread.eventDetailsOmitted || thread.events.length > 24}
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-ui-xs text-[var(--app-text-muted)]">
+                    <span title={thread.eventDetailsOmitted ? m['control_center.history_summary_help']() : undefined}>{m['control_center.history_summary']({ shown: history.length, count: thread.events.length })}</span>
+                    {#if thread.events.length > 24}<Button size="sm" variant="ghost" class="h-6 px-1.5 text-ui-xs" aria-expanded={Boolean(expandedHistory[thread.messageId])} onclick={() => (expandedHistory[thread.messageId] = !expandedHistory[thread.messageId])}>{expandedHistory[thread.messageId] ? m['control_center.history_collapse']() : m['control_center.history_expand']()}</Button>{/if}
+                  </div>
+                {/if}
               </article>
             {/each}
           </div>

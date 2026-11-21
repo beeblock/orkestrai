@@ -22,6 +22,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Avoid full communication history during agent status polling. Compact Control Center audit event payloads without dropping their identities/states/timestamps; render a bounded history with explicit expand/collapse and retain the full audit projection on request.
+
 - Keep Telegram and Slack setup footer actions inside the dialog in short windows. Remove inherited negative footer margins, keep header/footer fixed and scroll only the form body.
 
 - Keep Save responsive while editing a bot: refresh model/account metadata only when its provider changes, instead of on every form-field update.

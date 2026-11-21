@@ -39,7 +39,7 @@ const SILENT_SOCKET_MS = 30_000;
 
 async function load(workspaceId: string, ticket: number): Promise<void> {
   try {
-    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/control-center`);
+    const response = await fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/control-center?communications=0`);
     const payload = await response.json().catch(() => null) as { data?: ControlCenterSnapshot } | ControlCenterSnapshot | null;
     if (!response.ok || !payload) return;
     const snapshot = ('data' in payload && payload.data ? payload.data : payload) as ControlCenterSnapshot;

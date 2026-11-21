@@ -381,6 +381,8 @@ export type AgentMessageThread = {
   createdAt: string;
   updatedAt: string;
   events: AgentMessageDeliveryEvent[];
+  /** IDs, states and timestamps remain; duplicate event bodies/metadata do not. */
+  eventDetailsOmitted?: boolean;
 };
 
 export type ControlCenterSnapshot = {
@@ -389,6 +391,7 @@ export type ControlCenterSnapshot = {
   agents: AgentActivitySnapshot[];
   activity: AgentActivity[];
   communications: AgentMessageThread[];
+  communicationsProjection?: 'none' | 'compact' | 'full';
   generatedAt: string;
 };
 

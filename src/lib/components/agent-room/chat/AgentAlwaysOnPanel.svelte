@@ -67,7 +67,7 @@
     const [list, available, snapshot] = await Promise.all([
       api<ChannelBinding[]>(`${base}/channel-bindings?nodeId=${encodeURIComponent(nodeId)}`).catch(() => []),
       api<{ integrations: AutomationIntegration[] }>(`${base}/integrations`).then((data) => data.integrations ?? []).catch(() => []),
-      api<ControlCenterSnapshot>(`${base}/control-center`).catch(() => null),
+      api<ControlCenterSnapshot>(`${base}/control-center?communications=0`).catch(() => null),
     ]);
     if (ticket !== loadGeneration || workspace !== workspaceId || node !== nodeId) return;
     bindings = list;

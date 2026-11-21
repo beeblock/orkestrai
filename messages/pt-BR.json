@@ -6263,5 +6263,9 @@
   "bots.no_chats": "Nenhuma conversa encontrada ainda. Envie uma mensagem ao bot no serviço e busque novamente.",
   "bots.find_chats_error": "Não foi possível listar as conversas. Confira as permissões da conta e tente novamente.",
   "bots.slack_download_setup": "Baixar configuração do Slack",
-  "bots.setup_failed": "Não foi possível validar a conexão. Confira a credencial e os passos acima; o bot ainda não está conectado."
+  "bots.setup_failed": "Não foi possível validar a conexão. Confira a credencial e os passos acima; o bot ainda não está conectado.",
+  "control_center.history_summary": "Exibindo {shown} de {count} eventos",
+  "control_center.history_summary_help": "Corpos e metadados repetidos dos eventos foram omitidos nesta visualização. A mensagem, resposta e erro continuam acima; a auditoria completa permanece salva.",
+  "control_center.history_expand": "Mostrar todos os eventos",
+  "control_center.history_collapse": "Mostrar eventos recentes"
 }

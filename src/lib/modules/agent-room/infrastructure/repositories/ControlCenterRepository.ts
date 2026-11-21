@@ -585,13 +585,31 @@ export class ControlCenterRepository {
     return models.map(mapEnvelope);
   }
 
-  async listDeliveries(workspaceId: string, limit = 1_200): Promise<AgentMessageDeliveryEvent[]> {
-    const rows = await AgentMessageDelivery.query()
+  async listDeliveries(workspaceId: string, limit = 1_200, projection: 'compact' | 'full' = 'full'): Promise<AgentMessageDeliveryEvent[]> {
+    const query = AgentMessageDelivery.query()
       .where('workspace_id', workspaceId)
       .orderBy('created_at', 'desc')
-      .limit(limit)
-      .get();
-    return rows.reverse().map(mapDelivery);
+      // UUID v7 random bits do not order appends within the same millisecond.
+      // SQLite's insertion sequence keeps a confirmed reply after its receipt.
+      .orderBy('rowid', 'desc')
+      .limit(limit);
+    if (projection === 'compact') {
+      // Avoid parsing multi-megabyte repeated batch metadata for a status view.
+      query.select('id', 'message_id', 'workspace_id', 'from_node_id', 'to_node_id',
+        'state', 'content', 'reply', 'error', 'created_at');
+      // SQLite JSON projection is deliberately confined to this infrastructure
+      // query. Keep the bounded origin discriminator used by the audit UI,
+      // including legacy events without a canonical envelope, not whole JSON.
+      query.selectRaw("CASE WHEN json_valid(metadata_json) THEN CASE WHEN json_type(metadata_json, '$.kind') = 'text' THEN substr(json_extract(metadata_json, '$.kind'), 1, 80) END END AS metadata_kind");
+    }
+    const rows = await query.get();
+    return rows.reverse().map(row => {
+      const event = mapDelivery(row);
+      if (projection === 'compact' && typeof row.getAttribute('metadata_kind') === 'string') {
+        event.metadata = { kind: row.getAttribute('metadata_kind') };
+      }
+      return event;
+    });
   }
 
   async deleteWorkspaceHistory(workspaceId: string): Promise<void> {

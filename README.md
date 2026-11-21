@@ -80,6 +80,10 @@ caption when filtering. Existing chat/sender grants remain required. Agents use
 `orkestrai bot channel_targets --task <id> --input '{"nodeId":"...","integrationId":"..."}'`
 and `orkestrai bot slack_manifest --task <id> --input '{}'` through the same bridge.
 
+Agent status polling omits communication history. Control Center uses a compact
+audit view and shows its total before expanding; full persisted audit details
+remain available through `control-center?projection=full`.
+
 For chat bots, On demand receives authorized channel messages and wakes the bot
 as needed. Persistent keeps its session available. Max executions limits running
 automatic routines; native model turns remain sequential per bot. Renaming a bot

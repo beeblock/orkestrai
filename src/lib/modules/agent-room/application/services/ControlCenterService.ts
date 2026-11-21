@@ -86,9 +86,16 @@ function emptyCounts(): Record<AgentActivityState, number> {
 function projectMessages(
   events: AgentMessageDeliveryEvent[],
   titles: Map<string, string>,
+  projection: 'compact' | 'full',
 ): AgentMessageThread[] {
   const threads = new Map<string, AgentMessageThread>();
   for (const event of events) {
+    // State-history dots do not need hundreds of repeated prompts and batch
+    // metadata. Keep the full current message/reply/error once on the thread.
+    const projectedEvent = projection === 'compact'
+      ? { ...event, content: '', reply: null, error: null,
+        metadata: typeof event.metadata.kind === 'string' ? { kind: event.metadata.kind.slice(0, 80) } : {} }
+      : event;
     const existing = threads.get(event.messageId);
     if (!existing) {
       threads.set(event.messageId, {
@@ -104,7 +111,8 @@ function projectMessages(
         error: event.error,
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
-        events: [event],
+        events: [projectedEvent],
+        ...(projection === 'compact' ? { eventDetailsOmitted: true } : {}),
       });
       continue;
     }
@@ -112,7 +120,7 @@ function projectMessages(
     existing.reply = event.reply ?? existing.reply;
     existing.error = event.error ?? existing.error;
     existing.updatedAt = event.createdAt;
-    existing.events.push(event);
+    existing.events.push(projectedEvent);
   }
   return [...threads.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 100);
 }
@@ -442,12 +450,14 @@ export class ControlCenterService {
     }
   }
 
-  async snapshot(workspaceId: string, includeCommunications = true): Promise<ControlCenterSnapshot> {
+  async snapshot(workspaceId: string, includeCommunications = true, projection: 'compact' | 'full' = 'full'): Promise<ControlCenterSnapshot> {
     const [nodes, activeFloors, activityEvents, deliveryEvents, taskModels] = await Promise.all([
-      workspaceRepository.listNodes(workspaceId),
+      workspaceRepository.listTerminalNodes(workspaceId),
       AgentFloor.query().where('workspace_id', workspaceId).where('status', 'active').get(),
       controlCenterRepository.listActivity(workspaceId),
-      includeCommunications ? controlCenterRepository.listDeliveries(workspaceId) : Promise.resolve([]),
+      includeCommunications ? (projection === 'compact'
+        ? controlCenterRepository.listDeliveries(workspaceId, 1_200, 'compact')
+        : controlCenterRepository.listDeliveries(workspaceId)) : Promise.resolve([]),
       AgentBoardTask.query().where('workspace_id', workspaceId).get(),
     ]);
     const terminalNodes = nodes.filter((node) => node.type === 'terminal');
@@ -513,7 +523,8 @@ export class ControlCenterService {
       counts,
       agents,
       activity: [...activityEvents].reverse().slice(0, 300),
-      communications: projectMessages(deliveryEvents, titles),
+      communications: projectMessages(deliveryEvents, titles, projection),
+      communicationsProjection: includeCommunications ? projection : 'none',
       generatedAt: new Date().toISOString(),
     };
   }

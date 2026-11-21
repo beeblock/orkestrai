@@ -69,7 +69,7 @@
       const [items, summary, snapshot] = await Promise.all([
         api<AgentAttentionItem[]>(`/api/agent-room/attention?workspaceId=${encodeURIComponent(workspaceId)}&limit=100`),
         api<{ channels: ChannelSummary[] }>(`${base}/channels`),
-        api<ControlCenterSnapshot>(`${base}/control-center`),
+        api<ControlCenterSnapshot>(`${base}/control-center?communications=0`),
       ]);
       const time = Date.now();
       attention = items.filter((item) => item.workspaceId === workspaceId && (item.status === 'open' || item.status === 'read' || (item.status === 'snoozed' && new Date(item.snoozedUntil ?? 0).getTime() <= time)));
