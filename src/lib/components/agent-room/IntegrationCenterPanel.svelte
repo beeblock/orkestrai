@@ -377,9 +377,9 @@
 {/if}
 
 <Dialog.Root bind:open={dialogOpen} onOpenChange={value => { if (!value && setupProvider && !busy) onCloseSetup?.(); }}>
-  <Dialog.Content class="max-h-[min(760px,calc(100dvh-2rem))] max-w-2xl sm:max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-0" showCloseButton={false} onInteractOutside={(event: Event) => { if (busy) event.preventDefault(); }} onEscapeKeyDown={(event: Event) => { if (busy) event.preventDefault(); }}>
-    <Dialog.Header class="border-b border-[var(--app-border)] px-5 py-4"><Dialog.Title>{setupProvider ? m['bots.setup_title']({ provider: providerLabel(setupProvider) }) : m['integrations.add_title']()}</Dialog.Title><Dialog.Description>{setupProvider ? m['bots.setup_description']() : m['integrations.add_description']()}</Dialog.Description></Dialog.Header>
-    <div class="min-h-0 overflow-y-auto px-5 py-4">
+  <Dialog.Content class="flex max-h-[min(760px,calc(100dvh-2rem))] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false} onInteractOutside={(event: Event) => { if (busy) event.preventDefault(); }} onEscapeKeyDown={(event: Event) => { if (busy) event.preventDefault(); }}>
+    <Dialog.Header class="shrink-0 border-b border-[var(--app-border)] px-5 py-4"><Dialog.Title>{setupProvider ? m['bots.setup_title']({ provider: providerLabel(setupProvider) }) : m['integrations.add_title']()}</Dialog.Title><Dialog.Description>{setupProvider ? m['bots.setup_description']() : m['integrations.add_description']()}</Dialog.Description></Dialog.Header>
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4" data-testid="integration-dialog-body">
       {#if setupProvider && !setupInitialized}
         <p class="flex items-center gap-2 text-sm" role="status">{#if loading}<LoaderCircle class="animate-spin" size={15} />{/if}{loading ? m['bots.loading']() : m['bots.setup_failed']()}</p>
         {#if !loading}<Button type="button" variant="outline" size="sm" onclick={() => void refresh()}>{m['chat.profile_memory_retry']()}</Button>{/if}
@@ -410,7 +410,7 @@
       <section class="mt-6 border-t border-[var(--app-border)] pt-5"><h3 class="font-display text-[14px] font-semibold">{m['integrations.permissions']()}</h3><p class="mt-1 text-pretty text-ui-sm leading-[1.45] text-[var(--app-text-muted)]">{m['integrations.permissions_help']()}</p><div class="mt-3 grid gap-2 sm:grid-cols-2">{#each currentManifest?.actions ?? [] as action (action.id)}<label class="permission-option flex cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 shadow-border"><Checkbox class="mt-0.5" disabled={busy} checked={permissions.includes(action.id)} onCheckedChange={(checked: boolean) => togglePermission(action.id, checked)} /><span class="min-w-0"><span class="block text-ui-md font-medium">{actionLabel(action.id)}</span><span class={`mt-0.5 block text-ui-sm ${action.mutation ? 'text-[var(--app-warning)]' : 'text-[var(--app-text-muted)]'}`}>{action.mutation ? m['integrations.mutation']() : m['integrations.read_only']()}</span></span></label>{/each}</div></section>
       {/if}
     </div>
-    <Dialog.Footer class="border-t border-[var(--app-border)] px-5 py-3"><Button variant="ghost" disabled={busy} onclick={closeCreate}>{m['automation.cancel']()}</Button><Button disabled={busy || loading || !setupReady || permissions.length === 0 || !name.trim() || Boolean(setupProvider) && !secretValue.trim()} onclick={connect}>{#if busy}<LoaderCircle class="animate-spin" />{:else if type === 'gmail' && !setupProvider}<Mail />{:else}<ShieldCheck />{/if}{type === 'gmail' && !setupProvider ? m['integrations.connect_google']() : m['integrations.connect']()}</Button></Dialog.Footer>
+    <Dialog.Footer class="mx-0 mt-0 mb-0 shrink-0 border-t border-[var(--app-border)] px-5 py-3" data-testid="integration-dialog-footer"><Button variant="ghost" disabled={busy} onclick={closeCreate}>{m['automation.cancel']()}</Button><Button disabled={busy || loading || !setupReady || permissions.length === 0 || !name.trim() || Boolean(setupProvider) && !secretValue.trim()} onclick={connect}>{#if busy}<LoaderCircle class="animate-spin" />{:else if type === 'gmail' && !setupProvider}<Mail />{:else}<ShieldCheck />{/if}{type === 'gmail' && !setupProvider ? m['integrations.connect_google']() : m['integrations.connect']()}</Button></Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
 

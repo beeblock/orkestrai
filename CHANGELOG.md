@@ -7,7 +7,7 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.2 local preview
+### Added — 0.55.0-beta.3 local preview
 
 - Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.
 - Add opt-in Codex App Server and Claude Agent SDK transports using unchanged installed CLIs and selected profiles. Native prompts bypass TUI paste/Enter timing; provider receipts, per-conversation contexts, bounded output and verified process shutdown retain the existing bridge identity and Canvas tools.
@@ -21,6 +21,8 @@ pt-BR, English, and Spanish translations.
 
 
 ### Fixed in the local preview
+
+- Keep Telegram and Slack setup footer actions inside the dialog in short windows. Remove inherited negative footer margins, keep header/footer fixed and scroll only the form body.
 
 - Keep Save responsive while editing a bot: refresh model/account metadata only when its provider changes, instead of on every form-field update.
 
