@@ -810,7 +810,20 @@ function createManagedPortalExecutor({ WebContentsView, View, BrowserWindow, ses
     return closingAll;
   }
 
-  return { execute: queuedExecute, inspect, surface, setGeometry, detach, userCommand, closeAll };
+  function diagnosticRenderers() {
+    const rows = [];
+    for (const managed of sessions.values()) for (const tab of managed.tabs.values()) {
+      const contents = tab.window.webContents;
+      if (contents.isDestroyed()) continue;
+      rows.push({ workspaceId: managed.workspaceId, nodeId: managed.nodeId, tabId: tab.id,
+        webContentsId: contents.id, osProcessId: contents.getOSProcessId(),
+        visible: Boolean(managed.parent?.isVisible()) && managed.visible && managed.activeTabId === tab.id,
+        paused: managed.pauseLocked || managed.profile.paused });
+      if (rows.length >= 256) return rows;
+    }
+    return rows;
+  }
+  return { execute: queuedExecute, inspect, surface, setGeometry, detach, userCommand, closeAll, diagnosticRenderers };
 }
 
 module.exports = { createManagedPortalExecutor, SNAPSHOT_SCRIPT };

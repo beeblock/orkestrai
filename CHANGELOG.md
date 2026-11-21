@@ -22,6 +22,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Add private Core-token-authenticated renderer metrics and a bounded five-second main-renderer CPU profile to diagnose Canvas stalls. Never open a debugger port, evaluate arbitrary scripts, expose Portal contents or replace an attached debugger session.
+
 - Avoid full communication history during agent status polling. Compact Control Center audit event payloads without dropping their identities/states/timestamps; render a bounded history with explicit expand/collapse and retain the full audit projection on request.
 
 - Keep Telegram and Slack setup footer actions inside the dialog in short windows. Remove inherited negative footer margins, keep header/footer fixed and scroll only the form body.

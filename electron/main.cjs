@@ -17,6 +17,7 @@ const net = require('node:net');
 const { canInstallUpdatesAutomaticallyAsync, applyUpdateInstallPolicy, createUpdaterLogger } = require('./update-policy.cjs');
 const { latestPublicRelease, checkWithFallback } = require('./update-discovery.cjs');
 const { createDiagnosticsLogger } = require('./diagnostics.cjs');
+const { createRuntimeDiagnostics } = require('./runtime-diagnostics.cjs');
 const { isExpectedPortalDiagnostic, isExpectedServerDiagnostic, orchestrationHealthDiagnostic } = require('./diagnostic-filter.cjs');
 const { isBackgroundRuntimeInvocation } = require('./launch-intent.cjs');
 const { createManagedPortalExecutor } = require('./managed-portal.cjs');
@@ -69,6 +70,9 @@ const coreToken = crypto.randomBytes(32).toString('base64url');
 let coreStartedAt = new Date().toISOString();
 let managedPortalExecutor = null;
 let computerHostClosing = Promise.resolve();
+const runtimeDiagnostics = createRuntimeDiagnostics({ app, getMainWindow: () => mainWindow,
+  getWindows: () => BrowserWindow.getAllWindows(),
+  getPortalRenderers: () => managedPortalExecutor?.diagnosticRenderers() ?? [] });
 
 function initializeDiagnostics() {
   app.setAppLogsPath();
@@ -643,6 +647,14 @@ async function startServer(port) {
   });
   serverProcess.on('message', (message) => {
     if (!message?.requestId) return;
+    if (message.type === 'orkestrai:runtime:diagnostics') {
+      if (typeof message.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.requestId)
+        || requestingServer !== serverProcess || isQuitting || !['metrics', 'profile'].includes(message.mode)) return;
+      void runtimeDiagnostics.execute(message.mode).then(result => {
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:runtime:diagnostics:result', requestId: message.requestId, result }, () => {});
+      });
+      return;
+    }
     if (message.type === 'orkestrai:folder:open') {
       if (typeof message.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(message.requestId)
         || requestingServer !== serverProcess || isQuitting) return;
