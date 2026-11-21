@@ -22,6 +22,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Keep xterm mode-query replies working after production minification. Apply a version/hash-guarded dependency patch that preserves its local enum variable; verify the minified code and a real terminal response instead of disabling bundle minification globally.
+
 - Add private Core-token-authenticated renderer metrics and a bounded five-second main-renderer CPU profile to diagnose Canvas stalls. Never open a debugger port, evaluate arbitrary scripts, expose Portal contents or replace an attached debugger session.
 
 - Avoid full communication history during agent status polling. Compact Control Center audit event payloads without dropping their identities/states/timestamps; render a bounded history with explicit expand/collapse and retain the full audit projection on request.

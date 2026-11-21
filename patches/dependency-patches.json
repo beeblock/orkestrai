@@ -120,6 +120,12 @@
       "file": "node_modules/minimatch/dist/commonjs/index.js",
       "before": "d89e8ca7dda77bd9dc9efed6920b0ed09deb2f478ada54110980daa3080d3f9b",
       "after": "c87196ee69e5b8baa11e91c710ae6b1a2d7a552901c43e8006f3f49e22a3159f"
+    },
+    {
+      "patch": "@xterm+xterm+6.0.0.patch",
+      "file": "node_modules/@xterm/xterm/lib/xterm.mjs",
+      "before": "b336ec65a086c056d4804b3d4c2347da5663d3f23c3f25be866467bd8857ad59",
+      "after": "b08a69e8835f70f7328474a4e289515dafefb20e64c055d97be8bd476449a0cd"
     }
   ]
 }
