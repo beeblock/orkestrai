@@ -165,7 +165,7 @@ export class PersonalBotService {
         if (!binding) throw new Error('BOT_BINDING_NOT_FOUND');
         await this.requireBot(workspaceId, binding.nodeId);
         const result = input.command === 'disconnect' ? { removed: await channelBindingService.remove(workspaceId, binding.id) }
-          : await channelBindingService.setEnabled(workspaceId, binding.id, input.enabled);
+          : await channelBindingService.setEnabled(workspaceId, binding.id, input.enabled, input);
         this.changed(workspaceId);
         return result;
       }

@@ -56,16 +56,21 @@ export type BridgeAskOwnerInput = z.infer<typeof bridgeAskOwnerSchema>;
 export type BridgeCloseQuestionInput = z.infer<typeof bridgeCloseQuestionSchema>;
 export type BridgeEscalateQuestionInput = z.infer<typeof bridgeEscalateQuestionSchema>;
 
+const allowedChannelSendersSchema = z.array(z.string().trim().min(1).max(120)).max(50);
+const channelReplyPrefixesSchema = z.array(z.string().trim().min(1).max(80).refine(value => !/[\r\n\x00-\x1f]/.test(value))).max(10);
+
 export const createChannelBindingSchema = z.object({
   nodeId: z.string().uuid(),
   integrationId: z.string().uuid(),
   externalChatId: z.string().trim().min(1, 'Informe o chat ou canal.').max(120).regex(/^[A-Za-z0-9_@:.-]+$/, 'Use o id do chat ou canal.'),
-  allowedSenders: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
-  replyPrefixes: z.array(z.string().trim().min(1).max(80).refine(value => !/[\r\n\x00-\x1f]/.test(value))).max(10).default([]),
+  allowedSenders: allowedChannelSendersSchema.default([]),
+  replyPrefixes: channelReplyPrefixesSchema.default([]),
 });
 
 export const updateChannelBindingSchema = z.object({
-  enabled: z.boolean(),
+  enabled: z.boolean().optional(),
+  allowedSenders: allowedChannelSendersSchema.optional(),
+  replyPrefixes: channelReplyPrefixesSchema.optional(),
 });
 
 export type CreateChannelBindingInput = Omit<z.infer<typeof createChannelBindingSchema>, 'replyPrefixes'> & { replyPrefixes?: string[] };

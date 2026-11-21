@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
-  import { Activity, CirclePower, Link2, Plus, Trash2 } from '@lucide/svelte';
+  import { Activity, CirclePower, Link2, Pencil, Plus, Trash2 } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
@@ -31,6 +31,39 @@
   let saving = $state(false);
   let targets = $state<Array<{ id: string; name: string }>>([]), finding = $state(false), targetError = $state(false);
   let replyMode = $state<'all' | 'prefix'>('prefix'), prefixes = $state('');
+  let editingBindingId = $state(''), editSenders = $state(''), editPrefixes = $state('');
+  let editReplyMode = $state<'all' | 'prefix'>('prefix');
+  const prefixRules = $derived(prefixes.split(',').map(value => value.trim()).filter(Boolean));
+  const senderRules = $derived(senders.split(',').map(value => value.trim()).filter(Boolean));
+  const editPrefixRules = $derived(editPrefixes.split(',').map(value => value.trim()).filter(Boolean));
+  const editSenderRules = $derived(editSenders.split(',').map(value => value.trim()).filter(Boolean));
+
+  function connectionError(error: unknown): string {
+    const code = error instanceof Error ? error.message : '';
+    return code === 'BOT_ROUTE_CONFLICT' ? m['bots.route_conflict']() : code === 'BOT_CHAT_ALREADY_CONNECTED' ? m['bots.route_exists']()
+      : code === 'BOT_SENDER_INVALID' ? m['bots.route_sender_invalid']() : code || m['always_on.error']();
+  }
+
+  function editBinding(binding: ChannelBinding) {
+    editingBindingId = binding.id;
+    editSenders = binding.allowedSenders.join(', ');
+    editPrefixes = (binding.replyPrefixes ?? []).join(', ');
+    editReplyMode = binding.replyPrefixes?.length ? 'prefix' : 'all';
+  }
+
+  async function saveBinding(binding: ChannelBinding) {
+    if (saving || editReplyMode === 'prefix' && !editPrefixRules.length || editSenders.trim() && !editSenderRules.length) return;
+    saving = true;
+    try {
+      const updated = await api<ChannelBinding>(`${base}/channel-bindings/${binding.id}`, {
+        method: 'PATCH', body: JSON.stringify({ allowedSenders: editSenderRules,
+          replyPrefixes: editReplyMode === 'prefix' ? editPrefixRules : [] }),
+      });
+      bindings = bindings.map(item => item.id === updated.id ? updated : item);
+      editingBindingId = '';
+    } catch (error) { toast.error(connectionError(error)); }
+    finally { saving = false; }
+  }
 
   async function discover() {
     if (!integrationId || finding) return;
@@ -85,7 +118,7 @@
   $effect(() => {
     if (!botEvents) return;
     void workspaceId; void nodeId;
-    integrationId = ''; chatId = ''; senders = ''; targets = []; adding = false; replyMode = 'prefix';
+    integrationId = ''; chatId = ''; senders = ''; targets = []; adding = false; replyMode = 'prefix'; editingBindingId = '';
     const changed = () => void load();
     const ready = (event: Event) => {
       const data = (event as CustomEvent<{ nodeId: string; integrationId: string }>).detail;
@@ -99,19 +132,19 @@
   });
 
   async function connect() {
-    if (!integrationId || !chatId.trim() || saving) return;
+    if (!integrationId || !chatId.trim() || saving || botEvents && replyMode === 'prefix' && !prefixRules.length || senders.trim() && !senderRules.length) return;
     saving = true;
     try {
       const created = await api<ChannelBinding>(`${base}/channel-bindings`, {
         method: 'POST',
-        body: JSON.stringify({ nodeId, integrationId, externalChatId: chatId.trim(), allowedSenders: senders.split(',').map((value) => value.trim()).filter(Boolean), replyPrefixes: botEvents && replyMode === 'prefix' ? prefixes.split(',').map(value => value.trim()).filter(Boolean) : [] }),
+        body: JSON.stringify({ nodeId, integrationId, externalChatId: chatId.trim(), allowedSenders: senderRules, replyPrefixes: botEvents && replyMode === 'prefix' ? prefixRules : [] }),
       });
       bindings = [...bindings, created];
       adding = false;
       chatId = '';
       senders = '';
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : m['always_on.error']());
+      toast.error(connectionError(error));
     } finally {
       saving = false;
     }
@@ -122,7 +155,7 @@
       const updated = await api<ChannelBinding>(`${base}/channel-bindings/${binding.id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
       bindings = bindings.map((candidate) => (candidate.id === binding.id ? updated : candidate));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : m['always_on.error']());
+      toast.error(connectionError(error));
     }
   }
 
@@ -163,14 +196,25 @@
       <div class="binding-main">
         <b>{binding.kind === 'telegram' ? 'Telegram' : binding.kind === 'whatsapp' ? 'WhatsApp' : 'Slack'}</b>
         <span class="mono">{binding.externalChatId}</span>
-        {#if botEvents}<span class="meta">{binding.replyPrefixes?.length ? binding.replyPrefixes.join(', ') : m['bots.reply_all']()}</span>{/if}
+        {#if botEvents}<span class="meta">{binding.replyPrefixes?.length ? binding.replyPrefixes.join(', ') : m['bots.reply_all']()}</span><span class="meta">{binding.allowedSenders.length ? m['always_on.allowed']({ names: binding.allowedSenders.join(', ') }) : m['always_on.anyone']()}</span>{/if}
         {#if binding.lastError}<span class="err" title={binding.lastError}>{binding.lastError === 'BOT_DELIVERY_PENDING' ? m['bots.delivery_pending']() : binding.lastError === 'BOT_DELIVERY_UNCERTAIN' ? m['bots.delivery_uncertain']() : binding.lastError}</span>
         {:else if binding.lastInboundAt}<span class="meta">{m['always_on.last_message']({ time: time(binding.lastInboundAt) })}</span>
         {:else}<span class="meta">{binding.allowedSenders.length ? m['always_on.allowed']({ names: binding.allowedSenders.join(', ') }) : m['always_on.anyone']()}</span>{/if}
       </div>
-      <Switch checked={binding.enabled} onCheckedChange={(value: boolean) => void toggle(binding, value)} aria-label={m['always_on.enabled']()} />
-      <Button size="icon-sm" variant="ghost" aria-label={m['always_on.remove']()} title={m['always_on.remove']()} onclick={() => void remove(binding)}><Trash2 size={13} /></Button>
+      <Switch checked={binding.enabled} disabled={saving} onCheckedChange={(value: boolean) => void toggle(binding, value)} aria-label={m['always_on.enabled']()} />
+      {#if botEvents}<Button size="icon-sm" variant="ghost" disabled={saving} aria-label={m['bots.edit_route']()} title={m['bots.edit_route']()} onclick={() => editBinding(binding)}><Pencil size={13} /></Button>{/if}
+      <Button size="icon-sm" variant="ghost" disabled={saving} aria-label={m['always_on.remove']()} title={m['always_on.remove']()} onclick={() => void remove(binding)}><Trash2 size={13} /></Button>
     </div>
+    {#if editingBindingId === binding.id}
+      <form class="grid gap-2 rounded-lg border border-[var(--app-border)] p-3" aria-label={m['bots.edit_route']()} onsubmit={event => { event.preventDefault(); void saveBinding(binding); }}>
+        <label class="grid gap-1 text-xs">{m['bots.allowed_senders']()}<Input bind:value={editSenders} maxlength={6000} disabled={saving} /></label>
+        <p class="hint">{binding.kind === 'whatsapp' ? m['bots.allowed_senders_hint']() : m['bots.route_senders_hint']()}</p>
+        <SegmentedControl fill label={m['bots.reply_when']()} value={editReplyMode} onValueChange={value => (editReplyMode = value)} options={[{ value: 'prefix', label: m['bots.reply_prefix']() }, { value: 'all', label: m['bots.reply_all']() }]} />
+        {#if editReplyMode === 'prefix'}<label class="grid gap-1 text-xs">{m['bots.prefixes']()}<Input bind:value={editPrefixes} maxlength={809} required disabled={saving} /></label>{/if}
+        <p class="hint">{m['bots.prefixes_hint']()}</p>
+        <div class="row"><Button size="sm" variant="ghost" type="button" disabled={saving} onclick={() => (editingBindingId = '')}>{m['always_on.cancel']()}</Button><Button size="sm" type="submit" disabled={saving || editReplyMode === 'prefix' && !editPrefixRules.length || Boolean(editSenders.trim()) && !editSenderRules.length}>{m['bots.save']()}</Button></div>
+      </form>
+    {/if}
   {/each}
   {#if adding}
     <form class="add" onsubmit={(event) => { event.preventDefault(); void connect(); }}>
@@ -190,7 +234,7 @@
         <p class="hint">{m['always_on.reply_policy']()}</p>
         <div class="row">
           <Button size="sm" variant="ghost" type="button" onclick={() => (adding = false)}>{m['always_on.cancel']()}</Button>
-          <Button size="sm" type="submit" disabled={!integrationId || !chatId.trim() || saving || botEvents && replyMode === 'prefix' && !prefixes.trim()}>{m['always_on.connect']()}</Button>
+          <Button size="sm" type="submit" disabled={!integrationId || !chatId.trim() || saving || botEvents && replyMode === 'prefix' && !prefixRules.length || Boolean(senders.trim()) && !senderRules.length}>{m['always_on.connect']()}</Button>
         </div>
       {:else}
         <p class="hint">{botEvents ? m['bots.setup_description']() : m['always_on.no_integrations']()}</p>

@@ -80,6 +80,16 @@ caption when filtering. Existing chat/sender grants remain required. Agents use
 `orkestrai bot channel_targets --task <id> --input '{"nodeId":"...","integrationId":"..."}'`
 and `orkestrai bot slack_manifest --task <id> --input '{}'` through the same bridge.
 
+One linked WhatsApp account can serve several bots in the same group. In each
+bot choose the same account/group and distinct prefixes, such as `@Sales` and
+`@Support`; no new QR is required. Optional verified sender filters can separate
+routes too. Overlapping enabled rules are rejected before model invocation.
+Rule-only edits preserve a paused binding; set enabled explicitly to resume it.
+Edit rules with the pencil in External channels, or with an assigned task:
+`orkestrai bot set_binding --task <id> --input '{"bindingId":"...","enabled":true,"replyPrefixes":["@Sales"]}'`.
+Bots can ask Canvas agents through the bridge; recruitment requires the existing
+leader/deputy role. See **How to use → Several bots in one WhatsApp group**.
+
 Agent status polling omits communication history. Control Center uses a compact
 audit view and shows its total before expanding; full persisted audit details
 remain available through `control-center?projection=full`.

@@ -50,6 +50,9 @@ describe('personal bot CLI/MCP parity', () => {
     const input = { binding: { nodeId: 'bot-id', integrationId: 'account-id', externalChatId: 'chat-id', allowedSenders: [], replyPrefixes: ['@Helper', '#Helper'] } };
     expect(await run(['bot', 'connect', '--task', 'task-id', '--input', JSON.stringify(input)], options())).toBe(0);
     expect(requests.at(-1).body.input.binding.replyPrefixes).toEqual(['@Helper', '#Helper']);
+    const edit = { bindingId: 'binding-id', enabled: true, allowedSenders: ['5511999999999@s.whatsapp.net'], replyPrefixes: ['@Support'] };
+    expect(await run(['bot', 'set_binding', '--task', 'task-id', '--input', JSON.stringify(edit)], options())).toBe(0);
+    expect(requests.at(-1).body.input).toEqual({ command: 'set_binding', ...edit });
     const bridge = vi.fn().mockResolvedValue([]);
     await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: null }, 'bot_command', { taskId: 'task-id', input: { command: 'channel_targets', nodeId: 'bot-id', integrationId: 'account-id' } });
     expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', expect.objectContaining({ input: expect.objectContaining({ command: 'channel_targets' }) }));

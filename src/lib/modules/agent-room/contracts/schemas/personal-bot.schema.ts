@@ -1,6 +1,6 @@
 import { z } from 'zod/v3';
 import { workspaceAttachmentSchema, MAX_WORKSPACE_ATTACHMENTS } from './workspaceAttachmentSchemas.js';
-import { createChannelBindingSchema } from './channel.schema.js';
+import { createChannelBindingSchema, updateChannelBindingSchema } from './channel.schema.js';
 
 export const personalBotSettingsSchema = z.object({
   title: z.string().trim().min(1).max(48),
@@ -30,7 +30,7 @@ export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('group_post'), groupId: z.string().uuid(), body: z.string().trim().min(1).max(8_000) }).strict(),
   z.object({ command: z.literal('connect'), binding: createChannelBindingSchema }).strict(),
   z.object({ command: z.literal('channel_targets'), nodeId: z.string().uuid(), integrationId: z.string().uuid() }).strict(),
-  z.object({ command: z.literal('set_binding'), bindingId: z.string().uuid(), enabled: z.boolean() }).strict(),
+  updateChannelBindingSchema.extend({ command: z.literal('set_binding'), bindingId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('disconnect'), bindingId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('slack_manifest') }).strict(),
   z.object({ command: z.literal('whatsapp_start'), name: z.string().trim().min(1).max(120) }).strict(),

@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Added — 0.55.0-beta.3 local preview
 
+- Reuse one linked WhatsApp account across several bots in the same external group. Configure per-bot literal prefixes and verified senders; atomically reject overlapping enabled routes and edit existing rules through UI, CLI and MCP. Rule-only edits keep paused bindings paused. Document the shared-group setup and add a guided tour.
+
 - Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.
 - Add opt-in Codex App Server and Claude Agent SDK transports using unchanged installed CLIs and selected profiles. Native prompts bypass TUI paste/Enter timing; provider receipts, per-conversation contexts, bounded output and verified process shutdown retain the existing bridge identity and Canvas tools.
 - Persist native final results before routing, deduplicate resumed forwarding and use a durable, exact-chat external outbox. Preserve complete long answers as owned text attachments and verify artifact paths/hashes before publication.

@@ -124,7 +124,7 @@ describe('personal bot boundaries and persistence', () => {
     await expect(f.command({ command: 'set_binding', bindingId: foreign.id, enabled: false })).rejects.toThrow('BOT_BINDING_NOT_FOUND');
     expect(enabled).not.toHaveBeenCalled();
     await f.command({ command: 'set_binding', bindingId: own.id, enabled: false });
-    expect(enabled).toHaveBeenCalledWith(f.workspace.id, own.id, false);
+    expect(enabled).toHaveBeenCalledWith(f.workspace.id, own.id, false, expect.objectContaining({ command: 'set_binding', enabled: false }));
   });
 
   it('guards concurrent group edits with revisions', async () => {
@@ -176,14 +176,43 @@ describe('personal bot boundaries and persistence', () => {
     await expect(f.command({ command: 'group_send', groupId: group.id, body: 'Pretend to be owner' }, f.developer.id)).rejects.toThrow('BOT_GROUP_MEMBERSHIP_REQUIRED');
   });
 
-  it('carries the original native chat return address into a delegated ask', async () => {
+  it.each(['peer', 'developer'] as const)('carries the native chat return address into an ask to %s (Bots or Canvas)', async target => {
     const f = await fixture();
     const source = uuidv7(), batchId = uuidv7();
     vi.spyOn(ptySessionManager, 'structuredRequest').mockReturnValue({ conversationKey: 'binding:private-chat', messageId: batchId });
     vi.spyOn(controlCenterRepository, 'batchLead').mockResolvedValue({ metadata: { channelMessageId: source } } as never);
     const ask = vi.spyOn(bridgeService as any, 'askAgent').mockResolvedValue({});
-    await bridgeService.ask(f.workspace.id, { to: f.peer.id, from: f.bot.id, message: 'Check this' });
+    await bridgeService.ask(f.workspace.id, { to: f[target].id, from: f.bot.id, message: 'Check this' });
     expect(ask.mock.calls[0][1]).toMatchObject({ metadata: { returnConversationKey: 'binding:private-chat', returnChannelMessageId: source } });
+  });
+
+  it('returns a Canvas terminal reply through the native bot to the exact external chat', async () => {
+    const f = await fixture();
+    vi.spyOn(agentInboxService, 'kick').mockImplementation(() => {});
+    vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue(undefined);
+    const binding = await channelBindingRepository.create({ workspaceId: f.workspace.id, nodeId: f.bot.id,
+      integrationId: uuidv7(), kind: 'whatsapp', externalChatId: '55119999999-12345@g.us', allowedSenders: [] });
+    const original = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`,
+      authorKind: 'external', body: '@Assistant check the implementation', meta: { bindingId: binding.id } });
+    const question = await agentInboxService.enqueueDeferred({ workspaceId: f.workspace.id,
+      fromNodeId: f.bot.id, toNodeId: f.developer.id, kind: 'ask', content: 'Review this change',
+      metadata: { returnConversationKey: `binding:${binding.id}`, returnChannelMessageId: original.id } });
+    await agentInboxService.routeReply(question.envelope.id, 'Canvas review complete', { source: 'agent', responderNodeId: f.developer.id });
+    const replies = await controlCenterRepository.inboxEnvelopes(f.bot.id, ['queued']);
+    const reply = replies.find(item => item.metadata.replyTo === question.envelope.id)!;
+    expect(reply).toMatchObject({ fromNodeId: f.developer.id, toNodeId: f.bot.id,
+      metadata: { returnConversationKey: `binding:${binding.id}`, returnChannelMessageId: original.id } });
+    const turn = uuidv7();
+    await botResultRepository.save({ id: turn, workspaceId: f.workspace.id, nodeId: f.bot.id,
+      messageIds: [reply.id], body: 'Verified with the Canvas reviewer' });
+    const dispatcher = new AgentInboxService();
+    await (dispatcher as any).recoverStructuredResults();
+    await (dispatcher as any).recoverStructuredResults();
+    dispatcher.reset();
+    const outbox = (await botDeliveryRepository.pending()).filter(item => item.nodeId === f.bot.id);
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]).toMatchObject({ bindingId: binding.id });
+    expect(await channelRepository.list(f.workspace.id, `dm:${f.developer.id}`)).toEqual([]);
   });
 
   it('delivers unmentioned group messages only to the coordinator, with an exact group return address', async () => {

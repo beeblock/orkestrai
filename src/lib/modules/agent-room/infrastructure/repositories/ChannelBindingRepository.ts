@@ -72,9 +72,11 @@ export class ChannelBindingRepository {
     return model && model.getAttribute('workspace_id') === workspaceId ? mapBinding(model) : null;
   }
 
-  async update(id: string, values: { enabled?: boolean; cursor?: string | null; lastError?: string | null; lastInboundAt?: string }): Promise<void> {
+  async update(id: string, values: { enabled?: boolean; allowedSenders?: string[]; replyPrefixes?: string[]; cursor?: string | null; lastError?: string | null; lastInboundAt?: string }): Promise<void> {
     await AgentChannelBinding.query().where('id', id).update({
       ...(values.enabled !== undefined ? { enabled: values.enabled } : {}),
+      ...(values.allowedSenders !== undefined ? { allowed_senders_json: JSON.stringify(values.allowedSenders) } : {}),
+      ...(values.replyPrefixes !== undefined ? { reply_prefixes_json: JSON.stringify(values.replyPrefixes) } : {}),
       ...(values.cursor !== undefined ? { cursor: values.cursor } : {}),
       ...(values.lastError !== undefined ? { last_error: values.lastError } : {}),
       ...(values.lastInboundAt !== undefined ? { last_inbound_at: values.lastInboundAt } : {}),

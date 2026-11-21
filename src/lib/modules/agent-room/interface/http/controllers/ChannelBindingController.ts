@@ -24,7 +24,7 @@ export class ChannelBindingController extends Controller {
   async update(event: RequestEvent) {
     try {
       const input = await UpdateChannelBindingRequest.validate(event);
-      return this.json({ data: await channelBindingService.setEnabled(event.params.id, event.params.bindingId, input.enabled) });
+      return this.json({ data: await channelBindingService.setEnabled(event.params.id, event.params.bindingId, input.enabled, input) });
     } catch (error) {
       return this.failure(error, 'Could not update the channel connection.');
     }

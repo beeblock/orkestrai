@@ -15,6 +15,8 @@
   let connections = $state<Connection[]>([]), selectedId = $state(''), qr = $state<string | null>(null), connectionState = $state('offline');
   let busy = $state(false), failed = $state(false), chatId = $state(''), senders = $state(''), removing = $state(false);
   let replyMode = $state<'all' | 'prefix'>('prefix'), prefixes = $state(''), failureCode = $state('');
+  const prefixRules = $derived(prefixes.split(',').map(value => value.trim()).filter(Boolean));
+  const senderRules = $derived(senders.split(',').map(value => value.trim()).filter(Boolean));
   const selected = $derived(connections.find(item => item.id === selectedId));
   const base = $derived(`/api/agent-room/workspaces/${workspaceId}/bots`);
   let generation = 0;
@@ -57,15 +59,15 @@
     catch (error) { failed = true; failureCode = error instanceof Error ? error.message : ''; } finally { busy = false; }
   }
   async function bind() {
-    if (!selectedId || !chatId.trim() || busy) return;
+    if (!selectedId || !chatId.trim() || busy || replyMode === 'prefix' && !prefixRules.length || senders.trim() && !senderRules.length) return;
     const raw = chatId.trim().replace(/^\+/, '');
     busy = true; failed = false;
     try {
       await botApi(base, { command: 'connect', binding: { nodeId, integrationId: selectedId, externalChatId: /^\d+$/.test(raw) ? `${raw}@s.whatsapp.net` : raw,
-        allowedSenders: senders.split(',').map(value => value.trim().replace(/^\+/, '')).filter(Boolean).map(value => /^\d+$/.test(value) ? `${value}@s.whatsapp.net` : value),
-        replyPrefixes: replyMode === 'prefix' ? prefixes.split(',').map(value => value.trim()).filter(Boolean) : [] } });
+        allowedSenders: senderRules,
+        replyPrefixes: replyMode === 'prefix' ? prefixRules : [] } });
       chatId = ''; onChanged();
-    } catch { failed = true; } finally { busy = false; }
+    } catch (error) { failed = true; failureCode = error instanceof Error ? error.message : ''; } finally { busy = false; }
   }
   async function disconnect() {
     if (!selectedId || busy) return; busy = true;
@@ -77,6 +79,7 @@
 <section class="grid gap-3" aria-label="WhatsApp" data-testid="bot-whatsapp">
   <div class="flex items-center justify-between gap-2"><h3 class="flex items-center gap-2 text-sm font-semibold"><MessageCircle size={16} />WhatsApp</h3>{#if connections.length}<Button size="icon-sm" variant="ghost" aria-label={m['bots.whatsapp_add']()} disabled={busy} onclick={() => void start()}>{#if busy}<LoaderCircle size={15} class="animate-spin" />{:else}<Plus size={15} />{/if}</Button>{/if}</div>
   <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_hint']()}</p>
+  <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_routes_hint']()}</p>
   {#if connections.length}
     <Select.Root type="single" bind:value={selectedId}><Select.Trigger aria-label={m['bots.whatsapp_account']()}>{selected?.name ?? 'WhatsApp'}</Select.Trigger><Select.Content>{#each connections as connection}<Select.Item value={connection.id}>{connection.name} · {connection.state === 'connected' ? m['bots.connected']() : m['bots.whatsapp_waiting']()}</Select.Item>{/each}</Select.Content></Select.Root>
     {#if qr}<div class="grid justify-items-center gap-2 rounded-xl border border-[var(--app-border)] p-3"><img src={qr} width="224" height="224" alt={m['bots.whatsapp_scan']()} class="max-w-full rounded-lg bg-white" /><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_scan']()}</p></div>
@@ -92,11 +95,11 @@
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.allowed_senders_hint']()}</p>
         <SegmentedControl fill label={m['bots.reply_when']()} value={replyMode} onValueChange={value => (replyMode = value)} options={[{ value: 'prefix', label: m['bots.reply_prefix']() }, { value: 'all', label: m['bots.reply_all']() }]} />
         {#if replyMode === 'prefix'}<label class="grid gap-1 text-xs">{m['bots.prefixes']()}<Input bind:value={prefixes} maxlength={809} required /></label><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.prefixes_hint']()}</p>{/if}
-        <Button size="sm" type="submit" disabled={busy || !chatId.trim() || replyMode === 'prefix' && !prefixes.trim()}><Link2 size={14} />{m['bots.connect']()}</Button>
+        <Button size="sm" type="submit" disabled={busy || !chatId.trim() || replyMode === 'prefix' && !prefixRules.length || Boolean(senders.trim()) && !senderRules.length}><Link2 size={14} />{m['bots.connect']()}</Button>
       </form>
     {/if}
     <Button size="sm" variant="ghost" disabled={busy} onclick={() => (removing = true)}><Trash2 size={13} />{m['bots.disconnect']()}</Button>
   {:else}<Button size="sm" variant="outline" disabled={busy} onclick={() => void start()}><Plus size={14} />{m['bots.whatsapp_add']()}</Button>{/if}
-  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{failureCode === 'SECURE_STORAGE_UNLOCK_TIMEOUT' || failureCode === 'Secure credential request timed out.' ? m['bots.whatsapp_unlock_timeout']() : m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['chat.profile_memory_retry']()}</Button>{/if}
+  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{failureCode === 'SECURE_STORAGE_UNLOCK_TIMEOUT' || failureCode === 'Secure credential request timed out.' ? m['bots.whatsapp_unlock_timeout']() : failureCode === 'BOT_ROUTE_CONFLICT' ? m['bots.route_conflict']() : failureCode === 'BOT_CHAT_ALREADY_CONNECTED' ? m['bots.route_exists']() : failureCode === 'BOT_SENDER_INVALID' ? m['bots.route_sender_invalid']() : m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['chat.profile_memory_retry']()}</Button>{/if}
 </section>
 <AlertDialog.Root bind:open={removing}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['bots.disconnect']()}</AlertDialog.Title><AlertDialog.Description>{m['bots.whatsapp_disconnect_hint']()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['bots.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void disconnect()}>{m['bots.disconnect']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>
