@@ -328,7 +328,9 @@ export class WhatsAppBotService {
         }
         const latest = await channelBindingRepository.find(binding.workspaceId, binding.id);
         if (link.stopped || !latest?.enabled || latest.integrationId !== link.connection.id || latest.nodeId !== binding.nodeId || latest.externalChatId !== chat || !senderAllowed(latest, sender, null) || !channelPrefixAllowed(latest, body)) continue;
-        await channelService.postExternal(binding.workspaceId, binding.nodeId, { body, via: 'whatsapp', bindingId: binding.id, sender: (message.pushName || sender).slice(0, 120), externalId, attachments });
+        await channelService.postExternal(binding.workspaceId, binding.nodeId, { body, via: 'whatsapp', bindingId: binding.id,
+          expectedBindingScope: (await import('./BotSafetyService.js')).botSafetyService.bindingScope(latest),
+          sender: (message.pushName || sender).slice(0, 120), senderId: sender, externalId, attachments });
         await channelBindingRepository.update(binding.id, { lastInboundAt: new Date().toISOString(), lastError: null });
       } finally {
         for (const attachment of uploaded) await workspaceAttachmentService.remove(binding.workspaceId, WorkspaceAttachmentDeleteDto.fromAttachment(attachment)).catch(() => undefined);

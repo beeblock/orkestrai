@@ -309,11 +309,12 @@ export class AgentWorkspaceToolService {
 export class ToolExecutionService {
   constructor(private readonly http = new TrustedIntegrationHttpClient()) {}
 
-  async execute(workspaceId: string, toolId: string, raw: ExecuteWorkspaceToolInput): Promise<WorkspaceToolRunRecord> {
+  async execute(workspaceId: string, toolId: string, raw: ExecuteWorkspaceToolInput, options: { signal?: AbortSignal; beforeEffect?: () => Promise<void>; publicJsonBody?: boolean; publicCaller?: { senderId: string; channel: string; bindingId: string } } = {}): Promise<WorkspaceToolRunRecord> {
     const request = executeWorkspaceToolSchema.parse(raw);
     assertNoEmbeddedSecrets(request.input, 'input');
     const tool = await agentWorkspaceToolRepository.find(workspaceId, toolId);
     if (!tool || tool.status === 'archived') throw new Error('Archived workspace tools cannot run.');
+    if (request.expectedPublishedRevision !== undefined && tool.publishedRevision !== request.expectedPublishedRevision) throw new Error('BOT_PUBLIC_ACTION_CHANGED');
     let executableTool = tool;
     const previous = await agentWorkspaceToolRepository.findRun(workspaceId, request.idempotencyKey);
     if (!request.dryRun) {
@@ -347,7 +348,10 @@ export class ToolExecutionService {
         operation: `tool:${executableTool.slug}`, target: executableTool.name,
         mutation: executableTool.manifest.executor.kind !== 'transform', actorType: request.actor.type,
         actorId: request.actor.id ?? null, input: { toolId, toolRunId: run.id, revision: executableTool.currentRevision }, certainty: 'semantic',
-      }, () => this.run(executableTool, request.input, request, run));
+      }, async () => {
+        await options.beforeEffect?.();
+        return this.run(executableTool, request.input, request, run, options);
+      });
       if (!request.dryRun) validateValue(executableTool.manifest.outputSchema, output);
       const serialized = JSON.stringify(redactAutonomyValue(output));
       if (Buffer.byteLength(serialized) > executableTool.manifest.maxOutputBytes) throw new Error('Tool output exceeded its published limit.');
@@ -373,7 +377,7 @@ export class ToolExecutionService {
     return { valid: true, executor: tool.manifest.executor.kind, revision: tool.currentRevision, requestDigest: digest({ toolId: tool.id, input }) };
   }
 
-  private async run(tool: WorkspaceToolRecord, input: Record<string, unknown>, request: ExecuteWorkspaceToolInput, run: WorkspaceToolRunRecord): Promise<unknown> {
+  private async run(tool: WorkspaceToolRecord, input: Record<string, unknown>, request: ExecuteWorkspaceToolInput, run: WorkspaceToolRunRecord, options: { signal?: AbortSignal; beforeEffect?: () => Promise<void>; publicJsonBody?: boolean; publicCaller?: { senderId: string; channel: string; bindingId: string } } = {}): Promise<unknown> {
     const executor = tool.manifest.executor;
     if (executor.kind === 'transform') return this.transform(input, executor.operations);
     if (executor.kind === 'integration') {
@@ -382,7 +386,7 @@ export class ToolExecutionService {
         input: record(renderValue(executor.inputTemplate, input)), idempotencyKey: request.idempotencyKey,
       }, { actorType: request.actor.type === 'automation' ? 'automation' : request.actor.type === 'agent' ? 'agent' : 'user', actorId: request.actor.id, runId: request.automationRunId });
     }
-    if (executor.kind === 'http') return this.httpRequest(tool, input);
+    if (executor.kind === 'http') return this.httpRequest(tool, input, options);
     if (executor.kind === 'browser') {
       const outputs: unknown[] = [...(run.checkpoint?.steps ?? [])];
       const deadline = Date.now() + tool.manifest.timeoutMs;
@@ -427,7 +431,7 @@ export class ToolExecutionService {
     return output;
   }
 
-  private async httpRequest(tool: WorkspaceToolRecord, input: Record<string, unknown>): Promise<unknown> {
+  private async httpRequest(tool: WorkspaceToolRecord, input: Record<string, unknown>, options: { signal?: AbortSignal; beforeEffect?: () => Promise<void>; publicJsonBody?: boolean; publicCaller?: { senderId: string; channel: string; bindingId: string } } = {}): Promise<unknown> {
     const executor = tool.manifest.executor as Extract<WorkspaceToolManifest['executor'], { kind: 'http' }>;
     const url = new URL(render(executor.urlTemplate, input));
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Tool URL is not allowed.');
@@ -442,18 +446,30 @@ export class ToolExecutionService {
         headers[header.name] = value;
       } else headers[header.name] = render(header.value ?? '', input);
     }
+    if (options.publicCaller) {
+      for (const name of Object.keys(headers)) if (/^x-orkestrai-external-/i.test(name)) delete headers[name];
+      headers['x-orkestrai-external-sender'] = encodeURIComponent(options.publicCaller.senderId);
+      headers['x-orkestrai-external-channel'] = options.publicCaller.channel;
+      headers['x-orkestrai-external-binding'] = options.publicCaller.bindingId;
+    }
     const mutation = !['GET', 'HEAD'].includes(executor.method);
     try {
+      // Public arguments are values in a JSON tree, never raw JSON source.
+      // Parse the owner template before rendering, then serialize after binding.
+      const body = executor.bodyTemplate && mutation
+        ? options.publicJsonBody ? JSON.stringify(renderValue(JSON.parse(executor.bodyTemplate), input)) : render(executor.bodyTemplate, input)
+        : undefined;
       return await autonomyPolicyService.execute({
         workspaceId: tool.workspaceId, capability: 'network', operation: `tool:${tool.slug}`, target: url.hostname,
         mutation, actorType: 'integration', actorId: tool.id, input: { url: url.toString(), method: executor.method },
         network: { url: url.toString(), method: executor.method }, certainty: 'semantic',
       }, async () => {
         try {
+        await options.beforeEffect?.();
         const response = await this.http.request(url.toString(), {
           method: executor.method, headers,
-          ...(executor.bodyTemplate && mutation ? { body: render(executor.bodyTemplate, input) } : {}),
-          signal: AbortSignal.timeout(tool.manifest.timeoutMs),
+          ...(body !== undefined ? { body } : {}),
+          signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(tool.manifest.timeoutMs)]) : AbortSignal.timeout(tool.manifest.timeoutMs),
         });
         if (!response.ok) throw new Error(`Tool endpoint returned HTTP ${response.status}.`);
         return redactResolvedSecrets(response.json, resolvedSecrets);

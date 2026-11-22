@@ -175,7 +175,7 @@
     if (item.status === 'open') await act(item, 'read');
     open = false;
     if (item.action?.target === 'bots') {
-      await goto(`/bots?${new URLSearchParams({ workspace: item.workspaceId }).toString()}`);
+      await goto(`/bots?${new URLSearchParams({ workspace: item.workspaceId, ...(item.nodeId ? { node: item.nodeId } : {}) }).toString()}`);
       return;
     }
     if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {

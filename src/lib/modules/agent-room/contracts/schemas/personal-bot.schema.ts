@@ -1,6 +1,7 @@
 import { z } from 'zod/v3';
 import { workspaceAttachmentSchema, MAX_WORKSPACE_ATTACHMENTS } from './workspaceAttachmentSchemas.js';
 import { createChannelBindingSchema, updateChannelBindingSchema } from './channel.schema.js';
+import { botSafetySchema, type BotSafetySettings } from './bot-safety.schema.js';
 
 export const personalBotSettingsSchema = z.object({
   title: z.string().trim().min(1).max(48),
@@ -23,6 +24,8 @@ export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('create'), settings: personalBotSettingsSchema }).strict(),
   z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema }).strict(),
   z.object({ command: z.literal('remove'), nodeId: z.string().uuid() }).strict(),
+  z.object({ command: z.literal('safety_options'), nodeId: z.string().uuid() }).strict(),
+  z.object({ command: z.literal('safety_update'), nodeId: z.string().uuid(), revision: z.number().int().min(0), settings: botSafetySchema }).strict(),
   z.object({ command: z.literal('group_create'), settings: botGroupSettingsSchema }).strict(),
   z.object({ command: z.literal('group_update'), groupId: z.string().uuid(), revision: z.number().int().min(1), settings: botGroupSettingsSchema }).strict(),
   z.object({ command: z.literal('group_archive'), groupId: z.string().uuid(), revision: z.number().int().min(1) }).strict(),
@@ -44,5 +47,6 @@ export type PersonalBotSummary = {
   id: string; title: string; provider: string; model: string | null; effort: string | null;
   profileId: string | null; instructions: string; transport: 'terminal' | 'structured'; sessionId: string | null;
   runtimeMode: 'interactive' | 'on_demand' | 'persistent';
+  safety: BotSafetySettings; safetyRevision: number;
 };
 export type PersonalBotGroup = BotGroupSettings & { id: string; workspaceId: string; revision: number; archived: boolean };

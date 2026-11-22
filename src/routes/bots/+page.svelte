@@ -5,6 +5,7 @@
   import { Button } from '$lib/components/ui/button';
   import * as Select from '$lib/components/ui/select';
   import BotEditor from '$lib/components/agent-room/bots/BotEditor.svelte';
+  import BotSafetyEditor from '$lib/components/agent-room/bots/BotSafetyEditor.svelte';
   import BotGroupEditor from '$lib/components/agent-room/bots/BotGroupEditor.svelte';
   import { botApi, type BotProviderOption } from '$lib/components/agent-room/bots/bot-api.js';
   import AgentChatFace from '$lib/components/agent-room/chat/AgentChatFace.svelte';
@@ -29,6 +30,7 @@
   let selectedId = $state(''), groupId = $state(''), loading = $state(true), failed = $state(false), connected = $state(false);
   let editorOpen = $state(false), editing = $state<PersonalBotSummary | null>(null), groupEditor = $state(false), runtimeOpen = $state(false);
   let profileOpen = $state(true);
+  let safetyOpen = $state(false);
   let generation = 0;
   let automationOpen = $state(false), groupEditing = $state<PersonalBotGroup | null>(null), confirmRemove = $state(false);
   let viewportWidth = $state(1200);
@@ -153,6 +155,7 @@
     {#if loading}<div class="bot-empty"><LoaderCircle class="animate-spin" size={24} /><p>{m['bots.loading']()}</p></div>
     {:else if selected || group}
       <header class="chat-heading"><div><h2>{selected?.title ?? group?.title}</h2><p>{selected ? providers.find(item => item.id === selected?.provider)?.displayName : m['bots.group_hint']()}</p></div><div class="heading-actions">{#if group}<Button variant="ghost" size="icon-sm" aria-label={m['bots.edit_group']()} onclick={() => { groupEditing = group; groupEditor = true; }}><Settings2 size={16} /></Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.archive_group']()}</Button>{/if}{#if selected}<Button variant="ghost" size="icon-sm" aria-label={m['bots.edit']()} onclick={() => edit(selected)}><Settings2 size={16} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['bots.profile_tab']()} onclick={() => (profileOpen = !profileOpen)}><PanelRight size={16} /></Button>{/if}</div></header>
+      {#if selected && !selected.safety.publicInstructions}<div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--app-border)] px-5 py-3 text-sm text-[var(--app-text-muted)]"><span>{m['bots.safety_setup_required']()}</span><Button size="sm" variant="outline" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button></div>{/if}
       {#if failed}<p class="bot-error" role="alert">{m['bots.error']()}</p>{/if}
       {#if selected}
         {#key `${workspaceId}:${selected.id}`}<div class="bot-conversation"><AgentChatFace {workspaceId} nodeId={selected.id} title={selected.title} voice personalBot /></div>{/key}
@@ -162,10 +165,11 @@
     {:else}<div class="bot-empty"><span class="empty-avatar"><Bot size={34} strokeWidth={1.4} /></span><h2>{m['bots.empty']()}</h2><p>{failed ? m['bots.error']() : m['bots.empty_hint']()}</p><Button disabled={!workspaceId} onclick={() => edit(null)}><Plus size={16} />{m['bots.create']()}</Button></div>{/if}
   </main>
   {#if selected && profileOpen && selectedPayload}
-    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
+    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><Button variant="outline" size="sm" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
   {/if}
 </div>
 {#if editorOpen}<BotEditor {workspaceId} {providers} bot={editing} onSaved={saved} onClose={() => (editorOpen = false)} />{/if}
+{#if safetyOpen && selected}<BotSafetyEditor {workspaceId} bot={selected} onSaved={() => { safetyOpen = false; void refresh(); }} onClose={() => (safetyOpen = false)} />{/if}
 {#if groupEditor}<BotGroupEditor {workspaceId} {bots} group={groupEditing} onSaved={item => { groupId = item.id; selectedId = ''; groupEditor = false; void refresh(); }} onClose={() => (groupEditor = false)} />{/if}
 {#if selected}<AgentRuntimeDialog open={runtimeOpen} {workspaceId} nodeId={selected.id} onChanged={() => void refresh()} onClose={() => (runtimeOpen = false)} />{/if}
 

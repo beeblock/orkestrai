@@ -682,6 +682,8 @@ export type TerminalNodePayload = {
   /** Personal bots are presented in their own mode, independently of Chat. */
   personalBot?: boolean;
   botInstructions?: string;
+  botSafetyRevision?: number;
+  botSafety?: import('../contracts/schemas/bot-safety.schema.js').BotSafetySettings;
   agentTransport?: 'terminal' | 'structured';
   /** Provider session identifiers only; never credentials or transcript bodies. */
   structuredConversations?: Record<string, string>;

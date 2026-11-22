@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { mkdtemp, rm, writeFile, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { botSafetyService, BotSafetyService } from '$lib/modules/agent-room/application/services/BotSafetyService.js';
+import { botSafetySchema } from '$lib/modules/agent-room/contracts/schemas/bot-safety.schema.js';
 import { tmpdir } from 'node:os';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -186,7 +189,7 @@ describe('personal bot boundaries and persistence', () => {
     expect(ask.mock.calls[0][1]).toMatchObject({ metadata: { returnConversationKey: 'binding:private-chat', returnChannelMessageId: source } });
   });
 
-  it('returns a Canvas terminal reply through the native bot to the exact external chat', async () => {
+  it('does not publish an unreviewed Canvas reply as public bot authority', async () => {
     const f = await fixture();
     vi.spyOn(agentInboxService, 'kick').mockImplementation(() => {});
     vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue(undefined);
@@ -210,8 +213,8 @@ describe('personal bot boundaries and persistence', () => {
     await (dispatcher as any).recoverStructuredResults();
     dispatcher.reset();
     const outbox = (await botDeliveryRepository.pending()).filter(item => item.nodeId === f.bot.id);
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toMatchObject({ bindingId: binding.id });
+    expect(outbox).toHaveLength(0);
+    expect(await botResultRepository.pending()).toHaveLength(0);
     expect(await channelRepository.list(f.workspace.id, `dm:${f.developer.id}`)).toEqual([]);
   });
 
@@ -288,8 +291,13 @@ describe('personal bot boundaries and persistence', () => {
     vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue();
     await writeFile(join(f.root, 'report.pdf'), '%PDF-1.4 test');
     const binding = await channelBindingRepository.create({ workspaceId: f.workspace.id, nodeId: f.bot.id, integrationId: uuidv7(), kind: 'telegram', externalChatId: '42', allowedSenders: [] });
-    const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'Report please', meta: { bindingId: binding.id } });
-    const result = await channelService.postStructuredResult(f.workspace.id, f.bot.id, source.id, 'x'.repeat(4500) + '\n[Report](report.pdf)', uuidv7());
+    const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'Report please', meta: { bindingId: binding.id, bindingScope: botSafetyService.bindingScope(binding), senderId: 'verified-id', sender: 'customer' } });
+    const body = 'x'.repeat(4500) + '\n[Report](report.pdf)', id = uuidv7();
+    await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, botSafety: botSafetySchema.parse({ publicInstructions: 'Public support', maxReplyCharacters: 8000 }) } as never });
+    const turn = await botSafetyService.begin(f.workspace.id, f.bot.id, binding.id, source.id);
+    turn.artifacts.set('report.pdf', { path: 'report.pdf', name: 'report.pdf', mimeType: 'application/pdf', image: false, sha256: createHash('sha256').update('%PDF-1.4 test').digest('hex') });
+    await botSafetyService.approve(turn, body, id);
+    const result = await channelService.postStructuredResult(f.workspace.id, f.bot.id, source.id, body, id);
     expect(result!.meta.artifacts).toMatchObject([{ path: 'report.pdf', mimeType: 'application/pdf', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
     let failOnce = true;
     const accepted = new Set<string>();
@@ -312,8 +320,13 @@ describe('personal bot boundaries and persistence', () => {
     const f = await fixture();
     const binding = await channelBindingRepository.create({ workspaceId: f.workspace.id, nodeId: f.bot.id, integrationId: uuidv7(), kind: 'telegram', externalChatId: '42', allowedSenders: [] });
     const ids: string[] = [];
+    await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, botSafety: botSafetySchema.parse({ publicInstructions: 'Public support', requestsPerMinute: 30 }) } as never });
     for (let index = 0; index < 51; index++) {
-      const message = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'agent', authorNodeId: f.bot.id, body: `Reply ${index}`, meta: { bindingId: binding.id } });
+      const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'Public request', meta: { bindingId: binding.id, bindingScope: botSafetyService.bindingScope(binding), senderId: 'verified-id', sender: 'customer' } });
+      const service = new BotSafetyService();
+      const turn = await service.begin(f.workspace.id, f.bot.id, binding.id, source.id);
+      const id = uuidv7(); await service.approve(turn, `Reply ${index}`, id);
+      const message = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'agent', authorNodeId: f.bot.id, body: `Reply ${index}`, replyToId: source.id, meta: { bindingId: binding.id } }, id);
       ids.push(message.id);
       await botDeliveryRepository.create(f.workspace.id, f.bot.id, binding.id, message.id);
     }
@@ -335,15 +348,14 @@ describe('personal bot boundaries and persistence', () => {
     await expect(integrationExecutionService.readBotArtifact(f.workspace.id, f.bot.id, 'report.pdf', '0'.repeat(64))).rejects.toThrow('BOT_ARTIFACT_CHANGED');
   });
 
-  it('delivers file replies from a terminal-fallback bot through the same durable native-channel outbox', async () => {
+  it('does not bypass public review through channel_post in a terminal fallback', async () => {
     const f = await fixture();
     vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue();
     await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, agentTransport: 'terminal' } as never });
     await writeFile(join(f.root, 'fallback.pdf'), '%PDF fallback');
     const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'Report', meta: { bindingId: uuidv7() } });
-    const reply = await channelService.postAgent(f.workspace.id, f.bot.id, { body: '[Report](fallback.pdf)', replyToId: source.id });
-    expect(reply.meta.artifacts).toMatchObject([{ path: 'fallback.pdf', sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
-    expect((await botDeliveryRepository.pending()).map(item => item.id)).toContain(reply.id);
+    await expect(channelService.postAgent(f.workspace.id, f.bot.id, { body: '[Report](fallback.pdf)', replyToId: source.id })).rejects.toThrow('UNAPPROVED');
+    expect(await botDeliveryRepository.pending()).toEqual([]);
   });
 
   it('rejects invalid WhatsApp media without trapping later inbound messages behind it', async () => {

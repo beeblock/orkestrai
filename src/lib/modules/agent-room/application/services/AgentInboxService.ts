@@ -1,6 +1,7 @@
 import { taskExecutionService } from './TaskExecutionService.js';
 import { taskExecutionRepository } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { uuidv7 } from '@beeblock/svelar/support';
+import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
 import { Event } from '@beeblock/svelar/events';
 import type { AgentMessageEnvelope } from '../../domain/types.js';
 import { AutomationTriggerReceived } from '../../domain/events/AutomationTriggerReceived.js';
@@ -622,7 +623,18 @@ export class AgentInboxService {
                   ? envelope.metadata.channelMessageId ?? envelope.metadata.returnChannelMessageId : envelope.kind === 'reply' ? envelope.metadata.returnChannelMessageId : null;
                 if (typeof source === 'string') {
                   const { channelService } = await import('./ChannelService.js');
-                  await channelService.postStructuredResult(result.workspaceId, result.nodeId, source, result.body, result.id);
+                  try { await channelService.postStructuredResult(result.workspaceId, result.nodeId, source, result.body, result.id); }
+                  catch (error) {
+                    if (!(error instanceof Error) || !/^BOT_PUBLIC_/.test(error.message)) throw error;
+                    // An old/unapproved draft is permanently quarantined. Do
+                    // not retry it on every sweep or restart the model.
+                    await channelService.modelFailure(result.workspaceId, source, 'turn');
+                    const original = await channelRepository.find(result.workspaceId, source);
+                    if (typeof original?.meta.bindingId === 'string') {
+                      const { botSafetyService } = await import('./BotSafetyService.js');
+                      await botSafetyService.notice(result.workspaceId, result.nodeId, original.meta.bindingId, error);
+                    }
+                  }
                 }
               }
             }
@@ -924,19 +936,29 @@ export class AgentInboxService {
     try {
       await agentTerminalDeliveryService.deliver({
         conversationKey: structuredConversation(batch.envelopes[0]),
+        ...((typeof batch.envelopes[0].metadata.bindingId === 'string' || ['telegram', 'slack', 'whatsapp'].includes(String(batch.envelopes[0].metadata.via))) ? {
+          publicOrigin: { type: 'external' as const,
+            bindingId: typeof batch.envelopes[0].metadata.bindingId === 'string' ? batch.envelopes[0].metadata.bindingId : null,
+            channelMessageId: typeof batch.envelopes[0].metadata.channelMessageId === 'string' ? batch.envelopes[0].metadata.channelMessageId : null },
+        } : {}),
         messageId: batch.batchId,
         onAccepted: async () => {
           await submissionWrites;
           await this.markDelivered(batch.batchId, batch, 'provider');
         },
         onCompleted: text => this.keepStructuredResult(batch, text, batch.batchId),
-        onFailed: async () => {
+        onFailed: async (error) => {
           const { channelService } = await import('./ChannelService.js');
           for (const envelope of batch.envelopes) {
             if (typeof envelope.metadata.channelMessageId === 'string') await channelService.modelFailure(batch.workspaceId, envelope.metadata.channelMessageId, 'turn');
           }
+          const publicBinding = batch.envelopes[0].metadata.bindingId;
+          if (typeof publicBinding === 'string') {
+            const { botSafetyService } = await import('./BotSafetyService.js');
+            await botSafetyService.notice(batch.workspaceId, batch.nodeId, publicBinding, error);
+          }
           await controlCenterService.recordActivity({ workspaceId: batch.workspaceId, nodeId: batch.nodeId,
-            state: 'error', action: 'system:structured_turn_failed', category: 'system', verb: 'failed',
+            state: typeof publicBinding === 'string' ? 'idle' : 'error', action: 'system:structured_turn_failed', category: 'system', verb: 'failed',
             sourceType: 'structured_agent', sourceId: batch.batchId });
         },
         workspaceId: batch.workspaceId,
@@ -968,6 +990,14 @@ export class AgentInboxService {
     } catch (error) {
       await submissionWrites.catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
+      if (/^BOT_PUBLIC_[A-Z_]+$/.test(message)) {
+        const { botSafetyService } = await import('./BotSafetyService.js');
+        for (const envelope of batch.envelopes) {
+          await this.fail(envelope, message);
+          if (typeof envelope.metadata.bindingId === 'string') await botSafetyService.notice(batch.workspaceId, batch.nodeId, envelope.metadata.bindingId, error);
+        }
+        return;
+      }
       if ((error as { code?: string }).code === 'PTY_DELIVERY_OBSOLETE') {
         for (const envelope of batch.envelopes) await this.cancel(envelope, 'obsolete');
         return;

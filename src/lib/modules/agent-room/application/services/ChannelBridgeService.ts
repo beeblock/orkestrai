@@ -183,10 +183,11 @@ export class ChannelBridgeService {
           attachments.push(attachment); uploaded.push(attachment);
         }
         await channelService.postExternal(binding.workspaceId, binding.nodeId, {
+        expectedBindingScope: (await import('./BotSafetyService.js')).botSafetyService.bindingScope(binding),
         body: message.text,
         via: binding.kind,
         bindingId: binding.id,
-        sender: message.senderName || message.senderId,
+        sender: message.senderName || message.senderId, senderId: message.senderId,
         externalId: message.externalId,
         ...(attachments.length ? { attachments } : {}),
         });
@@ -203,27 +204,14 @@ export class ChannelBridgeService {
    * Never blocks the post; a binding that is gone or disabled gets nothing.
    */
   async mirrorReply(workspaceId: string, nodeId: string, messageId: string, body: string, bindingId: string): Promise<void> {
-    const bindings = (await channelBindingRepository.list(workspaceId, nodeId).catch(() => []))
-      .filter((binding) => binding.id === bindingId && binding.enabled);
-    for (const binding of bindings) {
-      try {
-        if (binding.kind === 'whatsapp') {
-          const { whatsappBotService } = await import('./WhatsAppBotService.js');
-          await whatsappBotService.send(workspaceId, nodeId, binding.id, body, messageId);
-          continue;
-        }
-        await integrationExecutionService.execute(workspaceId, {
-          integrationId: binding.integrationId,
-          action: binding.kind === 'telegram' ? 'telegram.send_message' : 'slack.send_message',
-          input: binding.kind === 'telegram'
-            ? { chatId: binding.externalChatId, text: body.slice(0, 4_000) }
-            : { channel: binding.externalChatId, text: body.slice(0, 4_000) },
-          idempotencyKey: `agent-reply:${messageId}:${binding.id}`,
-        }, { actorType: 'agent', actorId: nodeId });
-      } catch (error) {
-        await channelBindingRepository.update(binding.id, { lastError: error instanceof Error ? error.message.slice(0, 300) : 'Reply failed.' }).catch(() => undefined);
-      }
-    }
+    const message = await channelRepository.find(workspaceId, messageId);
+    if (!message?.replyToId || message.authorNodeId !== nodeId || message.meta.bindingId !== bindingId || message.body !== body) return;
+    const { botSafetyService } = await import('./BotSafetyService.js');
+    await botSafetyService.approved(workspaceId, nodeId, message.replyToId, body, messageId);
+    const { botDeliveryRepository } = await import('../../infrastructure/repositories/BotDeliveryRepository.js');
+    await botDeliveryRepository.create(workspaceId, nodeId, bindingId, messageId);
+    const { botExternalDeliveryService } = await import('./BotExternalDeliveryService.js');
+    await botExternalDeliveryService.flush();
   }
 }
 

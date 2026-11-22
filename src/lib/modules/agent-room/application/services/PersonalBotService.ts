@@ -14,12 +14,14 @@ import { channelBindingService } from './ChannelBindingService.js';
 import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
 import { mentionedTitles } from '../../domain/channels.js';
 import { providerProfileService } from './ProviderProfileService.js';
+import { botSafetyService } from './BotSafetyService.js';
 
 function summary(node: { id: string; title: string | null; payload: unknown }): PersonalBotSummary {
   const payload = node.payload as TerminalNodePayload;
   return { id: node.id, title: node.title ?? 'Bot', provider: payload.provider ?? '', model: payload.model ?? null,
     effort: payload.effort ?? null, profileId: payload.profileId ?? null, instructions: payload.botInstructions ?? '',
-    transport: payload.agentTransport ?? 'terminal', sessionId: payload.sessionId ?? null, runtimeMode: payload.agentRuntimeMode ?? 'interactive' };
+    transport: payload.agentTransport ?? 'terminal', sessionId: payload.sessionId ?? null, runtimeMode: payload.agentRuntimeMode ?? 'interactive',
+    safety: botSafetyService.settings(payload.botSafety), safetyRevision: payload.botSafetyRevision ?? 0 };
 }
 
 export function botGroupChannel(id: string): string { return `botgroup:${id}`; }
@@ -66,8 +68,9 @@ export class PersonalBotService {
     if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
     switch (input.command) {
       case 'create': {
+        const safety = await botSafetyService.validateSettings(workspaceId, {});
         const payload = { ...await this.command(input.settings), agentRuntimeMode: 'on_demand',
-          agentRuntimeIdleMinutes: 30, agentRuntimeConcurrency: 1, agentRuntimeUsageLimit: 95 };
+          agentRuntimeIdleMinutes: 30, agentRuntimeConcurrency: 1, agentRuntimeUsageLimit: 95, botSafety: safety };
         const node = await workspaceService.createNode(CreateCanvasNodeDto.from(workspaceId, { type: 'terminal', title: input.settings.title,
           payload: payload as never, width: 560, height: 360 }));
         return summary(node);
@@ -82,7 +85,10 @@ export class PersonalBotService {
         const sameExecution = (['provider', 'model', 'effort', 'profileId', 'instructions', 'transport'] as const)
           .every(key => current[key] === input.settings[key]);
         if (sameExecution) {
-          const updated = await workspaceRepository.updateNode(node.id, { title: input.settings.title });
+          const updated = await Connection.transaction(async () => {
+            const fresh = await this.requireBot(workspaceId, node.id);
+            return workspaceRepository.updateNode(fresh.id, { title: input.settings.title });
+          });
           if (!updated) throw new Error('PERSONAL_BOT_NOT_FOUND');
           this.changed(workspaceId);
           return summary(updated);
@@ -93,7 +99,10 @@ export class PersonalBotService {
         if (old.provider !== input.settings.provider || (old.profileId ?? null) !== input.settings.profileId) {
           if (old.agentSessionId || Object.keys(old.structuredConversations ?? {}).length) throw new Error('BOT_ACCOUNT_CHANGE_USE_PROFILE_SWITCH');
         }
-        const updated = await workspaceRepository.updateNode(node.id, { title: input.settings.title, payload: { ...old, ...payload } as never });
+        const updated = await Connection.transaction(async () => {
+          const fresh = await this.requireBot(workspaceId, node.id);
+          return workspaceRepository.updateNode(node.id, { title: input.settings.title, payload: { ...(fresh.payload as TerminalNodePayload), ...payload } as never });
+        });
         this.changed(workspaceId);
         return summary(updated!);
       }
@@ -101,6 +110,21 @@ export class PersonalBotService {
         const node = await this.requireBot(workspaceId, input.nodeId);
         await workspaceService.deleteNode(workspaceId, node.id);
         return { removed: true };
+      }
+      case 'safety_options':
+        await this.requireBot(workspaceId, input.nodeId);
+        return botSafetyService.options(workspaceId);
+      case 'safety_update': {
+        await this.requireBot(workspaceId, input.nodeId);
+        const settings = await botSafetyService.validateSettings(workspaceId, input.settings);
+        const node = await Connection.transaction(async () => {
+          const fresh = await this.requireBot(workspaceId, input.nodeId);
+          const payload = fresh.payload as TerminalNodePayload;
+          if ((payload.botSafetyRevision ?? 0) !== input.revision) throw new Error('BOT_PUBLIC_POLICY_CONFLICT');
+          return workspaceRepository.updateNode(fresh.id, { payload: { ...payload, botSafety: settings, botSafetyRevision: input.revision + 1 } as never });
+        });
+        this.changed(workspaceId);
+        return summary(node!);
       }
       case 'group_create':
         await this.groupMembers(workspaceId, input.settings);

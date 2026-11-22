@@ -1,9 +1,11 @@
 import type { IPty } from 'node-pty';
+import type { PublicBotOrigin } from '../../domain/public-bot-origin.js';
 
 export type StructuredTurn = {
   prompt: string;
   conversationKey: string;
   messageId: string;
+  publicOrigin?: PublicBotOrigin;
   signal: AbortSignal;
   accepted: (sessionId: string, turnId: string) => void;
   output: (text: string) => void;
@@ -39,7 +41,7 @@ export class StructuredAgentProcess {
   private stopped = false;
   private shutdown: Promise<void> | null = null;
   private draft = '';
-  private request: { conversationKey: string; messageId: string } | null = null;
+  private request: { conversationKey: string; messageId: string; publicOrigin?: PublicBotOrigin } | null = null;
   private receipts = new Map<string, { sessionId: string; turnId: string }>();
 
   constructor(private readonly driver: StructuredAgentDriver) {}
@@ -63,7 +65,7 @@ export class StructuredAgentProcess {
     for (const listener of this.data) listener(safe);
   }
 
-  submit(prompt: string, conversationKey = 'owner', messageId: string = crypto.randomUUID(), signal?: AbortSignal): Promise<StructuredReceipt> {
+  submit(prompt: string, conversationKey = 'owner', messageId: string = crypto.randomUUID(), signal?: AbortSignal, publicOrigin?: PublicBotOrigin): Promise<StructuredReceipt> {
     if (signal?.aborted) return Promise.reject(new Error('STRUCTURED_TURN_CANCELLED'));
     if (this.stopped) return Promise.reject(new Error('STRUCTURED_SESSION_CLOSED'));
     if (this.active) return Promise.reject(new Error('STRUCTURED_SESSION_BUSY'));
@@ -72,14 +74,14 @@ export class StructuredAgentProcess {
     this.active = controller;
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
-    this.request = { conversationKey, messageId };
+    this.request = { conversationKey, messageId, ...(publicOrigin ? { publicOrigin: { ...publicOrigin } } : {}) };
     for (const state of this.states) state(true);
     let accepted = false;
     let resolve!: (receipt: StructuredReceipt) => void;
     let reject!: (error: unknown) => void;
     const receipt = new Promise<StructuredReceipt>((yes, no) => { resolve = yes; reject = no; });
     const completion = Promise.resolve().then(() => this.driver.run({
-      prompt, conversationKey, messageId, signal: controller.signal,
+      prompt, conversationKey, messageId, signal: controller.signal, ...(publicOrigin ? { publicOrigin: { ...publicOrigin } } : {}),
       output: text => this.emit(text),
       accepted: (sessionId, turnId) => {
         if (accepted || this.stopped || controller.signal.aborted) return;

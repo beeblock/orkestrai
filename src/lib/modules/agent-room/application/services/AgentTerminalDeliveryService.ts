@@ -3,10 +3,12 @@ import { agentSessionTracker } from '../../infrastructure/pty/AgentSessionTracke
 import { ObsoletePtyDeliveryError, ptySessionManager, type PtyOutputMark } from '../../infrastructure/pty/PtySessionManager.js';
 import { findPromptInTranscript, latestTurnBoundary } from '../../infrastructure/transcript/AgentTranscript.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
+import type { PublicBotOrigin } from '../../domain/public-bot-origin.js';
 
 type DeliverAgentMessageInput = {
   conversationKey?: string;
   messageId?: string;
+  publicOrigin?: PublicBotOrigin;
   onCompleted?: (text: string) => Promise<void>;
   onAccepted?: () => Promise<void>;
   onFailed?: (error: unknown) => Promise<void>;
@@ -38,7 +40,7 @@ export class AgentTerminalDeliveryService {
     }
     if (ptySessionManager.get(input.sessionId)?.transport === 'structured') {
       const receipt = await ptySessionManager.submitStructured(input.sessionId, input.message,
-        input.conversationKey ?? 'owner', input.messageId ?? crypto.randomUUID(), input.signal);
+        input.conversationKey ?? 'owner', input.messageId ?? crypto.randomUUID(), input.signal, input.publicOrigin);
       input.onSubmitted?.({ sessionId: input.sessionId, length: 0 });
       const accepted = Promise.resolve().then(() => input.onAccepted?.());
       void receipt.completion.then(async text => {
@@ -53,6 +55,7 @@ export class AgentTerminalDeliveryService {
       await accepted;
       return;
     }
+    if (input.publicOrigin || input.conversationKey?.startsWith('binding:')) throw new Error('BOT_PUBLIC_STRUCTURED_REQUIRED');
     const startedAt = Date.now();
     const submission: { at: number | null; boundaryCheckedAt: number; unverified?: Error } = { at: null, boundaryCheckedAt: 0 };
     const provider = ptySessionManager.get(input.sessionId)?.provider;

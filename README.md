@@ -87,7 +87,7 @@ routes too. Overlapping enabled rules are rejected before model invocation.
 Rule-only edits preserve a paused binding; set enabled explicitly to resume it.
 Edit rules with the pencil in External channels, or with an assigned task:
 `orkestrai bot set_binding --task <id> --input '{"bindingId":"...","enabled":true,"replyPrefixes":["@Sales"]}'`.
-Bots can ask Canvas agents through the bridge; recruitment requires the existing
+In private owner chats, bots can ask Canvas agents through the bridge; recruitment requires the existing
 leader/deputy role. See **How to use → Several bots in one WhatsApp group**.
 
 Agent status polling omits communication history. Control Center uses a compact
@@ -104,6 +104,33 @@ WhatsApp session revocation raises an Attention Center item and a native desktop
 notification; temporary outages notify after one minute. Open the item to return
 to Bots and relink by QR when required. Reconnection resolves the item without
 waking a model, and deliberate disconnects do not raise alarms.
+
+**External channel protection:** open the selected bot’s protection settings and
+write its public role and knowledge. Existing connections require this explicit
+configuration; unconfigured or unsupported messages stay visible and raise an
+Attention Center notice instead of entering an unrestricted terminal. In-app
+owner chats keep their existing account, context and full bridge.
+
+Public turns use fresh restricted native workers with no host shell, arbitrary
+workspace files, private instructions, full bridge or unrestricted delegation.
+Grant only published fixed-destination functions, pin their revisions and choose
+safe output fields. Approve file fields explicitly; paths and SHA-256 must match
+before a file can leave. HTTP functions receive trusted customer identity in
+`x-orkestrai-external-sender`, `-channel` and `-binding` headers. Your backend must
+validate that identity and authorize its own customer data.
+
+Each external reply uses an additional tool-free model review, increasing account
+usage and latency. Rate/action/output limits, revision and revocation checks,
+credential-pattern detection and exact-chat outbox approvals run outside the
+model. Prompt rules and review are additional defenses, not immunity to prompt
+injection or a promise that model-visible instructions cannot be repeated.
+Never place secrets in public instructions. Public Codex requires the verified
+0.171.x CLI contract; other versions fail closed. Public attachment reads are
+limited to 5 MB. Unreviewed old external drafts are quarantined, never auto-sent.
+
+Leaders and specialists configure the same policy with `bot_command` or
+`orkestrai bot safety_options|safety_update --task <id> --input <json>`.
+See **How to use → Protect a support bot from hostile messages** and its tour.
 
 The desktop Core, network and provider account must stay available. The phone
 cannot reach an offline computer. Subscription limits and configured policies

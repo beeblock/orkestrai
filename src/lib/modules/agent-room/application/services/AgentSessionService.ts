@@ -271,6 +271,7 @@ export class AgentSessionService {
     const launch = codexMcpLaunchForRuntime(runtime, sessionEnv);
     const bridgeEnv = Object.fromEntries(Object.entries(sessionEnv).filter(([key]) => key.startsWith('ORKESTRAI_')));
     const structuredProcess = transport === 'structured' ? adapter!.createStructuredProcess!({
+      workspaceId, nodeId: target.id,
       cwd: trackingCwd, hostCwd: cwd, workspaceRoot: workspace.workingDir, runtime, env: sessionEnv,
       model: payload.model, effort: payload.effort,
       instructions: [(payload as TerminalNodePayload).botInstructions ?? '', structuredRole?.prompt ?? '',

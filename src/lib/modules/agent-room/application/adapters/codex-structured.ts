@@ -2,6 +2,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StructuredAgentProcess, type StructuredAgentDriver, type StructuredTurn } from '../../infrastructure/pty/StructuredAgentProcess.ts';
 import { spawnStructuredAgent, stopStructuredAgent } from './structured-launch.js';
 import type { StructuredAgentOptions } from './structured-types.js';
+import { BotStructuredDriver } from './public-bot-structured.js';
 
 type Json = Record<string, unknown>;
 const object = (value: unknown): Json => value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {};
@@ -39,6 +40,18 @@ export class CodexStructuredDriver implements StructuredAgentDriver {
       });
       await this.request('initialize', { clientInfo: { name: 'orkestrai', title: 'Orkestrai', version: '0.55.0-beta.1' } });
       this.write({ method: 'initialized', params: {} });
+      if (this.options.publicWorker) {
+        const config = object((await this.request('config/read', { includeLayers: false })).config);
+        const servers = object(config.mcp_servers), features = object(config.features);
+        const safe = this.options.publicWorker;
+        if (config.model_catalog_json !== safe.codexCatalog || config.developer_instructions !== ''
+          || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false
+          || safe.disabledFeatures?.some(name => features[name] !== false)
+          || Object.entries(servers).some(([name, value]) => name !== safe.serverName && object(value).enabled !== false)
+          || !servers[safe.serverName] || object(servers[safe.serverName]).enabled === false) {
+          await stopStructuredAgent(child); throw new Error('BOT_PUBLIC_RUNTIME_UNVERIFIED');
+        }
+      }
     })();
   }
 
@@ -95,8 +108,9 @@ export class CodexStructuredDriver implements StructuredAgentDriver {
     await this.start();
     if (turn.signal.aborted) throw new Error('STRUCTURED_TURN_CANCELLED');
     let sessionId = this.options.session(turn.conversationKey);
-    const configuration = { cwd: this.options.cwd, approvalPolicy: 'never', sandbox: 'danger-full-access',
+    const configuration = { cwd: this.options.cwd, approvalPolicy: 'never', sandbox: this.options.publicWorker ? 'read-only' : 'danger-full-access',
       developerInstructions: this.options.instructions, ...(this.options.model ? { model: this.options.model } : {}),
+      ...(this.options.publicWorker ? { ephemeral: true, baseInstructions: this.options.instructions } : {}),
       ...(this.options.effort ? { config: { model_reasoning_effort: this.options.effort } } : {}) };
     if (!sessionId || !this.loaded.has(sessionId)) {
       const result = await this.request(sessionId ? 'thread/resume' : 'thread/start',
@@ -193,4 +207,4 @@ export class CodexStructuredDriver implements StructuredAgentDriver {
   }
 }
 
-export const createCodexStructuredProcess = (options: StructuredAgentOptions) => new StructuredAgentProcess(new CodexStructuredDriver(options));
+export const createCodexStructuredProcess = (options: StructuredAgentOptions) => new StructuredAgentProcess(new BotStructuredDriver('codex', options, input => new CodexStructuredDriver(input)));

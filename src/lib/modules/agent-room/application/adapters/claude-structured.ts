@@ -3,6 +3,7 @@ import { spawnStructuredAgent, stopStructuredAgent } from './structured-launch.j
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { StructuredAgentOptions } from './structured-types.js';
 import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { BotStructuredDriver } from './public-bot-structured.js';
 
 type QueryFunction = typeof import('@anthropic-ai/claude-agent-sdk').query;
 
@@ -46,7 +47,8 @@ export class ClaudeStructuredDriver implements StructuredAgentDriver {
       spawnClaudeCodeProcess: launch => {
         // Run the owner's unchanged CLI in its own native/WSL runtime; the SDK
         // owns the protocol, while the existing profile owns authentication.
-        const env = Object.fromEntries(Object.entries({ ...this.options.env, ...launch.env }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+        const merged = this.options.publicWorker ? this.options.env : { ...this.options.env, ...launch.env };
+        const env = Object.fromEntries(Object.entries(merged).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
         const child = spawnStructuredAgent('claude', launch.args, { ...this.options, env });
         this.children.add(child);
         child.once('exit', () => this.children.delete(child));
@@ -54,6 +56,21 @@ export class ClaudeStructuredDriver implements StructuredAgentDriver {
         return child;
       },
     };
+    if (this.options.publicWorker) {
+      const serverName = this.options.publicWorker.serverName;
+      options.permissionMode = 'dontAsk';
+      options.allowDangerouslySkipPermissions = false;
+      options.tools = [];
+      options.allowedTools = [`mcp__${serverName}__*`];
+      options.settingSources = [];
+      options.systemPrompt = this.options.instructions;
+      options.persistSession = false;
+      options.maxTurns = 32;
+      options.strictMcpConfig = true;
+      options.extraArgs = { 'strict-mcp-config': null, 'disable-slash-commands': null };
+      options.settings = { disableAllHooks: true, enabledPlugins: {}, autoMemoryEnabled: false, claudeMdExcludes: ['/**', '**'] };
+      options.mcpServers = { [serverName]: options.mcpServers!.orkestrai };
+    }
     const stream = query({ prompt: turn.prompt, options });
     this.active = stream;
     let accepted = false;
@@ -100,4 +117,4 @@ export class ClaudeStructuredDriver implements StructuredAgentDriver {
   }
 }
 
-export const createClaudeStructuredProcess = (options: StructuredAgentOptions) => new StructuredAgentProcess(new ClaudeStructuredDriver(options));
+export const createClaudeStructuredProcess = (options: StructuredAgentOptions) => new StructuredAgentProcess(new BotStructuredDriver('claude', options, input => new ClaudeStructuredDriver(input)));

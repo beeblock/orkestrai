@@ -29,6 +29,7 @@ export class BotExternalDeliveryService {
     if (this.active.has(candidate.id)) return;
     this.active.add(candidate.id);
     let delivery: BotDelivery | null = null;
+    let dispatchStarted = false;
     try {
       delivery = await botDeliveryRepository.claim(candidate);
       if (!delivery) return;
@@ -36,6 +37,20 @@ export class BotExternalDeliveryService {
       const message = await channelRepository.find(delivery.workspaceId, delivery.id);
       if (!message || !binding?.enabled || binding.nodeId !== delivery.nodeId || message.authorNodeId !== delivery.nodeId || message.meta.bindingId !== binding.id) {
         await botDeliveryRepository.settle(delivery, 'cancelled'); return;
+      }
+      let approvedArtifacts: BotArtifact[] = [];
+      try {
+        if (!message.replyToId) throw new Error('BOT_PUBLIC_REPLY_UNAPPROVED');
+        const { botSafetyService } = await import('./BotSafetyService.js');
+        const approval = await botSafetyService.approved(delivery.workspaceId, delivery.nodeId, message.replyToId, message.body, message.id);
+        approvedArtifacts = Array.isArray(approval.artifacts) ? approval.artifacts as BotArtifact[] : [];
+      } catch (error) {
+        // A temporary SQLite/read failure is not a security rejection and must
+        // not discard an already reviewed customer reply.
+        if (!(error instanceof Error) || !/^BOT_PUBLIC_(?:REPLY_UNAPPROVED|GRANT_REVOKED)$/.test(error.message)) throw error;
+        await botDeliveryRepository.settle(delivery, 'cancelled');
+        await channelBindingRepository.update(binding.id, { lastError: 'BOT_PUBLIC_REPLY_UNAPPROVED' });
+        return;
       }
       if (binding.kind === 'whatsapp' && candidate.state === 'sending') {
         await botDeliveryRepository.settle(delivery, 'uncertain');
@@ -46,10 +61,16 @@ export class BotExternalDeliveryService {
       for (const raw of Array.isArray(message.meta.artifacts) ? message.meta.artifacts.slice(0, 6) : []) {
         const parsed = botArtifactSchema.safeParse(raw);
         if (!parsed.success || !parsed.data.sha256) throw new Error('BOT_ARTIFACT_INVALID');
+        if (!approvedArtifacts.some(file => file.path === parsed.data.path && file.sha256 === parsed.data.sha256)) {
+          await botDeliveryRepository.settle(delivery, 'cancelled');
+          await channelBindingRepository.update(binding.id, { lastError: 'BOT_PUBLIC_ARTIFACT_DENIED' });
+          return;
+        }
         artifacts.push(parsed.data);
       }
       if (binding.kind === 'whatsapp') {
         const { whatsappBotService } = await import('./WhatsAppBotService.js');
+        dispatchStarted = true;
         await whatsappBotService.send(delivery.workspaceId, delivery.nodeId, binding.id, message.body, delivery.id, artifacts);
       } else {
         let index = 0;
@@ -76,7 +97,7 @@ export class BotExternalDeliveryService {
         const message = error instanceof Error ? error.message : '';
         const binding = await channelBindingRepository.find(delivery.workspaceId, delivery.bindingId).catch(() => null);
         const beforeWhatsAppDispatch = ['WHATSAPP_NOT_CONNECTED', 'BOT_ARTIFACT_CHANGED', 'BOT_ARTIFACT_INVALID', 'BOT_CONNECTION_UNAVAILABLE'].includes(message);
-        const uncertain = binding?.kind === 'whatsapp' && !beforeWhatsAppDispatch || /uncertain|in progress|another.*key/i.test(message);
+        const uncertain = binding?.kind === 'whatsapp' && dispatchStarted && !beforeWhatsAppDispatch || /uncertain|in progress|another.*key/i.test(message);
         await botDeliveryRepository.settle(delivery, uncertain ? 'uncertain' : 'queued');
         await channelBindingRepository.update(delivery.bindingId, { lastError: uncertain ? 'BOT_DELIVERY_UNCERTAIN' : 'BOT_DELIVERY_PENDING' });
       }

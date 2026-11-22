@@ -4,6 +4,18 @@ import { buildWslLaunch } from '../../infrastructure/WslRuntime.js';
 import type { StructuredAgentOptions } from './structured-types.js';
 
 export function spawnStructuredAgent(command: string, args: string[], options: StructuredAgentOptions): ChildProcessWithoutNullStreams {
+  if (options.runtime.kind === 'wsl' && options.publicWorker) {
+    // Public workers must not run a login shell or inherit the normal bridge
+    // launcher's owner capabilities. Values travel in environment, never argv.
+    const keys = Object.keys(options.env).filter(key => key !== 'PATH' && key !== 'HOME' && key !== 'USERPROFILE' && key !== 'WSLENV');
+    const keep = [...keys, 'PATH', 'HOME', 'USERPROFILE'].join('|');
+    const script = `export HOME="$ORKESTRAI_PUBLIC_HOME" USERPROFILE="$ORKESTRAI_PUBLIC_HOME" PATH="$ORKESTRAI_PUBLIC_PATH"; for name in $(compgen -e); do case "$name" in ${keep}) ;; *) unset "$name";; esac; done; export WSLENV=ORKESTRAI_INFERENCE_PROXY_URL:ORKESTRAI_INFERENCE_PROXY_TOKEN:ELECTRON_RUN_AS_NODE; exec "$@"`;
+    return spawn('wsl.exe', ['--distribution', options.runtime.distribution, '--cd', options.cwd, '--exec',
+      '/bin/bash', '--noprofile', '--norc', '-c', script, 'orkestrai-public-bot', command, ...args], {
+      env: { ...options.env, WSLENV: [...keys, 'ORKESTRAI_PUBLIC_HOME', 'ORKESTRAI_PUBLIC_PATH'].join(':') },
+      windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  }
   const target = options.runtime.kind === 'wsl'
     ? buildWslLaunch({ runtime: options.runtime, command, args, hostCwd: options.hostCwd,
         resolvedGuestCwd: options.cwd, workspaceRoot: options.workspaceRoot, hostEnv: options.env,

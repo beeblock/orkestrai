@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Added — 0.55.0-beta.5 local preview
 
+- Isolate public bot turns from private workspace context and host tools; add public role/knowledge, pinned action/output grants, customer-scoped attachment reads, immutable HTTP caller identity, quotas, exact artifact approvals and a tool-free reply review. Keep owner sessions unchanged; quarantine unreviewed drafts and surface blocked requests in Attention Center.
+
 - Reuse one linked WhatsApp account across several bots in the same external group. Configure per-bot literal prefixes and verified senders; atomically reject overlapping enabled routes and edit existing rules through UI, CLI and MCP. Rule-only edits keep paused bindings paused. Document the shared-group setup and add a guided tour.
 
 - Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.

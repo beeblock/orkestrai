@@ -16,6 +16,7 @@ import { integrateNativeShellDirectory } from './ShellDirectoryIntegration.ts';
 import { inspectShellForeground, type ShellForegroundProcess } from './ShellAgentProcess.ts';
 import { workingDirectoryFromOsc, workingDirectoryFromWindowsOsc } from '../../domain/terminal-working-directory.ts';
 import type { StructuredAgentProcess, StructuredReceipt } from './StructuredAgentProcess.ts';
+import type { PublicBotOrigin } from '../../domain/public-bot-origin.js';
 
 // PATH aumentado e resolucao de comando (registro/PATHEXT/.cmd) foram movidos
 // para ../agent-path.ts, compartilhado com o Modo Maestro (application/agents.ts)
@@ -441,7 +442,7 @@ export class PtySessionManager {
     await this.structuredShutdowns.get(`${workspaceId}:${nodeId}`);
   }
 
-  structuredRequest(workspaceId: string, nodeId: string): { conversationKey: string; messageId: string } | null {
+  structuredRequest(workspaceId: string, nodeId: string): { conversationKey: string; messageId: string; publicOrigin?: PublicBotOrigin } | null {
     const session = [...this.sessions.values()].find(item => item.workspaceId === workspaceId && item.nodeId === nodeId && !item.exited && item.structuredProcess);
     return session?.structuredProcess?.activeRequest ?? null;
   }
@@ -1312,10 +1313,10 @@ export class PtySessionManager {
   }
 
   /** An authoritative provider receipt, independent of Canvas attachment. */
-  submitStructured(id: string, prompt: string, conversationKey: string, messageId: string, signal?: AbortSignal): Promise<StructuredReceipt> {
+  submitStructured(id: string, prompt: string, conversationKey: string, messageId: string, signal?: AbortSignal, publicOrigin?: PublicBotOrigin): Promise<StructuredReceipt> {
     const session = this.requireSession(id);
     if (session.exited || !session.structuredProcess) throw new Error('STRUCTURED_SESSION_UNAVAILABLE');
-    return session.structuredProcess.submit(prompt, conversationKey, messageId, signal);
+    return session.structuredProcess.submit(prompt, conversationKey, messageId, signal, publicOrigin);
   }
 
   structuredReceipt(id: string, messageId: string) { return this.sessions.get(id)?.structuredProcess?.receipt(messageId) ?? null; }

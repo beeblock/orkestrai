@@ -1,7 +1,12 @@
 /** Private worker MCP: it can only forward the guest's declared tools. No workspace discovery. */
 import readline from 'node:readline';
 import { readFile } from 'node:fs/promises';
-const context = JSON.parse(await readFile(process.argv[2], 'utf8'));
+// Public bot workers pass a short-lived capability only through inheritance.
+// Existing delegated workers may retain their private context-file protocol.
+const context = process.argv[2] ? JSON.parse(await readFile(process.argv[2], 'utf8')) : {
+  url: process.env.ORKESTRAI_INFERENCE_PROXY_URL,
+  token: process.env.ORKESTRAI_INFERENCE_PROXY_TOKEN,
+};
 const endpoint = context.url;
 const token = context.token;
 if (!endpoint || !token || !/^http:\/\/127\.0\.0\.1:\d+\/mcp$/.test(endpoint)) process.exit(1);

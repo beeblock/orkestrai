@@ -13,6 +13,7 @@ import {
 import type { AgentMessageEnvelope, TerminalNodePayload, WorkspaceAttachment } from '../../domain/types.js';
 import { attentionRepository } from '../../infrastructure/repositories/AttentionRepository.js';
 import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
+import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
 import { controlCenterRepository } from '../../infrastructure/repositories/ControlCenterRepository.js';
 import { workspaceRepository } from '../../infrastructure/repositories/WorkspaceRepository.js';
 import { agentInboxService } from './AgentInboxService.js';
@@ -143,6 +144,10 @@ export class ChannelService {
     const key = `structured:${turnId}:${sourceId}`;
     const previous = await channelRepository.findStructuredReply(workspaceId, nodeId, key, turnId);
     if (previous) return previous;
+    // An external answer must carry the server's exact post-review approval.
+    // A generic channel_post or a recovered old draft cannot mint one.
+    const publicApproval = original.authorKind === 'external'
+      ? await (await import('./BotSafetyService.js')).botSafetyService.approved(workspaceId, nodeId, sourceId, body, turnId) : null;
     const attachments: WorkspaceAttachment[] = [];
     let visible = body;
     if (body.length > MAX_CHANNEL_BODY) {
@@ -154,8 +159,11 @@ export class ChannelService {
     const artifacts: BotArtifact[] = [];
     try {
     for (const artifact of botArtifactLinks(body)) {
+      if (publicApproval && !(Array.isArray(publicApproval.artifacts) ? publicApproval.artifacts : []).some((allowed: BotArtifact) => allowed.path === artifact.path)) throw new Error('BOT_PUBLIC_ARTIFACT_DENIED');
       const bytes = await integrationExecutionService.readBotArtifact(workspaceId, nodeId, artifact.path);
-      artifacts.push({ ...artifact, sha256: createHash('sha256').update(bytes).digest('hex') });
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      if (publicApproval && !(publicApproval.artifacts as BotArtifact[]).some(allowed => allowed.path === artifact.path && allowed.sha256 === sha256)) throw new Error('BOT_PUBLIC_ARTIFACT_DENIED');
+      artifacts.push({ ...artifact, sha256 });
     }
     for (const attachment of attachments) {
       const bytes = await integrationExecutionService.readBotArtifact(workspaceId, nodeId, attachment.path!);
@@ -172,7 +180,7 @@ export class ChannelService {
       created = true;
       const result = await channelRepository.save({ workspaceId, channel: original.channel, authorKind: 'agent', authorNodeId: nodeId,
         body: clippedBody(visible), replyToId: original.authorKind === 'external' ? sourceId : null,
-        meta: { structuredReply: key, ...(artifacts.length ? { artifacts } : {}), ...(attachments.length ? { attachments } : {}), ...(original.meta.bindingId ? { bindingId: original.meta.bindingId } : {}) } }, turnId);
+        meta: { structuredReply: key, ...(publicApproval ? { publicBotApproval: publicApproval } : {}), ...(artifacts.length ? { artifacts } : {}), ...(attachments.length ? { attachments } : {}), ...(original.meta.bindingId ? { bindingId: original.meta.bindingId } : {}) } }, turnId);
       if (original.authorKind === 'external' && typeof original.meta.bindingId === 'string') await botDeliveryRepository.create(workspaceId, nodeId, original.meta.bindingId, result.id);
       return result;
     })).finally(async () => {
@@ -470,19 +478,12 @@ export class ChannelService {
       if (channel === TEAM_CHANNEL || !bindingId) throw new Error('A resposta precisa citar uma mensagem de chat externo da sua conversa direta.');
     }
     if (bindingId && input.replyToId) {
-      const node = await workspaceRepository.getNode(nodeId);
-      if (node?.workspaceId === workspaceId && (node.payload as TerminalNodePayload).personalBot) {
-        const saved = await this.postStructuredResult(workspaceId, nodeId, input.replyToId, body, uuidv7());
-        if (!saved) throw new Error('BOT_REPLY_SOURCE_NOT_FOUND');
-        return saved;
-      }
+      const saved = await this.postStructuredResult(workspaceId, nodeId, input.replyToId, body, uuidv7());
+      if (!saved) throw new Error('BOT_REPLY_SOURCE_NOT_FOUND');
+      return saved;
     }
     const message = await channelRepository.save({ workspaceId, channel, authorKind: 'agent', authorNodeId: nodeId, body, replyToId: input.replyToId ?? null });
     broadcast(message);
-    if (bindingId) {
-      const { channelBridgeService } = await import('./ChannelBridgeService.js');
-      void channelBridgeService.mirrorReply(workspaceId, nodeId, message.id, body, bindingId);
-    }
     return message;
   }
 
@@ -490,7 +491,7 @@ export class ChannelService {
   async postExternal(
     workspaceId: string,
     nodeId: string,
-    input: { body: string; via: 'telegram' | 'slack' | 'whatsapp'; bindingId: string; sender: string; externalId: string; attachments?: readonly WorkspaceAttachment[] },
+    input: { body: string; via: 'telegram' | 'slack' | 'whatsapp'; bindingId: string; expectedBindingScope?: string; senderId?: string; sender: string; externalId: string; attachments?: readonly WorkspaceAttachment[] },
   ): Promise<ChannelMessage> {
     const attachments = input.attachments ?? [];
     const body = ownerBody(input.body, attachments);
@@ -498,6 +499,10 @@ export class ChannelService {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal') throw new Error('PERSONAL_BOT_NOT_FOUND');
     const structured = (node.payload as TerminalNodePayload).agentTransport === 'structured';
+    const { botSafetyService } = await import('./BotSafetyService.js');
+    let publicBlocked = false;
+    try { await botSafetyService.readiness(workspaceId, nodeId); }
+    catch (error) { publicBlocked = true; await botSafetyService.notice(workspaceId, nodeId, input.bindingId, error); }
     const channel = directChannel(nodeId);
     const externalId = input.externalId.slice(0, 120);
     const dedupKey = `external:${input.bindingId}:${externalId}`;
@@ -512,7 +517,11 @@ export class ChannelService {
       // agent's inbox already took is not handed over again, however long ago it
       // arrived. Only a failed hand-over is retried.
       message = await workspaceAttachmentService.exclusive(workspaceId, () => Connection.transaction(async () => {
+        const binding = await channelBindingRepository.find(workspaceId, input.bindingId);
+        if (!binding?.enabled || binding.nodeId !== nodeId || binding.kind !== input.via || !input.expectedBindingScope
+          || botSafetyService.bindingScope(binding) !== input.expectedBindingScope || !input.senderId || input.senderId.length > 200) publicBlocked = true;
         const stored = await channelRepository.findExternal(workspaceId, channel, input.bindingId, externalId);
+        if (stored?.meta.publicBotBlocked) return stored;
         if (stored && (await controlCenterRepository.inboxByDedupKey(nodeId, dedupKey)).some((envelope) => envelope.state !== 'failed')) return stored;
         const saved = stored ?? await channelRepository.save({
           workspaceId,
@@ -520,9 +529,10 @@ export class ChannelService {
           authorKind: 'external',
           kind: 'text',
           body,
-          meta: { via: input.via, sender: input.sender.slice(0, 120), bindingId: input.bindingId, externalId, ...(attachments.length ? { attachments } : {}) },
+          meta: { via: input.via, sender: input.sender.slice(0, 120), bindingId: input.bindingId, bindingScope: input.expectedBindingScope ?? '', senderId: input.senderId?.slice(0, 200) ?? '', externalId, ...(publicBlocked ? { publicBotBlocked: true } : {}), ...(attachments.length ? { attachments } : {}) },
         });
         created = !stored;
+        if (publicBlocked) return saved;
         ({ release } = await agentInboxService.enqueueDeferred({
           workspaceId,
           toNodeId: nodeId,
@@ -539,6 +549,7 @@ export class ChannelService {
       throw new Error('A mensagem externa não entrou na caixa de entrada do agente.', { cause: error });
     }
     release();
+    if (publicBlocked) await botSafetyService.notice(workspaceId, nodeId, input.bindingId, new Error('BOT_PUBLIC_ORIGIN_INVALID'));
     if (created) broadcast(message);
     return message;
   }

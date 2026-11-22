@@ -147,6 +147,7 @@ export const executeWorkspaceToolSchema = z.object({
   dryRun: z.boolean().default(false),
   actor: actorSchema,
   automationRunId: z.string().uuid().nullish(),
+  expectedPublishedRevision: z.number().int().min(1).optional(),
 }).strict();
 
 export const rollbackWorkspaceToolSchema = z.object({

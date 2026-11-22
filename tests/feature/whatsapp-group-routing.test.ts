@@ -19,6 +19,8 @@ import { createChannelBindingSchema, updateChannelBindingSchema } from '$lib/mod
 import { BridgeController } from '$lib/modules/agent-room/interface/http/controllers/BridgeController.js';
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { botSafetyService } from '$lib/modules/agent-room/application/services/BotSafetyService.js';
+import { botSafetySchema } from '$lib/modules/agent-room/contracts/schemas/bot-safety.schema.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.js';
 
 const group = '55119999999-12345@g.us';
@@ -40,7 +42,7 @@ describe('multiple personal bots in one linked WhatsApp group', () => {
     const root = await mkdtemp(join(tmpdir(), 'orkestrai-wa-routes-')); roots.push(root);
     const workspace = await workspaceRepository.createWorkspace({ name: 'Group routes', workingDir: root });
     const bots = await Promise.all(['Sales', 'Support'].map(title => workspaceRepository.createNode({ workspaceId: workspace.id,
-      type: 'terminal', title, payload: { provider: 'claude', personalBot: true, agentTransport: 'structured' } as never })));
+      type: 'terminal', title, payload: { provider: 'claude', personalBot: true, agentTransport: 'structured', botSafety: botSafetySchema.parse({ publicInstructions: 'Answer within your assigned public role.' }) } as never })));
     const account = await botConnectionRepository.create(workspace.id, 'Shared WhatsApp');
     const create = (nodeId: string, prefixes: string[], senders: string[] = []) => channelBindingService.create(workspace.id,
       createChannelBindingSchema.parse({ nodeId, integrationId: account.id, externalChatId: group, replyPrefixes: prefixes, allowedSenders: senders }));
@@ -69,8 +71,11 @@ describe('multiple personal bots in one linked WhatsApp group', () => {
     expect(b[0]).toMatchObject({ body: '#Support investigate', meta: { bindingId: support.id } });
     for (const bot of f.bots) expect(await controlCenterRepository.inboxEnvelopes(bot.id, ['queued'])).toHaveLength(1);
     await expect(channelService.postStructuredResult(f.workspace.id, f.bots[1].id, a[0].id, 'Wrong conversation', uuidv7())).resolves.toBeNull();
-    await channelService.postStructuredResult(f.workspace.id, f.bots[0].id, a[0].id, 'Sales answer', uuidv7());
-    await channelService.postStructuredResult(f.workspace.id, f.bots[1].id, b[0].id, 'Support answer', uuidv7());
+    for (const [index, source, binding, body] of [[0, a[0], sales, 'Sales answer'], [1, b[0], support, 'Support answer']] as const) {
+      const id = uuidv7(), turn = await botSafetyService.begin(f.workspace.id, f.bots[index].id, binding.id, source.id);
+      await botSafetyService.approve(turn, body, id);
+      await channelService.postStructuredResult(f.workspace.id, f.bots[index].id, source.id, body, id);
+    }
     const outbox = await botDeliveryRepository.pending();
     expect(outbox).toEqual(expect.arrayContaining([
       expect.objectContaining({ nodeId: f.bots[0].id, bindingId: sales.id }),
