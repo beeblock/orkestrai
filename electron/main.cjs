@@ -199,9 +199,13 @@ function validAutomationSecretKey(key) {
   return typeof key === 'string' && /^automation:[a-z0-9:_-]{1,240}$/i.test(key);
 }
 
-function protectedSecretStorageAvailable() {
-  if (!safeStorage.isEncryptionAvailable()) return false;
-  return process.platform !== 'linux' || !['basic_text', 'unknown', undefined].includes(safeStorage.getSelectedStorageBackend?.());
+async function protectedSecretStorageAvailable() {
+  // The legacy Linux backend guard is retained: never accept basic_text.
+  // On macOS/Windows the async API keeps OS authentication off the UI thread.
+  if (process.platform === 'linux') {
+    return safeStorage.isEncryptionAvailable() && !['basic_text', 'unknown', undefined].includes(safeStorage.getSelectedStorageBackend?.());
+  }
+  return safeStorage.isAsyncEncryptionAvailable();
 }
 
 function readSecureSecrets(strict = false) {
@@ -223,36 +227,51 @@ function writeSecureSecrets(secrets) {
   fs.renameSync(temporary, destination);
 }
 
-function readAutomationSecret(key) {
+const pendingSecretWrites = new Map();
+
+async function readAutomationSecret(key) {
   const strict = validAutomationSecretKey(key) && key.startsWith('automation:whatsapp:');
-  if (!validAutomationSecretKey(key) || !protectedSecretStorageAvailable()) {
+  if (!validAutomationSecretKey(key) || !await protectedSecretStorageAvailable()) {
     if (strict) throw new Error('WHATSAPP_SECURE_STORAGE_REQUIRED');
     return null;
   }
-  // Missing keys and unreadable keys are different. Treating a cancelled
-  // Keychain unlock as "missing" would replace a linked account's identity.
   const encrypted = readSecureSecrets(strict)[key];
   if (typeof encrypted !== 'string' || !encrypted) return null;
   try {
-    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+    const bytes = Buffer.from(encrypted, 'base64');
+    const result = process.platform === 'linux' ? safeStorage.decryptString(bytes)
+      : (await safeStorage.decryptStringAsync(bytes)).result;
+    if (readSecureSecrets(strict)[key] !== encrypted) throw new Error('Credential changed during unlock.');
+    return result;
   } catch {
     if (strict) throw new Error('WHATSAPP_AUTH_DECRYPT_FAILED');
     return null;
   }
 }
 
-function saveAutomationSecret(key, value) {
+async function saveAutomationSecret(key, value) {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
   if (typeof value !== 'string' || !value.trim()) throw new Error('Credential cannot be empty.');
-  if (!protectedSecretStorageAvailable()) throw new Error('Secure credential storage is unavailable on this device.');
-  const secrets = readSecureSecrets(true);
-  secrets[key] = safeStorage.encryptString(value.trim()).toString('base64');
-  writeSecureSecrets(secrets);
-  return { stored: true };
+  const write = Symbol();
+  pendingSecretWrites.set(key, write);
+  try {
+    if (!await protectedSecretStorageAvailable()) throw new Error('Secure credential storage is unavailable on this device.');
+    // Validate the existing store before encryption, and re-read after the await
+    // so concurrent writes to other keys are preserved.
+    readSecureSecrets(true);
+    const encrypted = process.platform === 'linux' ? safeStorage.encryptString(value.trim())
+      : await safeStorage.encryptStringAsync(value.trim());
+    if (pendingSecretWrites.get(key) !== write) throw new Error('Credential changed during unlock.');
+    const secrets = readSecureSecrets(true);
+    secrets[key] = encrypted.toString('base64');
+    writeSecureSecrets(secrets);
+    return { stored: true };
+  } finally { if (pendingSecretWrites.get(key) === write) pendingSecretWrites.delete(key); }
 }
 
 function deleteAutomationSecret(key) {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
+  pendingSecretWrites.delete(key);
   const secrets = readSecureSecrets(true);
   const existed = Object.hasOwn(secrets, key);
   delete secrets[key];
@@ -705,21 +724,16 @@ async function startServer(port) {
       return;
     }
     if (!['orkestrai:secret:get', 'orkestrai:secret:set', 'orkestrai:secret:delete'].includes(message.type)) return;
-    try {
-      if (message.type === 'orkestrai:secret:set') saveAutomationSecret(message.key, message.value);
-      if (message.type === 'orkestrai:secret:delete') deleteAutomationSecret(message.key);
-      requestingServer?.send?.({
-        type: 'orkestrai:secret:result',
-        requestId: message.requestId,
-        value: message.type === 'orkestrai:secret:get' ? readAutomationSecret(message.key) : null,
-      });
-    } catch (error) {
-      requestingServer?.send?.({
-        type: 'orkestrai:secret:result',
-        requestId: message.requestId,
-        error: error?.message ?? String(error),
-      });
-    }
+    void (async () => {
+      try {
+        if (message.type === 'orkestrai:secret:set') await saveAutomationSecret(message.key, message.value);
+        if (message.type === 'orkestrai:secret:delete') deleteAutomationSecret(message.key);
+        const value = message.type === 'orkestrai:secret:get' ? await readAutomationSecret(message.key) : null;
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:secret:result', requestId: message.requestId, value }, () => {});
+      } catch (error) {
+        if (requestingServer.connected) requestingServer.send({ type: 'orkestrai:secret:result', requestId: message.requestId, error: error?.message ?? String(error) }, () => {});
+      }
+    })();
   });
 
   // The database step the server is in (backup, migration, compaction), so a slow preparation is not taken for a hang.
@@ -1209,9 +1223,9 @@ ipcMain.on('orkestrai:portal-layout', (event, input) => {
   managedPortalExecutor?.setGeometry(input.workspaceId, input.nodeId, geometry, input.lease);
 });
 
-ipcMain.handle('orkestrai:automation-secret-status', (_event, key) => {
+ipcMain.handle('orkestrai:automation-secret-status', async (_event, key) => {
   if (!validAutomationSecretKey(key)) throw new Error('Invalid automation secret key.');
-  return { available: protectedSecretStorageAvailable(), stored: Boolean(readAutomationSecret(key)) };
+  return { available: await protectedSecretStorageAvailable(), stored: Boolean(await readAutomationSecret(key)) };
 });
 
 ipcMain.handle('orkestrai:automation-secret-save', (_event, key, value) => saveAutomationSecret(key, value));

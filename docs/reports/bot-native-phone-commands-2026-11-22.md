@@ -76,3 +76,28 @@ Voice settings setup. No extra models are downloaded automatically. Native image
 creation and recurring tasks still honor existing workspace rules, integration
 configuration, pauses and gates. Local mock tests do not prove real model choices
 or every physical phone/media format.
+
+## Beta.9 follow-up: credential unlock blocked startup
+
+The beta.8 installation passed health checks but the owner then saw a startup
+error. A read-only sample of the Electron main process showed it waiting in
+`SecItemCopyMatching` / `SecKeychainItemCopyContent`. The synchronous safeStorage
+call blocked main's health-check callbacks; once released, the elapsed startup
+deadline produced a false failure and the Core recovered. The WhatsApp account
+subsequently reconnected, retaining its binding and credentials.
+
+Move macOS/Windows availability, encryption and decryption to Electron's async
+safeStorage API. Await the existing private IPC response and native UI status;
+keep encrypted values outside renderer output and logs. Re-read the vault after
+awaiting encryption, cancel an older write on deletion/replacement, and reject a
+credential changed while decryption awaited unlock. Linux retains its existing
+backend and `basic_text`/unknown denial contract. No Keychain rules, signing
+identity, passwords or plaintext fallback are changed.
+
+Primary contract: https://www.electronjs.org/docs/latest/api/safe-storage and the
+pinned Electron 42 safe-storage spec (sync/async ciphertext interoperability):
+https://github.com/electron/electron/blob/v42.0.0/spec/api-safe-storage-spec.ts
+
+The native vault/startup tests include delayed unlock with a responsive health
+check, concurrent account writes, cancelled encryption after delete, and revoked
+WhatsApp reads. They use fake OS crypto, not the owner's Keychain.

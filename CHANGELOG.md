@@ -7,7 +7,7 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.8 local preview
+### Added — 0.55.0-beta.9 local preview
 
 - Authenticate workspace commands from the linked WhatsApp account outside the model. These owner requests retain native Canvas tools, Codex image-workflow delegation, routines and integrations without promoting the bot to leader. Other contacts keep the restricted public worker; explicitly trusted verified contacts can be selected in the bot protection dialog. Recheck grants before forwarding each exact, hash-verified file to its originating chat.
 - Enable native public web search for current information without granting host files, shell commands or private workspace context. Keep the output reviewer tool-free.
@@ -32,6 +32,8 @@ pt-BR, English, and Spanish translations.
 
 
 ### Fixed in the local preview
+
+- Keep macOS/Windows credential reads and encryption off the Electron main thread so a native storage-unlock prompt cannot turn a healthy Core startup into a timeout. Preserve existing ciphertext, Linux backend checks, concurrent account writes and revocation during delayed operations; never change Keychain rules or use plaintext fallback.
 
 - Use Zapo for new WhatsApp QR links while preserving already registered preview sessions. Keep the official Signal/SQLite providers in bounded RAM and persist their compressed state through desktop encryption, without plaintext session files or another native dependency. Disable historical chat downloads. Add scoped, serialized in-place reconnect and QR refresh without deleting routes; surface unsupported extra verification and log only safe connection codes. Test the real protocol against the official local fake server, including QR pairing, exact text/image/PDF acknowledgements and encrypted restoration. Physical-phone pairing remains an owner validation step.
 
