@@ -6231,6 +6231,8 @@
   "bots.connect": "Conectar al bot",
   "bots.disconnect": "Desconectar",
   "bots.whatsapp_error": "No se pudo conectar a WhatsApp. Revisa la conexión y el almacenamiento seguro de este dispositivo e inténtalo de nuevo.",
+  "bots.whatsapp_new_qr": "Generar otro QR",
+  "bots.whatsapp_passkey_required": "WhatsApp solicitó una verificación adicional que esta conexión aún no admite. Revisa las notificaciones en el teléfono y usa Reintentar para generar un QR nuevo. Si la verificación persiste, aún no se podrá completar la conexión.",
   "bots.whatsapp_disconnect_hint": "¿Desconectar esta cuenta de todos los bots del workspace y eliminar su sesión local de WhatsApp? Las conversaciones guardadas se conservarán.",
   "bots.automations": "Rutinas, integraciones y seguridad",
   "bots.automations_hint": "Configura herramientas, cuentas conectadas, horarios y reglas para este workspace.",

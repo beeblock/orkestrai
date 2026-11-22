@@ -18,6 +18,9 @@ export class BotConnectionRepository {
     const row = await AgentBotConnection.query().where('workspace_id', workspaceId).where('id', id).first();
     return row ? map(row) : null;
   }
+  async enable(workspaceId: string, id: string) {
+    await AgentBotConnection.query().where('workspace_id', workspaceId).where('id', id).update({ enabled: true, updated_at: new Date().toISOString() });
+  }
   async disable(workspaceId: string, id: string) {
     await AgentBotConnection.query().where('workspace_id', workspaceId).where('id', id).update({ enabled: false, updated_at: new Date().toISOString() });
   }

@@ -19,7 +19,7 @@
   const senderRules = $derived(senders.split(',').map(value => value.trim()).filter(Boolean));
   const selected = $derived(connections.find(item => item.id === selectedId));
   const base = $derived(`/api/agent-room/workspaces/${workspaceId}/bots`);
-  let generation = 0;
+  let generation = 0, displayedConnection = '';
   let statusRevision = $state(0);
   async function load() {
     const ticket = ++generation, workspace = workspaceId;
@@ -40,6 +40,10 @@
   $effect(() => {
     const workspace = workspaceId, id = selectedId;
     void statusRevision;
+    if (displayedConnection !== `${workspace}:${id}`) {
+      displayedConnection = `${workspace}:${id}`;
+      untrack(() => { qr = null; connectionState = 'connecting'; failureCode = ''; failed = false; });
+    }
     if (!id) { qr = null; connectionState = 'offline'; return; }
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll() {
@@ -48,7 +52,7 @@
         if (controller.signal.aborted) return;
         qr = result.qr; connectionState = result.state; failed = Boolean(result.error); failureCode = result.error ?? '';
         if (result.state === 'qr' || result.state === 'connecting' || result.state === 'offline') timer = setTimeout(poll, 2500);
-      } catch { if (!controller.signal.aborted) { failed = true; connectionState = 'error'; } }
+      } catch { if (!controller.signal.aborted) { failed = true; qr = null; connectionState = 'error'; } }
     }
     untrack(() => { void poll(); });
     return () => { controller.abort(); clearTimeout(timer); };
@@ -57,6 +61,18 @@
     if (busy) return; busy = true; failed = false;
     try { const result = await botApi<{ id: string }>(base, { command: 'whatsapp_start', name: 'WhatsApp' }, AbortSignal.timeout(130_000)); selectedId = result.id; await load(); }
     catch (error) { failed = true; failureCode = error instanceof Error ? error.message : ''; } finally { busy = false; }
+  }
+  async function retry() {
+    if (busy) return;
+    if (!selectedId || connectionState === 'connected') { await load(); return; }
+    busy = true; failed = false;
+    const workspace = workspaceId, id = selectedId;
+    try {
+      await botApi(base, { command: 'whatsapp_reconnect', connectionId: id }, AbortSignal.timeout(130_000));
+      if (workspace !== workspaceId || id !== selectedId) return;
+      qr = null; connectionState = 'connecting'; failureCode = ''; await load();
+    } catch (error) { if (workspace === workspaceId) { failed = true; failureCode = error instanceof Error ? error.message : ''; } }
+    finally { busy = false; }
   }
   async function bind() {
     if (!selectedId || !chatId.trim() || busy || replyMode === 'prefix' && !prefixRules.length || senders.trim() && !senderRules.length) return;
@@ -98,8 +114,9 @@
         <Button size="sm" type="submit" disabled={busy || !chatId.trim() || replyMode === 'prefix' && !prefixRules.length || Boolean(senders.trim()) && !senderRules.length}><Link2 size={14} />{m['bots.connect']()}</Button>
       </form>
     {/if}
+    {#if !failed && (connectionState === 'offline' || connectionState === 'error' || connectionState === 'qr')}<Button size="sm" variant="outline" disabled={busy} onclick={() => void retry()}><RefreshCw size={13} />{connectionState === 'qr' ? m['bots.whatsapp_new_qr']() : m['chat.profile_memory_retry']()}</Button>{/if}
     <Button size="sm" variant="ghost" disabled={busy} onclick={() => (removing = true)}><Trash2 size={13} />{m['bots.disconnect']()}</Button>
   {:else}<Button size="sm" variant="outline" disabled={busy} onclick={() => void start()}><Plus size={14} />{m['bots.whatsapp_add']()}</Button>{/if}
-  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{failureCode === 'SECURE_STORAGE_UNLOCK_TIMEOUT' || failureCode === 'Secure credential request timed out.' ? m['bots.whatsapp_unlock_timeout']() : failureCode === 'BOT_ROUTE_CONFLICT' ? m['bots.route_conflict']() : failureCode === 'BOT_CHAT_ALREADY_CONNECTED' ? m['bots.route_exists']() : failureCode === 'BOT_SENDER_INVALID' ? m['bots.route_sender_invalid']() : m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" onclick={() => void load()}><RefreshCw size={13} />{m['chat.profile_memory_retry']()}</Button>{/if}
+  {#if failed}<p class="text-xs leading-relaxed text-[var(--app-danger)]" role="alert">{failureCode === 'SECURE_STORAGE_UNLOCK_TIMEOUT' || failureCode === 'Secure credential request timed out.' ? m['bots.whatsapp_unlock_timeout']() : failureCode === 'WHATSAPP_PASSKEY_REQUIRED' ? m['bots.whatsapp_passkey_required']() : failureCode === 'BOT_ROUTE_CONFLICT' ? m['bots.route_conflict']() : failureCode === 'BOT_CHAT_ALREADY_CONNECTED' ? m['bots.route_exists']() : failureCode === 'BOT_SENDER_INVALID' ? m['bots.route_sender_invalid']() : m['bots.whatsapp_error']()}</p><Button size="sm" variant="outline" disabled={busy} onclick={() => void retry()}><RefreshCw size={13} />{connectionState === 'qr' ? m['bots.whatsapp_new_qr']() : m['chat.profile_memory_retry']()}</Button>{/if}
 </section>
 <AlertDialog.Root bind:open={removing}><AlertDialog.Content><AlertDialog.Header><AlertDialog.Title>{m['bots.disconnect']()}</AlertDialog.Title><AlertDialog.Description>{m['bots.whatsapp_disconnect_hint']()}</AlertDialog.Description></AlertDialog.Header><AlertDialog.Footer><AlertDialog.Cancel>{m['bots.cancel']()}</AlertDialog.Cancel><AlertDialog.Action onclick={() => void disconnect()}>{m['bots.disconnect']()}</AlertDialog.Action></AlertDialog.Footer></AlertDialog.Content></AlertDialog.Root>

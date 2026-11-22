@@ -11,6 +11,15 @@ export class WhatsAppSecureAuth {
   private disposed = false;
   private constructor(private readonly key: string, private stored: StoredState, private readonly vault: Vault) {}
 
+  static async hasRegistered(workspaceId: string, connectionId: string, vault: Vault = desktopSecretService, options?: SecretRequestOptions): Promise<boolean> {
+    const raw = await vault.get(`automation:whatsapp:${workspaceId}:${connectionId}`, options);
+    if (!raw) return false;
+    if (Buffer.byteLength(raw) > MAX_AUTH_BYTES) throw new Error('WHATSAPP_AUTH_TOO_LARGE');
+    const stored = JSON.parse(raw, BufferJSON.reviver);
+    if (stored?.version !== 1 || !stored.creds?.noiseKey || !stored.keys || typeof stored.keys !== 'object') throw new Error('WHATSAPP_AUTH_INVALID');
+    return Boolean(stored.creds.me?.id);
+  }
+
   static async open(workspaceId: string, connectionId: string, vault: Vault = desktopSecretService, options?: SecretRequestOptions) {
     const key = `automation:whatsapp:${workspaceId}:${connectionId}`;
     const previous = await vault.get(key, options);

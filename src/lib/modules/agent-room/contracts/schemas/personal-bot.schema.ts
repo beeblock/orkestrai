@@ -56,6 +56,7 @@ export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('disconnect'), bindingId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('slack_manifest') }).strict(),
   z.object({ command: z.literal('whatsapp_start'), name: z.string().trim().min(1).max(120) }).strict(),
+  z.object({ command: z.literal('whatsapp_reconnect'), connectionId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('whatsapp_disconnect'), connectionId: z.string().uuid() }).strict(),
 ]);
 

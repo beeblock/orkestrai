@@ -116,7 +116,12 @@ and preserves the selected runtime mode and limits.
 WhatsApp session revocation raises an Attention Center item and a native desktop
 notification; temporary outages notify after one minute. Open the item to return
 to Bots and relink by QR when required. Reconnection resolves the item without
-waking a model, and deliberate disconnects do not raise alarms.
+waking a model, and deliberate disconnects do not raise alarms. New links use Zapo;
+already-linked preview sessions remain compatible. Use **New QR code** when the
+phone rejects a QR, or **Retry** after a connection error, on the same account.
+Bots and chat/sender/prefix rules are preserved. Signal keys stay encrypted in
+desktop secure storage; no historical chats are downloaded. Physical-phone
+pairing still needs local validation.
 
 **Simple bot setup:** enter a name, a public purpose and an account, then connect
 your chat. The public purpose is configured automatically; ordinary messages and

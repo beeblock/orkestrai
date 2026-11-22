@@ -55,6 +55,21 @@ describe('bot channel files and secure WhatsApp sessions', () => {
     await resumed.forget(); expect(store.values.size).toBe(0);
   });
 
+  it('keeps an already-linked legacy account and identifies only fresh QR sessions for Zapo', async () => {
+    const store = vault();
+    expect(await WhatsAppSecureAuth.hasRegistered('workspace', 'connection', store)).toBe(false);
+    const auth = await WhatsAppSecureAuth.open('workspace', 'connection', store);
+    expect(await WhatsAppSecureAuth.hasRegistered('workspace', 'connection', store)).toBe(false);
+    await auth.saveCreds({ ...auth.state.creds, me: { id: '5511999999999:1@s.whatsapp.net' }, registered: true });
+    const saved = store.values.get('automation:whatsapp:workspace:connection');
+    expect(await WhatsAppSecureAuth.hasRegistered('workspace', 'connection', store)).toBe(true);
+    expect(store.values.get('automation:whatsapp:workspace:connection')).toBe(saved);
+    store.values.set('automation:whatsapp:workspace:connection', '{broken');
+    await expect(WhatsAppSecureAuth.hasRegistered('workspace', 'connection', store)).rejects.toThrow();
+    expect(store.values.get('automation:whatsapp:workspace:connection')).toBe('{broken');
+    await auth.close();
+  });
+
   it('never acknowledges a key write the secure store rejected or lets an old socket overwrite new keys', async () => {
     const store = vault(), auth = await WhatsAppSecureAuth.open('workspace', 'connection', store);
     store.set.mockRejectedValueOnce(new Error('disk unavailable'));

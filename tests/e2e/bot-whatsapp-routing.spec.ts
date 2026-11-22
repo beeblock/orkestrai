@@ -78,3 +78,40 @@ test('reuses one linked account for two bots in a group and edits their reply ru
     for (const update of ruleUpdates) expect(update).not.toHaveProperty('enabled');
   } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
 });
+
+test('retries a failed WhatsApp link in place and refreshes its QR without recreating the account', async ({ page, request }) => {
+  const root = await mkdtemp(join(tmpdir(), 'orkestrai-qr-ui-'));
+  const response = await request.post('/api/agent-room/workspaces', { data: { name: 'QR retry UI', workingDir: root } });
+  expect(response.ok()).toBe(true);
+  const workspace = (await response.json()).data, base = `/api/agent-room/workspaces/${workspace.id}`;
+  const accountId = '00000000-0000-7000-8000-000000000001';
+  let phase: 'error' | 'qr' | 'connected' = 'error';
+  const reconnects: any[] = [], created: any[] = [];
+  const qr = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aU1kAAAAASUVORK5CYII=';
+  try {
+    const result = await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'QR Bot', provider: 'codex', instructions: 'UI only; no model calls' } } });
+    expect(result.ok()).toBe(true);
+    await page.route(`**${base}/bots?connections=1`, route => route.fulfill({ json: { data: [{ id: accountId, name: 'Existing phone', enabled: true, state: phase, error: phase === 'error' ? 'WHATSAPP_PASSKEY_REQUIRED' : null, chats: [] }] } }));
+    await page.route(`**${base}/bots?connectionId=*`, route => route.fulfill({ json: { data: { state: phase, qr: phase === 'qr' ? qr : null, error: phase === 'error' ? 'WHATSAPP_PASSKEY_REQUIRED' : null } } }));
+    await page.route(`**${base}/bots`, route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const input = route.request().postDataJSON();
+      if (input.command === 'whatsapp_start') { created.push(input); return route.abort(); }
+      if (input.command !== 'whatsapp_reconnect') return route.continue();
+      reconnects.push(input); phase = reconnects.length === 1 ? 'qr' : 'connected';
+      return route.fulfill({ json: { data: { id: accountId } } });
+    });
+    await page.goto(`/bots?workspace=${workspace.id}`);
+    await page.locator('.bot-row').filter({ hasText: 'QR Bot' }).click();
+    const whatsapp = page.getByTestId('bot-whatsapp');
+    await expect(whatsapp.getByRole('alert')).toHaveText(labels['bots.whatsapp_passkey_required']);
+    await whatsapp.getByRole('button', { name: labels['chat.profile_memory_retry'], exact: true }).click();
+    await expect(whatsapp.getByAltText(labels['bots.whatsapp_scan'])).toHaveAttribute('src', qr);
+    await expect(whatsapp.getByRole('alert')).toHaveCount(0);
+    await whatsapp.getByRole('button', { name: labels['bots.whatsapp_new_qr'], exact: true }).click();
+    await expect(whatsapp.getByRole('status')).toHaveText(labels['bots.connected']);
+    await expect(whatsapp.getByAltText(labels['bots.whatsapp_scan'])).toHaveCount(0);
+    expect(reconnects).toEqual([{ command: 'whatsapp_reconnect', connectionId: accountId }, { command: 'whatsapp_reconnect', connectionId: accountId }]);
+    expect(created).toHaveLength(0);
+  } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
+});

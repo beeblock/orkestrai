@@ -206,6 +206,10 @@ export class PersonalBotService {
         const { whatsappBotService } = await import('./WhatsAppBotService.js');
         return whatsappBotService.create(workspaceId, input.name);
       }
+      case 'whatsapp_reconnect': {
+        const { whatsappBotService } = await import('./WhatsAppBotService.js');
+        return whatsappBotService.retry(workspaceId, input.connectionId);
+      }
       case 'whatsapp_disconnect': {
         const { whatsappBotService } = await import('./WhatsAppBotService.js');
         await whatsappBotService.disconnect(workspaceId, input.connectionId);

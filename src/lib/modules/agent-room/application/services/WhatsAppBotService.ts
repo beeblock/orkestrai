@@ -11,7 +11,7 @@ import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { desktopSecretService } from '../../infrastructure/secrets/DesktopSecretService.js';
 import type { BotArtifact } from '../../domain/bot-artifacts.js';
 import type { WorkspaceAttachment } from '../../domain/types.js';
-import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
+import type { WAMessage } from '@whiskeysockets/baileys';
 import type { WhatsAppSecureAuth } from '../../infrastructure/integrations/WhatsAppSecureAuth.js';
 import { allowedWhatsAppMediaUrl, downloadWhatsAppMedia } from '../../infrastructure/integrations/WhatsAppMedia.js';
 import { attentionService } from './AttentionService.js';
@@ -19,10 +19,14 @@ import { attentionRepository } from '../../infrastructure/repositories/Attention
 import { nativeNotificationService } from './NativeNotificationService.js';
 import { settingsService } from './SettingsService.js';
 import * as m from '$lib/paraglide/messages.js';
+import type { ZapoSecureStore } from '../../infrastructure/integrations/ZapoSecureStore.js';
+import type { ZapoWhatsAppTransport } from '../../infrastructure/integrations/ZapoWhatsAppTransport.js';
+import type { WhatsAppTransport } from '../../infrastructure/integrations/WhatsAppTransport.js';
 
 const logger = { level: 'silent', child() { return this; }, trace() {}, debug() {}, info() {}, warn() {}, error() {} };
 type Link = {
-  connection: BotConnection; auth: WhatsAppSecureAuth; socket: WASocket | null;
+  connection: BotConnection; auth: WhatsAppSecureAuth | ZapoSecureStore; socket: WhatsAppTransport | null;
+  zapo?: ZapoWhatsAppTransport;
   state: 'connecting' | 'qr' | 'connected' | 'offline' | 'error'; qr: string | null; error: string | null;
   chats: Map<string, string>; stopped: boolean; retry: ReturnType<typeof setTimeout> | null;
   drainRetry: ReturnType<typeof setTimeout> | null;
@@ -36,6 +40,13 @@ const PENDING_LIMIT = 64;
 export class WhatsAppBotService {
   private links = new Map<string, Link>();
   private starts = new Map<string, Promise<Link>>();
+  private lifecycle = new Map<string, Promise<unknown>>();
+  private withLifecycle<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const run = (this.lifecycle.get(id) ?? Promise.resolve()).catch(() => undefined).then(operation);
+    this.lifecycle.set(id, run);
+    void run.finally(() => { if (this.lifecycle.get(id) === run) this.lifecycle.delete(id); }).catch(() => undefined);
+    return run;
+  }
   private notices = new Map<string, Promise<void>>();
   private pendingKey(link: Link) { return `automation:whatsapp:pending:${link.connection.workspaceId}:${link.connection.id}`; }
   private changed(workspaceId: string) {
@@ -118,26 +129,37 @@ export class WhatsAppBotService {
     } else { this.scheduleDisconnectNotice(link); this.reconnect(link); }
   }
   private open(connection: BotConnection, allowInteractiveUnlock = false): Promise<Link> {
+    return this.withLifecycle(connection.id, () => this.openOnce(connection, allowInteractiveUnlock));
+  }
+  private async openOnce(connection: BotConnection, allowInteractiveUnlock = false): Promise<Link> {
+    await this.require(connection.workspaceId, connection.id);
     const current = this.links.get(connection.id);
     if (current && !current.stopped) return Promise.resolve(current);
     const starting = this.starts.get(connection.id);
     if (starting) return starting;
     const run = (async () => {
-      await this.require(connection.workspaceId, connection.id);
       const { WhatsAppSecureAuth } = await import('../../infrastructure/integrations/WhatsAppSecureAuth.js');
-      const auth = await WhatsAppSecureAuth.open(connection.workspaceId, connection.id, desktopSecretService, { allowInteractiveUnlock });
+      const options = { allowInteractiveUnlock };
+      // Keep registered preview sessions on their original transport. Fresh or
+      // unpaired links use Zapo; no linked account is silently logged out.
+      const useZapo = Boolean(await desktopSecretService.get(`automation:whatsapp:zapo:${connection.workspaceId}:${connection.id}`, options))
+        || !await WhatsAppSecureAuth.hasRegistered(connection.workspaceId, connection.id, desktopSecretService, options);
+      const auth = useZapo ? await (await import('../../infrastructure/integrations/ZapoSecureStore.js')).ZapoSecureStore.open(connection.workspaceId, connection.id, desktopSecretService, options)
+        : await WhatsAppSecureAuth.open(connection.workspaceId, connection.id, desktopSecretService, options);
       const link: Link = { connection, auth, socket: null, state: 'connecting', qr: null, error: null,
         chats: new Map(), stopped: false, retry: null, drainRetry: null, pending: [], saveTail: Promise.resolve(), draining: false, attempts: 0, epoch: 0 };
-      const previous = await desktopSecretService.get(this.pendingKey(link));
-      if (previous) {
-        const { BufferJSON } = await import('@whiskeysockets/baileys');
-        if (Buffer.byteLength(previous) > 2 * 1024 * 1024) throw new Error('WHATSAPP_PENDING_LIMIT');
-        const pending = JSON.parse(previous, BufferJSON.reviver);
-        if (!Array.isArray(pending) || pending.length > PENDING_LIMIT) throw new Error('WHATSAPP_PENDING_INVALID');
-        link.pending = pending;
+      try {
+        const previous = await desktopSecretService.get(this.pendingKey(link));
+        if (previous) {
+          const { BufferJSON } = await import('@whiskeysockets/baileys');
+          if (Buffer.byteLength(previous) > 2 * 1024 * 1024) throw new Error('WHATSAPP_PENDING_LIMIT');
+          const pending = JSON.parse(previous, BufferJSON.reviver);
+          if (!Array.isArray(pending) || pending.length > PENDING_LIMIT) throw new Error('WHATSAPP_PENDING_INVALID');
+          link.pending = pending;
+        }
+        this.links.set(connection.id, link);
+        await this.connect(link);
       }
-      this.links.set(connection.id, link);
-      try { await this.connect(link); }
       catch (error) {
         link.stopped = true; link.epoch++;
         await link.socket?.end(undefined);
@@ -156,11 +178,24 @@ export class WhatsAppBotService {
     const { default: makeWASocket, DisconnectReason, proto } = await import('@whiskeysockets/baileys');
     const epoch = ++link.epoch;
     const isCurrent = () => !link.stopped && link.epoch === epoch;
-    const socket = makeWASocket({ auth: link.auth.forSession(isCurrent), logger, markOnlineOnConnect: false, syncFullHistory: false,
-      // Import contact names, never past conversations or their attachments.
-      shouldSyncHistoryMessage: message => message.syncType === proto.HistorySync.HistorySyncType.PUSH_NAME,
-      browser: ['Orkestrai', 'Desktop', '1.0.0'], defaultQueryTimeoutMs: 15_000,
-      getMessage: async () => undefined, connectTimeoutMs: 30_000 });
+    let socket: WhatsAppTransport;
+    const auth = link.auth;
+    if ('engine' in auth && auth.engine === 'zapo') {
+      const { ZapoWhatsAppTransport } = await import('../../infrastructure/integrations/ZapoWhatsAppTransport.js');
+      link.zapo ??= new ZapoWhatsAppTransport(auth, link.connection.id);
+      socket = await link.zapo.create(isCurrent, event => this.linkEvent(link, event));
+    } else {
+      const legacy = makeWASocket({ auth: auth.forSession(isCurrent), logger, markOnlineOnConnect: false, syncFullHistory: false,
+        // Import contact names, never past conversations or their attachments.
+        shouldSyncHistoryMessage: message => message.syncType === proto.HistorySync.HistorySyncType.PUSH_NAME,
+        browser: ['Orkestrai', 'Desktop', '1.0.0'], defaultQueryTimeoutMs: 15_000,
+        getMessage: async () => undefined, connectTimeoutMs: 30_000 });
+      legacy.ev.on('creds.update', () => {
+        if (!isCurrent()) return;
+        void auth.saveCreds(legacy.authState.creds, isCurrent).catch(() => { if (isCurrent()) this.fail(link, 'WHATSAPP_CREDENTIAL_WRITE_FAILED'); });
+      });
+      socket = legacy;
+    }
     link.socket = socket;
     const remember = (id: unknown, name: unknown) => {
       if (!isCurrent() || typeof id !== 'string' || !validJid(id)) return;
@@ -177,15 +212,16 @@ export class WhatsAppBotService {
     socket.ev.on('messaging-history.set', history => contacts(history.contacts));
     socket.ev.on('chats.upsert', chats => { for (const chat of chats.slice(0, 1000)) remember(chat.id, chat.name); this.changed(link.connection.workspaceId); });
     socket.ev.on('groups.upsert', groups => { for (const group of groups.slice(0, 1000)) remember(group.id, group.subject); this.changed(link.connection.workspaceId); });
-    socket.ev.on('creds.update', () => {
-      if (!isCurrent()) return;
-      void link.auth.saveCreds(socket.authState.creds, isCurrent).catch(() => { if (isCurrent()) this.fail(link, 'WHATSAPP_CREDENTIAL_WRITE_FAILED'); });
-    });
     socket.ev.on('connection.update', update => {
       if (link.stopped || link.socket !== socket) return;
-      if (update.qr) { link.qr = update.qr.slice(0, 4096); link.state = 'qr'; }
+      if ('pairingError' in update && ['WHATSAPP_PASSKEY_REQUIRED', 'WHATSAPP_CREDENTIAL_WRITE_FAILED'].includes(String(update.pairingError))) {
+        link.epoch++; link.state = 'error'; link.qr = null; link.error = String(update.pairingError);
+        if (link.retry) clearTimeout(link.retry); link.retry = null;
+        this.changed(link.connection.workspaceId); return;
+      }
+      if (update.qr) { this.linkEvent(link, 'qr'); link.qr = update.qr.slice(0, 4096); link.state = 'qr'; }
       if (update.connection === 'open') {
-        link.qr = null; link.state = 'connected'; link.error = null; link.attempts = 0; void this.drain(link);
+        this.linkEvent(link, 'open'); link.qr = null; link.state = 'connected'; link.error = null; link.attempts = 0; void this.drain(link);
         void this.resolveConnectionNotice(link.connection, link).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
         void socket.groupFetchAllParticipating().then(groups => {
           if (!isCurrent()) return;
@@ -195,7 +231,7 @@ export class WhatsAppBotService {
       }
       if (update.connection === 'close') {
         const code = (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-        this.connectionClosed(link, code, DisconnectReason);
+        this.linkEvent(link, 'close', code); this.connectionClosed(link, code, DisconnectReason);
       }
       this.changed(link.connection.workspaceId);
     });
@@ -203,6 +239,13 @@ export class WhatsAppBotService {
       if (update.type !== 'notify' || link.stopped || link.socket !== socket) return;
       for (const message of update.messages) void this.receive(link, message).catch(() => this.fail(link, 'WHATSAPP_MESSAGE_STORE_FAILED'));
     });
+  }
+  private linkEvent(link: Link, event: string, code?: number) {
+    // Safe diagnostics: never log QR data, credentials, messages, names or JIDs.
+    if (!['qr', 'open', 'close', 'pairing_refresh', 'passkey_required', 'paired', 'transport_error'].includes(event)) return;
+    console.info('[whatsapp-link]', JSON.stringify({ connectionId: link.connection.id,
+      engine: 'engine' in link.auth ? link.auth.engine : 'baileys', event,
+      ...(typeof code === 'number' && Number.isInteger(code) ? { code } : {}) }));
   }
   private reconnect(link: Link) {
     if (link.retry || link.stopped || !link.connection.enabled) return;
@@ -343,12 +386,46 @@ export class WhatsAppBotService {
       return { ...connection, state: link?.state ?? 'offline', error: link?.error ?? null, chats: [...(link?.chats.entries() ?? [])].map(([id, name]) => ({ id, name })) };
     });
   }
+  retry(workspaceId: string, id: string) {
+    return this.withLifecycle(id, () => this.retryOnce(workspaceId, id));
+  }
+  private async retryOnce(workspaceId: string, id: string) {
+    const connection = await botConnectionRepository.find(workspaceId, id);
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!connection || !workspace || workspace.suspendedAt) throw new Error('BOT_CONNECTION_UNAVAILABLE');
+    await this.starts.get(id)?.catch(() => undefined);
+    const link = this.links.get(id);
+    if (link) {
+      link.stopped = true; link.epoch++;
+      for (const timer of [link.retry, link.disconnectTimer, link.drainRetry]) if (timer) clearTimeout(timer);
+      await link.socket?.end(undefined); await link.zapo?.close();
+      await link.saveTail.catch(() => undefined);
+      await link.auth.close().catch(() => undefined);
+      this.links.delete(id);
+    }
+    // A revoked legacy session cannot resume. Seed the new transport without
+    // deleting saved chats, routes, history or another connection's credentials.
+    if (!connection.enabled) {
+      await desktopSecretService.delete(`automation:whatsapp:zapo:${workspaceId}:${id}`);
+      const { ZapoSecureStore } = await import('../../infrastructure/integrations/ZapoSecureStore.js');
+      const fresh = await ZapoSecureStore.open(workspaceId, id, desktopSecretService, { allowInteractiveUnlock: true });
+      await fresh.close();
+    }
+    await botConnectionRepository.enable(workspaceId, id);
+    connection.enabled = true;
+    await this.openOnce(connection, true);
+    this.changed(workspaceId);
+    return { id };
+  }
   async status(workspaceId: string, id: string) {
     const connection = await this.require(workspaceId, id), link = await this.open(connection);
     const { default: QRCode } = await import('qrcode');
     return { id, state: link.state, error: link.error, qr: link.qr ? await QRCode.toDataURL(link.qr, { margin: 2, width: 256 }) : null };
   }
-  async disconnect(workspaceId: string, id: string) {
+  disconnect(workspaceId: string, id: string) {
+    return this.withLifecycle(id, () => this.disconnectOnce(workspaceId, id));
+  }
+  private async disconnectOnce(workspaceId: string, id: string) {
     const connection = await botConnectionRepository.find(workspaceId, id);
     if (!connection) throw new Error('BOT_CONNECTION_NOT_FOUND');
     await this.starts.get(id)?.catch(() => undefined);
@@ -360,12 +437,16 @@ export class WhatsAppBotService {
       if (link.disconnectTimer) clearTimeout(link.disconnectTimer);
       if (link.drainRetry) clearTimeout(link.drainRetry);
       await link.socket?.end(undefined);
+      await link.zapo?.close();
       await link.saveTail.catch(() => undefined);
       await link.auth.forget();
+      await desktopSecretService.delete(`automation:whatsapp:${workspaceId}:${id}`);
+      await desktopSecretService.delete(`automation:whatsapp:zapo:${workspaceId}:${id}`);
       await desktopSecretService.delete(this.pendingKey(link));
       this.links.delete(id);
     } else {
       await desktopSecretService.delete(`automation:whatsapp:${workspaceId}:${id}`);
+      await desktopSecretService.delete(`automation:whatsapp:zapo:${workspaceId}:${id}`);
       await desktopSecretService.delete(`automation:whatsapp:pending:${workspaceId}:${id}`);
     }
     for (const binding of await channelBindingRepository.list(workspaceId)) if (binding.integrationId === id && binding.kind === 'whatsapp') await channelBindingRepository.delete(workspaceId, binding.id);

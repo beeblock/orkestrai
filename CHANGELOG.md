@@ -7,7 +7,7 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.6 local preview
+### Added — 0.55.0-beta.7 local preview
 
 - Add 16 searchable bot presets with localized purpose, personality and behavior rules. Keep all text editable, preserve the typed name/provider/account on selection, offer a blank custom option, and keep creation actions visible in short windows. Expose the same public-safe catalog and preset-based creation to authenticated leaders and specialists through CLI/MCP, without changing existing bots or granting tools/connections. Add a guided use case and tour in all three languages.
 
@@ -27,6 +27,8 @@ pt-BR, English, and Spanish translations.
 
 
 ### Fixed in the local preview
+
+- Use Zapo for new WhatsApp QR links while preserving already registered preview sessions. Keep the official Signal/SQLite providers in bounded RAM and persist their compressed state through desktop encryption, without plaintext session files or another native dependency. Disable historical chat downloads. Add scoped, serialized in-place reconnect and QR refresh without deleting routes; surface unsupported extra verification and log only safe connection codes. Test the real protocol against the official local fake server, including QR pairing, exact text/image/PDF acknowledgements and encrypted restoration. Physical-phone pairing remains an owner validation step.
 
 - Size bot preset cards to wrapped content and keep the entire creation footer inside its scrolling dialog, including short windows.
 

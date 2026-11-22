@@ -68,4 +68,15 @@ describe('personal bot CLI/MCP parity', () => {
     expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', expect.objectContaining({ input: expect.objectContaining({ command: 'channel_targets' }) }));
   });
 
+  it('reconnects an existing WhatsApp account through the authenticated CLI and MCP without replacing its routes', async () => {
+    const input = { connectionId: 'connection-id' };
+    expect(await run(['bot', 'whatsapp_reconnect', '--task', 'task-id', '--input', JSON.stringify(input)], options())).toBe(0);
+    const body = requests.at(-1).body;
+    expect(body).toEqual({ taskId: 'task-id', input: { command: 'whatsapp_reconnect', ...input } });
+    expect(requests.at(-1).identity).toBe('private-test-identity');
+    const bridge = vi.fn().mockResolvedValue({});
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: null }, 'bot_command', body);
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', body);
+  });
+
 });

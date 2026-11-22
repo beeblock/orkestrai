@@ -6231,6 +6231,8 @@
   "bots.connect": "Connect to bot",
   "bots.disconnect": "Disconnect",
   "bots.whatsapp_error": "Could not connect to WhatsApp. Check the connection and secure storage on this device, then try again.",
+  "bots.whatsapp_new_qr": "New QR code",
+  "bots.whatsapp_passkey_required": "WhatsApp requested an additional verification that this connection does not yet support. Check notifications on your phone, then use Retry to generate a new QR. If verification persists, the connection cannot yet be completed.",
   "bots.whatsapp_disconnect_hint": "Disconnect this account from all bots in this workspace and remove its local WhatsApp session? Saved conversations will remain.",
   "bots.automations": "Routines, integrations and security",
   "bots.automations_hint": "Configure tools, connected accounts, schedules and rules for this workspace.",
