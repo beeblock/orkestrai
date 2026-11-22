@@ -71,6 +71,8 @@
     onAgentSessionFound?: (id: string, agentSessionId: string) => void;
     /** Promise da pagina: providers carregados (para o respawn nao correr a race). */
     providersReady?: Promise<void>;
+    /** Existing sessions can attach immediately; starting one needs fresh node metadata. */
+    workspaceReady?: Promise<boolean>;
     providers?: AgentProviderInfo[];
     onProviderChange?: (id: string, provider: string, profileId?: string | null, profileLabel?: string | null) => Promise<void>;
     onRuntimeChange?: (id: string, selection: { mode: 'default' | 'native' | 'wsl'; wslDistribution: string | null; wslWorkingDir: string | null }) => Promise<void>;
@@ -94,6 +96,22 @@
   let ownsCreatedSession = $state(untrack(() => !data.payload.sessionId));
   let restartGeneration = $state(0);
   let providerMetadataReady = $state(untrack(() => !data.payload.provider));
+  const workspaceGate = $derived(data.workspaceReady);
+  let workspaceMetadataReady = $state(untrack(() => !data.workspaceReady));
+  $effect(() => {
+    const gate = workspaceGate;
+    if (!gate) { workspaceMetadataReady = true; return; }
+    let cancelled = false;
+    workspaceMetadataReady = false;
+    void gate.then((ready: boolean) => {
+      if (cancelled) return;
+      // A cached DTO without a session did not create a terminal while gated.
+      // Fresh metadata may discover a live PTY: attach instead of creating twice.
+      if (ready && data.payload.sessionId && !terminalNode) ownsCreatedSession = false;
+      workspaceMetadataReady = ready;
+    });
+    return () => { cancelled = true; };
+  });
 
   // Quando a sessao morre (restart do app), recria com os args de resume do
   // provider para retomar o contexto da conversa anterior.
@@ -163,6 +181,7 @@
   });
 
   async function resolveRespawn() {
+    if (data.workspaceReady && !(await data.workspaceReady)) return;
     // Espera os providers carregarem — sem eles o respawn sairia sem os args
     // de resume (race no restart do app: attach falha antes do status voltar).
     await (data.providersReady ?? Promise.resolve());
@@ -1039,7 +1058,7 @@
           {/snippet}
         </NodeEmptyState>
       </div>
-    {:else if data.payload.command && providerMetadataReady}
+    {:else if data.payload.command && providerMetadataReady && workspaceMetadataReady}
       {#key createSessionKey}
         <TerminalNode
           bind:this={terminalNode}

@@ -7,7 +7,7 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.3 local preview
+### Added — 0.55.0-beta.4 local preview
 
 - Reuse one linked WhatsApp account across several bots in the same external group. Configure per-bot literal prefixes and verified senders; atomically reject overlapping enabled routes and edit existing rules through UI, CLI and MCP. Rule-only edits keep paused bindings paused. Document the shared-group setup and add a guided tour.
 
@@ -23,6 +23,8 @@ pt-BR, English, and Spanish translations.
 
 
 ### Fixed in the local preview
+
+- Keep all six open Canvas tabs warm within a 16 MiB metadata budget instead of expiring their snapshots after one minute. Revalidate in the background without rebuilding unchanged nodes, precompute connections, restore the cached viewport immediately, reset foreign Floor filters and deduplicate workspace-scoped provider discovery. Existing live terminals may attach immediately; new sessions and respawns wait for revalidated command/runtime metadata. Stale graph/provider responses cannot overwrite a later selection; explicit refresh, unload and removal retain their semantics.
 
 - Detach removed Portal surfaces using the trusted app window and existing surface lease even when their database node is gone or the Core is unavailable. Prevent orphan native views from remaining above app controls; keep attachment and page commands database-authorized.
 

@@ -109,6 +109,11 @@ the app are not automatically replayed; already persisted final results recover
 without rerunning the model. See **How to use → Personal bots** and its
 guided tour. Openbot was a reference; none of its noncommercial code was copied.
 
+Previously opened Canvas tabs restore a bounded metadata snapshot before checking
+fresh data in the background. Six tabs stay warm without retaining every terminal
+view in memory; unchanged nodes survive revalidation. Provider discovery is
+workspace-scoped and shared between bootstrap and tab selection.
+
 ## Autonomous workspace delivery
 
 A direct task authorizes its normal implementation, validation and integration

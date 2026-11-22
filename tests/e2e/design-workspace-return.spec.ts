@@ -70,8 +70,8 @@ for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
       await expect(input).toHaveValue('Keep this unsent implementation plan for the leader.');
 
       // Also cover leaving the route, rather than merely closing the editor.
-      await page.getByRole('link', { name: 'Chat', exact: true }).click();
-      await page.getByRole('link', { name: 'Canvas', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Workspace view' }).getByRole('link', { name: 'Chat', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Workspace view' }).getByRole('link', { name: 'Canvas', exact: true }).click();
       await expect(page.locator('.svelte-flow__node-terminal')).toHaveCount(4);
       await expect(page.locator('.svelte-flow__node-terminal').first()).toBeInViewport();
       await expect(input).toHaveValue('Keep this unsent implementation plan for the leader.');
@@ -102,8 +102,8 @@ for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
       });
       await input.press('Enter');
       await received.promise;
-      await page.getByRole('link', { name: 'Chat', exact: true }).click();
-      await page.getByRole('link', { name: 'Canvas', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Workspace view' }).getByRole('link', { name: 'Chat', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Workspace view' }).getByRole('link', { name: 'Canvas', exact: true }).click();
       await expect(input).toHaveValue('Keep this unsent implementation plan for the leader.');
       const send = page.locator('.composer-wrap').getByRole('button', { name: 'Send', exact: true });
       await expect(send).toBeDisabled();

@@ -66,6 +66,7 @@
   import { isTypingTarget } from '$lib/components/agent-room/event-target.js';
   import {
     readProviderCache,
+    loadWorkspaceProviders,
     readWorkspaceListCache,
     readWorkspaceViewCache,
     clearWorkspaceViewCache,
@@ -1241,6 +1242,7 @@
   // ativo — sem precisar trocar de andar ou recarregar a pagina.
   let refreshDebounce: ReturnType<typeof setTimeout> | null = null;
   let graphRefreshRequestId = 0;
+  let appliedGraphRequestId = 0;
   const draggingNodeIds = new Set<string>();
   const localPositionOverrides = new Map<string, { x: number; y: number; confirmedAt: number | null }>();
   const localPayloadOverrides = new Map<string, { payload: Record<string, unknown>; confirmedAt: number | null }>();
@@ -1254,7 +1256,15 @@
       api<Floor[]>(`/api/agent-room/workspaces/${workspaceId}/floors`),
     ]);
     if (requestId !== graphRefreshRequestId || activeWorkspace?.id !== workspaceId) return false;
+    const applied = applyCanvasGraphSnapshot(workspaceId, canvasNodes, canvasEdges, floorList, refreshStartedAt);
+    if (applied) appliedGraphRequestId = requestId;
+    return applied;
+  }
+
+  function applyCanvasGraphSnapshot(workspaceId: string, canvasNodes: CanvasNode[], canvasEdges: CanvasEdge[], floorList: Floor[], refreshStartedAt: number, cache = true): boolean {
+    if (!activeWorkspace || activeWorkspace.id !== workspaceId) return false;
     const previousById = new Map(nodes.map((node) => [node.id, node]));
+    const workspaceRuntimeKey = JSON.stringify(workspaceExecutionRuntime(activeWorkspace));
     floors = floorList;
     const incomingById = new Map(canvasNodes.map(node => [node.id, node]));
     const changedConnectionTargets = new Set(canvasNodes.filter(node => {
@@ -1304,10 +1314,14 @@
           && previous.width === node.width && previous.height === node.height
           && previous.zIndex === (node.type === 'group' ? 0 : 20 + Math.max(0, node.zIndex ?? 0))
           && previous.data.title === (node.title ?? '')
+          && previous.data.workspaceName === activeWorkspace?.name
+          && previous.data.workspaceRoot === activeWorkspace?.workingDir
+          && previous.data.codeIntelligenceMode === (activeWorkspace?.codeIntelligenceMode ?? 'disabled')
+          && (node.type !== 'terminal' || previous.data.workspaceReady === workspaceReadiness?.promise)
+          && JSON.stringify(previous.data.workspaceRuntime) === workspaceRuntimeKey
           && previous.data.workingDir === (floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.')
           && JSON.stringify(previous.data.payload) === JSON.stringify(node.payload)) return previous;
-        const refreshed = toFlowNode(node);
-        refreshed.data.connections = connections.get(node.id) ?? [];
+        const refreshed = toFlowNode(node, connections.get(node.id) ?? []);
         const payloadOverride = localPayloadOverrides.get(node.id);
         if (payloadOverride) {
           if (payloadOverride.confirmedAt !== null && payloadOverride.confirmedAt <= refreshStartedAt) {
@@ -1337,7 +1351,7 @@
       return previous && previous.source === edge.sourceNodeId && previous.target === edge.targetNodeId
         ? previous : toFlowEdge(edge);
     }).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
-    writeWorkspaceViewCache({ workspace: activeWorkspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
+    if (cache) writeWorkspaceViewCache({ workspace: activeWorkspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
     return true;
   }
 
@@ -1500,15 +1514,17 @@
       // Indicador de workspaces ativos (sessoes PTY vivas em background).
       await refreshActivity();
       if (!mounted) return;
-      void api<{ providers: AgentProviderInfo[] }>(`/api/agent-room/status${activeWorkspace ? `?workspaceId=${encodeURIComponent(activeWorkspace.id)}` : ''}`)
-        .then((status) => {
-          providers = status.providers ?? [];
-          writeProviderCache(providers);
+      const providerWorkspaceId = activeWorkspace?.id;
+      const providerSelection = selectionRequestId;
+      const providerLoad = providerWorkspaceId ? workspaceProviderStatus(providerWorkspaceId)
+        : api<{ providers: AgentProviderInfo[] }>('/api/agent-room/status').then(result => result.providers ?? []);
+      void providerLoad.then((next) => {
+          if (!mounted || selectionRequestId !== providerSelection || activeWorkspace?.id !== providerWorkspaceId) return;
+          applyProviderSnapshot(next);
           const registeredProviderIds = new Set(providers.map((provider) => provider.id));
           pinnedProviderIds = parsePinnedAgentProviders(appSettings[PINNED_AGENT_PROVIDERS_SETTING])
             .filter((id) => registeredProviderIds.has(id));
           persistedPinnedProviderIds = pinnedProviderIds;
-          nodes = nodes.map((node) => ({ ...node, data: { ...node.data, providers } }));
         })
         .catch(() => undefined)
         .finally(providersReadyResolve);
@@ -1545,7 +1561,7 @@
     };
   });
 
-  function toFlowNode(node: CanvasNode): Node {
+  function toFlowNode(node: CanvasNode, loadedConnections?: ReturnType<typeof connectionsFor>): Node {
     const workspaceRuntime = activeWorkspace ? workspaceExecutionRuntime(activeWorkspace) : { kind: 'native' as const };
     const executionRuntime = activeWorkspace && node.type === 'terminal'
       ? terminalExecutionRuntime(activeWorkspace, node.payload as TerminalNodePayload)
@@ -1565,6 +1581,7 @@
         workspaceName: activeWorkspace?.name ?? '',
         codeIntelligenceMode: activeWorkspace?.codeIntelligenceMode ?? 'disabled',
         providersReady,
+        workspaceReady: workspaceReadiness?.promise,
         providers,
         workingDir: floorPath(node.floorId) ?? activeWorkspace?.workingDir ?? '.',
         workspaceRoot: activeWorkspace?.workingDir ?? '.',
@@ -1580,7 +1597,7 @@
         freshSessionArgsFor: () => freshSessionArgsFor(node),
         sessionStorageFor: () => sessionStorageFor(node),
         onAgentSessionFound: (id: string, agentSessionId: string) => updateNodePayload(id, { agentSessionId, resumeRecovery: false }),
-        connections: connectionsFor(node.id),
+        connections: loadedConnections ?? connectionsFor(node.id),
         onJumpToNode: jumpToNode,
         onRecruit: () => (pendingAgentCreation = { provider: preferredAgentProvider() }),
         onConnectAll: (orchestratorId: string) => connectAllToOrchestrator(orchestratorId),
@@ -1697,24 +1714,6 @@
       });
   }
 
-  // Nodes are created before edges when loading a graph. Hydrate header links
-  // from that same snapshot once, without subscribing to drag/viewport frames.
-  function hydrateLoadedConnections() {
-    const byId = new Map(nodes.map(node => [node.id, node]));
-    const connections = new Map<string, ReturnType<typeof connectionsFor>>();
-    for (const edge of edges) {
-      for (const [id, targetId, direction] of [[edge.source, edge.target, 'out'], [edge.target, edge.source, 'in']] as const) {
-        const other = byId.get(targetId);
-        if (!other) continue;
-        const links = connections.get(id) ?? [];
-        links.push({ edgeId: edge.id, targetId, direction, targetTitle: String(other.data.title ?? other.type ?? m['canvas.fallback_node']()),
-          targetType: String(other.type ?? m['canvas.fallback_node']()), targetPayload: (other.data.payload ?? {}) as Record<string, unknown> });
-        connections.set(id, links);
-      }
-    }
-    nodes = nodes.map(node => ({ ...node, data: { ...node.data, connections: connections.get(node.id) ?? [] } }));
-  }
-
   async function removeConnection(edgeId: string) {
     snapshot();
     selectedEdgeId = null;
@@ -1740,6 +1739,23 @@
     };
   }
 
+  let providerSnapshot: AgentProviderInfo[] | null = null;
+  let workspaceReadiness: { promise: Promise<boolean>; resolve: (ready: boolean) => void; state: 'loading' | 'ready' | 'failed' } | null = null;
+  function applyProviderSnapshot(next: AgentProviderInfo[]) {
+    if (providerSnapshot === next) return;
+    providerSnapshot = next;
+    providers = next;
+    writeProviderCache(next);
+    nodes = nodes.map(node => node.type === 'terminal'
+      ? { ...node, data: { ...node.data, providers } } : node);
+  }
+
+  function workspaceProviderStatus(workspaceId: string, force = false) {
+    return loadWorkspaceProviders(workspaceId, () => api<{ providers: AgentProviderInfo[] }>(
+      `/api/agent-room/status?workspaceId=${encodeURIComponent(workspaceId)}`
+    ).then(result => result.providers ?? []), force);
+  }
+
   async function selectWorkspace(id: string, options: { force?: boolean } = {}) {
     // Recarregar o workspace ja ativo pode sobrescrever estado mais novo
     // (ex.: um no criado enquanto o fetch estava em voo) — exceto com force
@@ -1749,28 +1765,47 @@
     // (ex.: o auto-select do mount) nao sobrescrevem escolhas posteriores.
     const changingWorkspace = activeWorkspace?.id !== id;
     const requestId = ++selectionRequestId;
+    if (changingWorkspace || workspaceReadiness?.state !== 'ready') {
+      let resolve!: (ready: boolean) => void;
+      const promise = new Promise<boolean>(done => { resolve = done; });
+      workspaceReadiness = { promise, resolve, state: 'loading' };
+    }
+    const readiness = workspaceReadiness;
+    let validated = false;
     errorMessage = '';
     permissionWorkspace = null;
     const cached = !options.force && !workspaces.find((workspace) => workspace.id === id)?.suspendedAt
       ? readWorkspaceViewCache(id)
       : null;
+    graphRefreshRequestId += 1;
+    appliedGraphRequestId = 0;
+    if (changingWorkspace) {
+      visibleFloorId = null;
+      leaderDictationState = 'idle';
+      leaderDictationNodeId = null;
+      designModeNodeId = null;
+      designRevisions = {};
+    }
+    const restoreViewport = () => queueMicrotask(() => {
+      if (requestId !== selectionRequestId || !nodes.length) return;
+      const saved = readSavedViewport(id);
+      if (saved) zoomApi?.setViewport(saved);
+      else zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
+    });
     if (cached) {
       activeWorkspace = cached.workspace;
-      floors = cached.floors;
-      nodes = cached.nodes
-        .filter((node) => shownOnFloor(node, visibleFloorId))
-        .map(toFlowNode);
-      const visibleIds = new Set(nodes.map((node) => node.id));
-      edges = cached.edges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
-      hydrateLoadedConnections();
+      graphLoadedFor = id;
+      applyCanvasGraphSnapshot(id, cached.nodes, cached.edges, cached.floors, performance.now(), false);
+      restoreViewport();
     }
     try {
       const resumedWorkspace = changingWorkspace
         ? await api<Workspace>(`/api/agent-room/workspaces/${id}/load`, { method: 'POST' })
         : null;
-      const providerStatusRequest = api<{ providers: AgentProviderInfo[] }>(
-        `/api/agent-room/status?workspaceId=${encodeURIComponent(id)}`
-      );
+      if (requestId !== selectionRequestId) return;
+      const providerStatusRequest = workspaceProviderStatus(id, options.force).catch(() => null);
+      const graphRequestId = ++graphRefreshRequestId;
+      const refreshStartedAt = performance.now();
       const [workspace, canvasNodes, canvasEdges, floorList] = await Promise.all([
         resumedWorkspace ?? api<Workspace>(`/api/agent-room/workspaces/${id}`),
         api<CanvasNode[]>(`/api/agent-room/workspaces/${id}/nodes`),
@@ -1783,42 +1818,30 @@
       workspaces = workspaces.map((item) => item.id === workspace.id ? workspace : item);
       writeWorkspaceListCache(workspaces);
       localStorage.setItem('orkestrai.activeWorkspaceId', workspace.id);
-      if (changingWorkspace) {
-        leaderDictationState = 'idle';
-        leaderDictationNodeId = null;
-        designModeNodeId = null;
-        designRevisions = {};
+      if (!cached || graphRequestId >= appliedGraphRequestId) {
+        applyCanvasGraphSnapshot(id, canvasNodes, canvasEdges, floorList, refreshStartedAt);
+        appliedGraphRequestId = graphRequestId;
+        if (!options.force && !cached) restoreViewport();
+        repairGroupFrames();
+        settleFloorAgentsOnGround(canvasNodes);
       }
-      floors = floorList;
-      if (!options.force) {
-        queueMicrotask(() => {
-          if (!canvasNodes.length) return;
-          const saved = readSavedViewport(workspace.id);
-          if (saved) zoomApi?.setViewport(saved);
-          else zoomApi?.fitView({ duration: 0, maxZoom: 1 } as never);
-        });
-      }
-      nodes = canvasNodes
-        .filter((node) => shownOnFloor(node, visibleFloorId))
-        .map(toFlowNode);
-      const visibleIds = new Set(nodes.map((node) => node.id));
-      edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
-      hydrateLoadedConnections();
-      writeWorkspaceViewCache({ workspace, nodes: canvasNodes, edges: canvasEdges, floors: floorList });
-      repairGroupFrames();
-      settleFloorAgentsOnGround(canvasNodes);
-      void providerStatusRequest.then((providerStatus) => {
-        if (requestId !== selectionRequestId || activeWorkspace?.id !== id) return;
-        providers = providerStatus.providers ?? [];
-        writeProviderCache(providers);
-        nodes = nodes.map((node) => ({ ...node, data: { ...node.data, providers } }));
+      validated = true;
+      void providerStatusRequest.then((next) => {
+        if (!next || requestId !== selectionRequestId || activeWorkspace?.id !== id) return;
+        applyProviderSnapshot(next);
       }).catch(() => undefined);
     } catch (error) {
+      if (requestId !== selectionRequestId) return;
       if (isWorkspacePermissionError(error)) {
         permissionWorkspace = workspaces.find((workspace) => workspace.id === id) ?? null;
         errorMessage = '';
       } else {
         errorMessage = error instanceof Error ? error.message : m['canvas.error_open_ws']();
+      }
+    } finally {
+      if (readiness?.state === 'loading') {
+        readiness.state = validated ? 'ready' : 'failed';
+        readiness.resolve(validated);
       }
     }
   }
@@ -1832,17 +1855,18 @@
   async function selectFloor(floorId: string | null) {
     visibleFloorId = floorId;
     if (activeWorkspace) {
-      const requestId = ++selectionRequestId;
+      // Floor navigation must not cancel a pending workspace validation gate.
+      const selectionId = selectionRequestId;
+      const requestId = ++graphRefreshRequestId;
       const workspaceId = activeWorkspace.id;
+      const refreshStartedAt = performance.now();
       const [canvasNodes, canvasEdges] = await Promise.all([
         api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
         api<CanvasEdge[]>(`/api/agent-room/workspaces/${workspaceId}/edges`),
       ]);
-      if (requestId !== selectionRequestId || activeWorkspace?.id !== workspaceId) return;
-      nodes = canvasNodes.filter((node) => shownOnFloor(node, visibleFloorId)).map(toFlowNode);
-      const visibleIds = new Set(nodes.map((node) => node.id));
-      edges = canvasEdges.map(toFlowEdge).filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
-      hydrateLoadedConnections();
+      if (selectionId !== selectionRequestId || requestId !== graphRefreshRequestId || activeWorkspace?.id !== workspaceId) return;
+      applyCanvasGraphSnapshot(workspaceId, canvasNodes, canvasEdges, floors, refreshStartedAt);
+      appliedGraphRequestId = requestId;
       settleFloorAgentsOnGround(canvasNodes);
     }
   }
@@ -2656,7 +2680,7 @@
       clearWorkspaceViewCache(workspaceId);
       if (activeWorkspace?.id === workspaceId && visibleFloorId === floorId) {
         const ids = new Set(result.nodes.map(node => node.id));
-        nodes = [...nodes.filter(node => !ids.has(node.id)), ...result.nodes.map(toFlowNode)];
+        nodes = [...nodes.filter(node => !ids.has(node.id)), ...result.nodes.map(node => toFlowNode(node))];
         const edgeIds = new Set(result.edges.map(edge => edge.id));
         edges = [...edges.filter(edge => !edgeIds.has(edge.id)), ...result.edges.map(toFlowEdge)];
       }
