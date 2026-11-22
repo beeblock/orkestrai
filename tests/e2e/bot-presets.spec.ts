@@ -58,6 +58,14 @@ test('preset browsing and custom setup keep creation actions inside short deskto
       expect(bounds!.width).toBeLessThanOrEqual(viewport.width - 24);
       expect(bounds!.y).toBeGreaterThanOrEqual(0);
       expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+      const saveBounds = await save.boundingBox();
+      expect(saveBounds!.y + saveBounds!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height - 8);
+      const cards = await picker.locator('[role=group] button').evaluateAll(buttons => buttons.map(button => ({
+        height: button.getBoundingClientRect().height, scroll: button.scrollHeight,
+      })));
+      for (const card of cards) expect(card.scroll).toBeLessThanOrEqual(card.height + 2);
+      await picker.getByRole('searchbox', { name: copy['bots.preset_search'] }).fill('programacao');
+      await expect(picker.getByRole('button', { name: copy['bots.preset.developer.name'], exact: true })).toBeVisible();
       await picker.getByRole('searchbox', { name: copy['bots.preset_search'] }).fill('nonsense-no-template');
       await expect(picker).toContainText(copy['bots.preset_empty']);
       await picker.getByRole('button', { name: copy['bots.preset_custom'], exact: true }).click();

@@ -28,6 +28,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Size bot preset cards to wrapped content and keep the entire creation footer inside its scrolling dialog, including short windows.
+
 - Preserve Claude’s native default/named account scope for protected bot workers without copying credentials or re-enabling private instructions and tools.
 
 - Keep the current mode when opening account limits from the header, native menu or Focus footer. Reuse the live Usage panel in a drawer outside Canvas, preserve the route/workspace, and retain the existing Canvas side panel.

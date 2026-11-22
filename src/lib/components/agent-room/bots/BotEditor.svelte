@@ -104,7 +104,10 @@
       <div class={`grid min-h-0 flex-1 overflow-y-auto ${!bot ? 'md:grid-cols-[250px_minmax(0,1fr)] md:overflow-hidden' : ''}`}>
       {#if !bot}<BotPresetPicker value={selectedPreset} onValueChange={selectPreset} />{/if}
       <div class="min-h-0 space-y-4 p-5 pt-1 md:overflow-y-auto">
-      {#if !bot}<p class="text-xs font-medium text-[var(--app-text-muted)]" aria-live="polite">{selectedPreset === 'custom' ? m['bots.preset_custom_hint']() : m['bots.preset_selected']({ name: getBotPreset(selectedPreset, getLocale()).name })}</p>{/if}
+      {#if !bot}<div class="space-y-1 text-xs text-[var(--app-text-muted)]" aria-live="polite">
+        <p class="font-medium">{selectedPreset === 'custom' ? m['bots.preset_custom']() : m['bots.preset_selected']({ name: getBotPreset(selectedPreset, getLocale()).name })}</p>
+        <p class="leading-relaxed">{selectedPreset === 'custom' ? m['bots.preset_custom_hint']() : getBotPreset(selectedPreset, getLocale()).description}</p>
+      </div>{/if}
       <label class="grid gap-1.5 text-sm font-medium">{m['bots.name']()}<Input name="title" bind:value={$data.title} oninput={() => (titleEdited = true)} maxlength={48} required /></label>
       {#if $errors.title}<p class="text-sm text-[var(--app-danger)]">{$errors.title}</p>{/if}
       {#if !bot}
@@ -156,7 +159,7 @@
       {#if error}<p class="flex gap-2 text-sm text-[var(--app-danger)]" role="alert"><CircleAlert size={16} />{error}</p>{/if}
       </div>
       </div>
-      <Dialog.Footer class="shrink-0 border-t border-[var(--app-border)] p-4">
+      <Dialog.Footer class="mx-0 mt-0 mb-0 shrink-0 border-t border-[var(--app-border)] p-4">
         <Button variant="outline" type="button" onclick={onClose}>{m['bots.cancel']()}</Button>
         <Button type="submit" disabled={saving || metadataLoading || !$data.provider}>{#if saving}<LoaderCircle class="animate-spin" size={15} />{/if}{m['bots.save']()}</Button>
       </Dialog.Footer>
