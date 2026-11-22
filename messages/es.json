@@ -6273,5 +6273,8 @@
   "control_center.history_summary": "Mostrando {shown} de {count} eventos",
   "control_center.history_summary_help": "Los cuerpos y metadatos repetidos de eventos se omiten en esta vista. El mensaje, respuesta y error siguen arriba; la auditoría completa permanece guardada.",
   "control_center.history_expand": "Mostrar todos los eventos",
-  "control_center.history_collapse": "Mostrar eventos recientes"
+  "control_center.history_collapse": "Mostrar eventos recientes",
+  "bots.whatsapp_notice_title": "WhatsApp necesita atención",
+  "bots.whatsapp_notice_relink": "La sesión de WhatsApp terminó. Abre Bots y vuelve a vincular la cuenta por QR. Los bots conectados no reciben ni envían mensajes hasta vincularla.",
+  "bots.whatsapp_notice_offline": "WhatsApp no está disponible y los bots conectados pueden no recibir ni enviar mensajes. Abre Bots para revisar la conexión; los cortes temporales se reintentan automáticamente."
 }

@@ -257,6 +257,7 @@ export class AttentionService {
       actionAvailable: Boolean(
         (item.taskId && availableTasks.has(item.taskId))
         || (item.nodeId && nodes.has(item.nodeId))
+        || (item.action?.target === 'bots' && workspaceNames.has(item.workspaceId))
       ),
     }));
   }

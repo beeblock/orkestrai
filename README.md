@@ -100,6 +100,11 @@ automatic routines; native model turns remain sequential per bot. Renaming a bot
 keeps its live session and context; changing execution settings requires sleep
 and preserves the selected runtime mode and limits.
 
+WhatsApp session revocation raises an Attention Center item and a native desktop
+notification; temporary outages notify after one minute. Open the item to return
+to Bots and relink by QR when required. Reconnection resolves the item without
+waking a model, and deliberate disconnects do not raise alarms.
+
 The desktop Core, network and provider account must stay available. The phone
 cannot reach an offline computer. Subscription limits and configured policies
 still apply. Fully authorized provider shells are not isolated by bridge policy;

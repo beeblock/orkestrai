@@ -174,6 +174,10 @@
     if (!item.actionAvailable) return;
     if (item.status === 'open') await act(item, 'read');
     open = false;
+    if (item.action?.target === 'bots') {
+      await goto(`/bots?${new URLSearchParams({ workspace: item.workspaceId }).toString()}`);
+      return;
+    }
     if (item.action?.target === 'chat' && typeof item.action.channel === 'string') {
       await goto(`/chat?${new URLSearchParams({ workspace: item.workspaceId, channel: item.action.channel }).toString()}`);
       return;

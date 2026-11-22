@@ -68,6 +68,10 @@ type SaveAttentionInput = {
 };
 
 export class AttentionRepository {
+  async hasCorrelation(workspaceId: string, correlationId: string): Promise<boolean> {
+    return Boolean(await AgentAttentionItem.query().where('workspace_id', workspaceId).where('correlation_id', correlationId).first());
+  }
+
   async save(input: SaveAttentionInput): Promise<AgentAttentionItemData> {
     const existing = input.correlationId
       ? await AgentAttentionItem.query()

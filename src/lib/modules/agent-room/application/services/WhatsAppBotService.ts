@@ -14,6 +14,11 @@ import type { WorkspaceAttachment } from '../../domain/types.js';
 import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import type { WhatsAppSecureAuth } from '../../infrastructure/integrations/WhatsAppSecureAuth.js';
 import { allowedWhatsAppMediaUrl, downloadWhatsAppMedia } from '../../infrastructure/integrations/WhatsAppMedia.js';
+import { attentionService } from './AttentionService.js';
+import { attentionRepository } from '../../infrastructure/repositories/AttentionRepository.js';
+import { nativeNotificationService } from './NativeNotificationService.js';
+import { settingsService } from './SettingsService.js';
+import * as m from '$lib/paraglide/messages.js';
 
 const logger = { level: 'silent', child() { return this; }, trace() {}, debug() {}, info() {}, warn() {}, error() {} };
 type Link = {
@@ -23,6 +28,7 @@ type Link = {
   drainRetry: ReturnType<typeof setTimeout> | null;
   wakeDrain?: () => void;
   pending: WAMessage[]; saveTail: Promise<unknown>; draining: boolean; attempts: number; epoch: number;
+  disconnectTimer?: ReturnType<typeof setTimeout> | null;
 };
 const PENDING_LIMIT = 64;
 
@@ -30,6 +36,7 @@ const PENDING_LIMIT = 64;
 export class WhatsAppBotService {
   private links = new Map<string, Link>();
   private starts = new Map<string, Promise<Link>>();
+  private notices = new Map<string, Promise<void>>();
   private pendingKey(link: Link) { return `automation:whatsapp:pending:${link.connection.workspaceId}:${link.connection.id}`; }
   private changed(workspaceId: string) {
     (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast?.({ type: 'workspaceChanged', workspaceId });
@@ -51,8 +58,64 @@ export class WhatsAppBotService {
   }
   async restore() {
     for (const connection of await botConnectionRepository.list()) {
-      if (connection.enabled) void this.open(connection).catch(() => undefined);
+      if (connection.enabled) void this.open(connection).catch(() => this.notice(connection, 'unavailable'));
+      else void this.notice(connection, 'relink');
     }
+  }
+  private notice(connection: BotConnection, kind: 'relink' | 'offline' | 'unavailable', link?: Link): Promise<void> {
+    const previous = this.notices.get(connection.id) ?? Promise.resolve();
+    const run = previous.then(async () => {
+      const recovered = () => Boolean(link?.stopped || link?.state === 'connected');
+      if (recovered()) return;
+      const current = await botConnectionRepository.find(connection.workspaceId, connection.id);
+      const workspace = await workspaceRepository.getWorkspace(connection.workspaceId);
+      if (!current || !workspace || workspace.suspendedAt) return;
+      const correlationId = `whatsapp:${connection.id}:${kind === 'relink' ? 'relink' : 'offline'}`;
+      // A revoked session keeps the same identity across app restarts. Reading
+      // or dismissing its notice must not generate another OS notification.
+      if (kind === 'relink' ? await attentionRepository.hasCorrelation(workspace.id, correlationId)
+        : await attentionRepository.hasUnresolved(workspace.id, correlationId)) return;
+      if (recovered()) return;
+      if (kind === 'relink') await attentionService.resolveSource(workspace.id, 'whatsapp_connection', connection.id);
+      const language = await settingsService.get('uiLanguage');
+      const locale = language === 'pt-BR' || language === 'es' ? language : 'en';
+      const title = m['bots.whatsapp_notice_title']({}, { locale });
+      const body = kind === 'relink' ? m['bots.whatsapp_notice_relink']({}, { locale }) : m['bots.whatsapp_notice_offline']({}, { locale });
+      await attentionService.raise({ workspaceId: workspace.id, nodeId: null, category: 'system', severity: 'warning',
+        title, body, sourceType: 'whatsapp_connection', sourceId: connection.id, correlationId, action: { target: 'bots' } });
+      if (!recovered()) await nativeNotificationService.send(workspace, { kind: 'attention', title: current.name, message: body });
+    }).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
+    this.notices.set(connection.id, run);
+    void run.finally(() => { if (this.notices.get(connection.id) === run) this.notices.delete(connection.id); });
+    return run;
+  }
+  private scheduleDisconnectNotice(link: Link) {
+    if (link.disconnectTimer || link.stopped) return;
+    link.disconnectTimer = setTimeout(() => {
+      link.disconnectTimer = null;
+      void this.notice(link.connection, 'offline', link);
+    }, 60_000);
+    link.disconnectTimer.unref?.();
+  }
+  private async resolveConnectionNotice(connection: BotConnection, link?: Link) {
+    if (link?.disconnectTimer) clearTimeout(link.disconnectTimer);
+    if (link) link.disconnectTimer = null;
+    await this.notices.get(connection.id);
+    await attentionService.resolveSource(connection.workspaceId, 'whatsapp_connection', connection.id);
+  }
+  private connectionClosed(link: Link, code: number | undefined, reasons: { loggedOut: number; connectionReplaced: number }) {
+    link.epoch++;
+    link.qr = null; link.state = 'offline'; link.socket = null;
+    if (code === reasons.loggedOut || code === reasons.connectionReplaced) {
+      link.error = code === reasons.loggedOut ? 'WHATSAPP_LOGGED_OUT' : 'WHATSAPP_CONNECTION_REPLACED';
+      link.connection.enabled = false;
+      if (link.retry) clearTimeout(link.retry);
+      link.retry = null;
+      if (link.disconnectTimer) clearTimeout(link.disconnectTimer);
+      link.disconnectTimer = null;
+      void botConnectionRepository.disable(link.connection.workspaceId, link.connection.id)
+        .then(() => this.notice(link.connection, 'relink', link)).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
+    } else { this.scheduleDisconnectNotice(link); this.reconnect(link); }
   }
   private open(connection: BotConnection, allowInteractiveUnlock = false): Promise<Link> {
     const current = this.links.get(connection.id);
@@ -123,6 +186,7 @@ export class WhatsAppBotService {
       if (update.qr) { link.qr = update.qr.slice(0, 4096); link.state = 'qr'; }
       if (update.connection === 'open') {
         link.qr = null; link.state = 'connected'; link.error = null; link.attempts = 0; void this.drain(link);
+        void this.resolveConnectionNotice(link.connection, link).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
         void socket.groupFetchAllParticipating().then(groups => {
           if (!isCurrent()) return;
           for (const group of Object.values(groups).slice(0, 1000)) remember(group.id, group.subject);
@@ -130,13 +194,8 @@ export class WhatsAppBotService {
         }).catch(() => { if (isCurrent()) { link.error = 'WHATSAPP_CONTACTS_UNAVAILABLE'; this.changed(link.connection.workspaceId); } });
       }
       if (update.connection === 'close') {
-        link.epoch++;
-        link.qr = null; link.state = 'offline'; link.socket = null;
         const code = (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
-        if (code === DisconnectReason.loggedOut || code === DisconnectReason.connectionReplaced) {
-          link.error = code === DisconnectReason.loggedOut ? 'WHATSAPP_LOGGED_OUT' : 'WHATSAPP_CONNECTION_REPLACED';
-          void botConnectionRepository.disable(link.connection.workspaceId, link.connection.id);
-        } else this.reconnect(link);
+        this.connectionClosed(link, code, DisconnectReason);
       }
       this.changed(link.connection.workspaceId);
     });
@@ -146,7 +205,7 @@ export class WhatsAppBotService {
     });
   }
   private reconnect(link: Link) {
-    if (link.retry || link.stopped) return;
+    if (link.retry || link.stopped || !link.connection.enabled) return;
     const wait = Math.min(60_000, 1000 * 2 ** Math.min(6, link.attempts++));
     link.retry = setTimeout(() => {
       link.retry = null;
@@ -296,6 +355,7 @@ export class WhatsAppBotService {
       link.stopped = true;
       link.epoch++;
       if (link.retry) clearTimeout(link.retry);
+      if (link.disconnectTimer) clearTimeout(link.disconnectTimer);
       if (link.drainRetry) clearTimeout(link.drainRetry);
       await link.socket?.end(undefined);
       await link.saveTail.catch(() => undefined);
@@ -308,6 +368,7 @@ export class WhatsAppBotService {
     }
     for (const binding of await channelBindingRepository.list(workspaceId)) if (binding.integrationId === id && binding.kind === 'whatsapp') await channelBindingRepository.delete(workspaceId, binding.id);
     await botConnectionRepository.remove(workspaceId, id);
+    await this.resolveConnectionNotice({ id, workspaceId, name: '', kind: 'whatsapp', enabled: false }, link);
     this.changed(workspaceId);
   }
   async disconnectWorkspace(workspaceId: string) {

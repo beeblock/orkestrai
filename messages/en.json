@@ -6273,5 +6273,8 @@
   "control_center.history_summary": "Showing {shown} of {count} events",
   "control_center.history_summary_help": "Repeated event bodies and metadata are omitted from this view. The message, reply and error remain above; the complete audit stays saved.",
   "control_center.history_expand": "Show all events",
-  "control_center.history_collapse": "Show recent events"
+  "control_center.history_collapse": "Show recent events",
+  "bots.whatsapp_notice_title": "WhatsApp needs attention",
+  "bots.whatsapp_notice_relink": "The WhatsApp session ended. Open Bots and link the account again by QR. Connected bots cannot receive or send messages until it is linked.",
+  "bots.whatsapp_notice_offline": "WhatsApp is unavailable and connected bots may not receive or send messages. Open Bots to check the connection; temporary interruptions are retried automatically."
 }
