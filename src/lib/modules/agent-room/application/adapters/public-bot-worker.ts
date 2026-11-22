@@ -44,10 +44,21 @@ export async function preparePublicWorker(provider: 'claude' | 'codex', original
     // CLI authentication remains in its selected account. Its config is never
     // copied or edited, and no host context becomes a model input.
     env.CODEX_HOME = original.env.CODEX_HOME ?? (original.runtime.kind === 'wsl' ? posix.join(home, '.codex') : join(home, '.codex'));
-    env.CLAUDE_CONFIG_DIR = original.env.CLAUDE_CONFIG_DIR ?? (original.runtime.kind === 'wsl' ? posix.join(home, '.claude') : join(home, '.claude'));
+    if (original.env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = original.env.CLAUDE_CONFIG_DIR;
+    else delete env.CLAUDE_CONFIG_DIR;
     env.HOME = cwd; env.USERPROFILE = cwd;
+    // Claude's default account identity is different from an explicitly set
+    // CLAUDE_CONFIG_DIR, even when both resolve to ~/.claude. Keep its native
+    // authentication scope; context/tools remain disabled independently.
+    if (provider === 'claude') {
+      env.HOME = home; env.USERPROFILE = original.env.USERPROFILE ?? home;
+      delete env.CODEX_HOME; delete env.OPENAI_API_KEY;
+    } else {
+      delete env.CLAUDE_CONFIG_DIR;
+      for (const name of Object.keys(env)) if (name.startsWith('ANTHROPIC_')) delete env[name];
+    }
     if (original.runtime.kind === 'wsl') {
-      env.ORKESTRAI_PUBLIC_HOME = cwd;
+      env.ORKESTRAI_PUBLIC_HOME = provider === 'claude' ? home : cwd;
       env.ORKESTRAI_PUBLIC_PATH = await publicWorkerProbe('sh', ['-c', 'printf %s "$PATH"'], original);
     }
     env.ORKESTRAI_INFERENCE_PROXY_URL = proxy.url; env.ORKESTRAI_INFERENCE_PROXY_TOKEN = proxy.token;

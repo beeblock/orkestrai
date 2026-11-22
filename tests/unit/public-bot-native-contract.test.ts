@@ -79,11 +79,16 @@ describe.skipIf(!process.env.PUBLIC_BOT_NATIVE_CONTRACT)('public native CLI isol
           ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`, ANTHROPIC_API_KEY: 'test-local-only',
           ORKESTRAI_AGENT_TOKEN: 'PRIVATE_BRIDGE_TOKEN', ORKESTRAI_WORKSPACE_CONFIG: '/private/workspace.json' },
         session: () => 'PRIVATE_OWNER_SESSION', saveSession: async () => { throw new Error('Must not change owner session'); } };
+      if (provider === 'claude' && !forcedTool) delete original.env.CLAUDE_CONFIG_DIR;
       let prepared: Awaited<ReturnType<typeof preparePublicWorker>> | undefined, driver: CodexStructuredDriver | ClaudeStructuredDriver | undefined;
       try {
         prepared = await preparePublicWorker(provider, original, proxy, 'Public role: answer product support questions only.');
         expect(prepared.options.env).not.toHaveProperty('ORKESTRAI_AGENT_TOKEN');
         expect(prepared.options.env).not.toHaveProperty('ORKESTRAI_WORKSPACE_CONFIG');
+        if (provider === 'claude') {
+          expect(prepared.options.env.HOME).toBe(home);
+          expect(prepared.options.env.CLAUDE_CONFIG_DIR).toBe(original.env.CLAUDE_CONFIG_DIR);
+        }
         expect(JSON.stringify(prepared.options.launchArgs)).not.toContain(proxy.token);
         driver = provider === 'codex' ? new CodexStructuredDriver(prepared.options) : new ClaudeStructuredDriver(prepared.options);
         let accepted = false;
