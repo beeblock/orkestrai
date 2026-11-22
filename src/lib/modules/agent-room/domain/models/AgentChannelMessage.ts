@@ -7,7 +7,7 @@ export class AgentChannelMessage extends Model {
   static timestamps = false;
   static fillable = [
     'id', 'workspace_id', 'channel', 'author_kind', 'author_node_id', 'kind', 'body',
-    'meta_json', 'reply_to_id', 'answered_at', 'created_at', 'updated_at',
+    'meta_json', 'reply_to_id', 'answered_at', 'created_at', 'updated_at', 'hidden_at',
   ];
 
   static casts = {

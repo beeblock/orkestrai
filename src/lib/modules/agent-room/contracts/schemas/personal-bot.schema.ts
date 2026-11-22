@@ -40,6 +40,8 @@ export const botGroupSettingsSchema = z.object({
 }).strict().refine(value => value.memberIds.includes(value.coordinatorId), { message: 'The coordinator must be a group member.', path: ['coordinatorId'] });
 
 export const personalBotCommandSchema = z.discriminatedUnion('command', [
+  z.object({ command: z.literal('history_delete'), channel: z.string().regex(/^(?:dm|botgroup):[a-f0-9-]{36}$/i), messageId: z.string().uuid() }).strict(),
+  z.object({ command: z.literal('history_clear'), channel: z.string().regex(/^(?:dm|botgroup):[a-f0-9-]{36}$/i), throughMessageId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('create'), settings: personalBotCreationSettingsSchema }).strict(),
   z.object({ command: z.literal('preset_list'), locale: z.enum(botPresetLocales).default('en') }).strict(),
   z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema.omit({ publicRole: true }) }).strict(),

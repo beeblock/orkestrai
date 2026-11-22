@@ -14,6 +14,7 @@
   import type { PersonalBotGroup, PersonalBotSummary } from '$lib/modules/agent-room/contracts/schemas/personal-bot.schema.js';
   import type { ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
+  import BotHistoryAction from './BotHistoryAction.svelte';
   let { workspaceId, group, bots }: { workspaceId: string; group: PersonalBotGroup; bots: PersonalBotSummary[] } = $props();
   let messages = $state<ChannelMessage[]>([]), draft = $state(''), sending = $state(false), failed = $state(false), listening = $state(false);
   let scroller = $state<HTMLDivElement | null>(null);
@@ -34,8 +35,10 @@
     draft = ''; messages = []; void load();
     const update = (event: Event) => { const frame = (event as CustomEvent).detail; if (frame?.workspaceId === workspaceId && frame?.message?.channel === `botgroup:${group.id}`) void load(); };
     const reconnect = () => void load();
+    const history = (event: Event) => { const frame = (event as CustomEvent).detail; if (frame?.workspaceId === workspaceId && frame?.channel === `botgroup:${group.id}`) void load(); };
     window.addEventListener('orkestrai:channel-message', update); window.addEventListener('orkestrai:bots-changed', reconnect);
-    return () => { generation++; staged.reset(); window.removeEventListener('orkestrai:channel-message', update); window.removeEventListener('orkestrai:bots-changed', reconnect); };
+    window.addEventListener('orkestrai:channel-history', history);
+    return () => { generation++; staged.reset(); window.removeEventListener('orkestrai:channel-message', update); window.removeEventListener('orkestrai:bots-changed', reconnect); window.removeEventListener('orkestrai:channel-history', history); };
   }); });
   async function send() {
     if ((!draft.trim() && !staged.items.length) || staged.busy || sending) return;
@@ -51,8 +54,9 @@
   function dictated(text: string) { draft = [draft.trim(), text.trim()].filter(Boolean).join(' '); listening = false; }
 </script>
 <div class="flex min-h-0 flex-1 flex-col" data-testid="bot-group-chat">
+  <div class="flex justify-end px-4"><BotHistoryAction {workspaceId} channel={`botgroup:${group.id}`} throughMessageId={messages.at(-1)?.id ?? null} onChanged={load} /></div>
   <div class="min-h-0 flex-1 overflow-y-auto p-6" bind:this={scroller} aria-live="polite">
-    {#each messages as message (message.id)}<article class={`mx-auto mb-6 max-w-3xl rounded-xl ${message.authorKind === 'owner' ? 'bg-[var(--app-accent-soft)] p-4' : ''}`}><small class="mb-2 block text-xs text-[var(--app-text-muted)]">{message.authorKind === 'owner' ? m['chat.you']() : bots.find(bot => bot.id === message.authorNodeId)?.title ?? m['bots.title']()}</small><MarkdownView {workspaceId} content={botMessageContent(message.body, message.meta, workspaceId)} /><MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} /></article>{/each}
+    {#each messages as message (message.id)}<article class={`mx-auto mb-6 max-w-3xl rounded-xl ${message.authorKind === 'owner' ? 'bg-[var(--app-accent-soft)] p-4' : ''}`}><div class="flex items-center justify-between"><small class="mb-2 block text-xs text-[var(--app-text-muted)]">{message.authorKind === 'owner' ? m['chat.you']() : bots.find(bot => bot.id === message.authorNodeId)?.title ?? m['bots.title']()}</small>{#if message.kind !== 'question' || message.answeredAt}<BotHistoryAction {workspaceId} channel={`botgroup:${group.id}`} messageId={message.id} onChanged={load} />{/if}</div><MarkdownView {workspaceId} content={botMessageContent(message.body, message.meta, workspaceId)} /><MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} /></article>{/each}
   </div>
   {#if failed || staged.error}<p class="px-6 text-sm text-[var(--app-danger)]" role="alert">{staged.error || m['bots.error']()}</p>{/if}
   <div class="px-6">{#if staged.items.length}<AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} />{/if}</div>

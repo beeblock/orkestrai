@@ -1179,6 +1179,11 @@ export class AgentInboxService {
   }
 
   private async cancel(envelope: AgentMessageEnvelope, reason: string): Promise<void> {
+    if (reason === 'obsolete' && ['owner', 'bot_group'].includes(envelope.kind) && typeof envelope.metadata.channelMessageId === 'string') {
+      const { channelRepository } = await import('../../infrastructure/repositories/ChannelRepository.js');
+      const source = await channelRepository.find(envelope.workspaceId, envelope.metadata.channelMessageId);
+      if (source?.hiddenAt && source.kind === 'text') reason = 'history_hidden';
+    }
     const error = reason === 'obsolete'
       ? 'Agent message delivery was cancelled because its task is no longer active.'
       : 'Message withdrawn before delivery.';
@@ -1197,6 +1202,13 @@ export class AgentInboxService {
   }
 
   private async isRelevant(envelope: AgentMessageEnvelope): Promise<boolean> {
+    if (['owner', 'bot_group'].includes(envelope.kind) && typeof envelope.metadata.channelMessageId === 'string') {
+      const { channelRepository } = await import('../../infrastructure/repositories/ChannelRepository.js');
+      const source = await channelRepository.find(envelope.workspaceId, envelope.metadata.channelMessageId);
+      // History cleanup withdraws new requests, never an already recorded
+      // owner decision, task assignment or specialist's completed result.
+      if (source?.hiddenAt && source.kind === 'text') return false;
+    }
     // These records carry role/review authority. A failed state read defers the
     // delivery (the drain retries), rather than sending or discarding a stale grant.
     if (envelope.kind === 'leadership_change') {

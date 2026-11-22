@@ -1,7 +1,7 @@
 import { uuidv7 } from '@beeblock/svelar/support';
 import { Connection } from '@beeblock/svelar/database';
 import { AgentChannelMessage } from '../../domain/models/AgentChannelMessage.js';
-import type { ChannelAuthorKind, ChannelMessage, ChannelMessageKind } from '../../domain/channels.js';
+import type { ChannelAuthorKind, ChannelMessage, ChannelMessageKind, ChannelHistoryChange } from '../../domain/channels.js';
 
 function toIso(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
@@ -31,6 +31,7 @@ export function mapChannelMessage(model: AgentChannelMessage): ChannelMessage {
     replyToId: model.getAttribute('reply_to_id') ?? null,
     answeredAt: answeredAt ? toIso(answeredAt) : null,
     createdAt: toIso(model.getAttribute('created_at')),
+    ...(model.getAttribute('hidden_at') ? { hiddenAt: toIso(model.getAttribute('hidden_at')) } : {}),
   };
 }
 
@@ -47,6 +48,27 @@ export type SaveChannelMessageInput = {
 };
 
 export class ChannelRepository {
+  /** Hide local history only. Durable rows still protect attachment ownership,
+   * external deduplication, approvals and already accepted work after restart. */
+  async hideHistory(workspaceId: string, channel: string, messageId: string, clear: boolean): Promise<ChannelHistoryChange> {
+    return Connection.transaction(async () => {
+      const target = await this.find(workspaceId, messageId);
+      if (!target || target.channel !== channel) throw new Error('BOT_HISTORY_MESSAGE_NOT_FOUND');
+      const hiddenAt = new Date().toISOString();
+      const query = AgentChannelMessage.query().where('workspace_id', workspaceId).where('channel', channel).whereNull('hidden_at');
+      if (!clear) {
+        if (target.kind === 'question' && !target.answeredAt) throw new Error('BOT_HISTORY_QUESTION_OPEN');
+        await query.where('id', messageId).update({ hidden_at: hiddenAt, updated_at: hiddenAt });
+        return { workspaceId, channel, deletedId: target.id, hiddenAt };
+      }
+      query.whereNested(before => before.where('created_at', '<', target.createdAt)
+        .orWhereNested(same => same.where('created_at', target.createdAt).where('id', '<=', target.id)));
+      query.whereNested(removable => removable.where('kind', '!=', 'question').orWhereNotNull('answered_at'));
+      await query.update({ hidden_at: hiddenAt, updated_at: hiddenAt });
+      return { workspaceId, channel, hiddenAt, through: { createdAt: target.createdAt, id: target.id } };
+    });
+  }
+
   async findStructuredReply(workspaceId: string, nodeId: string, key: string, messageId: string): Promise<ChannelMessage | null> {
     const message = await this.find(workspaceId, messageId);
     if (!message) return null;
@@ -113,7 +135,7 @@ export class ChannelRepository {
     channel: string,
     input: { before?: string | null; beforeId?: string | null; includeInstant?: boolean; limit?: number } = {},
   ): Promise<ChannelMessage[]> {
-    const query = AgentChannelMessage.query().where('workspace_id', workspaceId).where('channel', channel);
+    const query = AgentChannelMessage.query().where('workspace_id', workspaceId).where('channel', channel).whereNull('hidden_at');
     const { before, beforeId } = input;
     if (before && beforeId) {
       query.whereNested((older) => {
@@ -152,6 +174,7 @@ export class ChannelRepository {
   async latestByChannel(workspaceId: string, limit = 400): Promise<Map<string, ChannelMessage>> {
     const rows = await AgentChannelMessage.query()
       .where('workspace_id', workspaceId)
+      .whereNull('hidden_at')
       .orderBy('created_at', 'desc')
       .limit(limit)
       .get();

@@ -1389,7 +1389,7 @@
     const connect = () => {
     if (disposed) return;
     socket = new WebSocket(`${protocol}://${location.host}/ws/agent-room/pty`);
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged', 'channelMessage'] }));
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'subscribe', events: ['workspaceChanged', 'designChanged', 'controlCenterChanged', 'messageDelivery', 'talking', 'attentionChanged', 'channelMessage', 'channelHistoryChanged'] }));
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(String(event.data));
@@ -1419,6 +1419,7 @@
         if (message.type === 'attentionChanged' && (!message.workspaceId || message.workspaceId === activeWorkspace?.id)) {
           scheduleAttentionRefresh();
         }
+        if (message.type === 'channelHistoryChanged' && message.workspaceId === activeWorkspace?.id) window.dispatchEvent(new CustomEvent('orkestrai:channel-history', { detail: message }));
         if (message.type === 'channelMessage' && message.workspaceId === activeWorkspace?.id) {
           window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: { channel: message.channel, message: message.message } }));
         }

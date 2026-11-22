@@ -17,6 +17,7 @@
   import { botMessageContent } from '../bots/bot-message-content.js';
   import { botApi } from '../bots/bot-api.js';
   import { Button } from '$lib/components/ui/button/index.js';
+  import BotHistoryAction from '../bots/BotHistoryAction.svelte';
 
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
@@ -34,6 +35,7 @@
   let listening = $state(false);
   let repairing = $state<string | null>(null);
   let repairFailed = $state(false);
+  let loadGeneration = 0;
   const staged = new ComposerAttachments(() => workspaceId);
   // The draft is this agent's: another agent, another workspace or closing the face discards its files.
   $effect(() => {
@@ -58,8 +60,7 @@
     try {
       const saved = await botApi<ChannelMessage>(`/api/agent-room/workspaces/${ownerWorkspace}/bots`, { command: 'repair_artifact_delivery', nodeId: ownerNode, messageId: message.id });
       if (workspaceId !== ownerWorkspace || nodeId !== ownerNode) return;
-      if (saved) messages = upsertMessage(messages, saved);
-      messages = messages.map(item => item.id === message.id ? { ...item, meta: { ...item.meta, artifactRepairQueued: true } } : item);
+      if (saved) await load();
     } catch { if (workspaceId === ownerWorkspace && nodeId === ownerNode) repairFailed = true; }
     finally { repairing = null; }
   }
@@ -70,10 +71,12 @@
   }
 
   async function load() {
+    const workspace = workspaceId, ownerChannel = channel, ticket = ++loadGeneration;
     const response = await fetch(`${url}?limit=60`, { cache: 'no-store' }).catch(() => null);
     const body = response?.ok ? await response.json().catch(() => null) : null;
+    if (workspace !== workspaceId || ownerChannel !== channel || ticket !== loadGeneration) return;
     if (Array.isArray(body?.data)) {
-      messages = mergeLoaded(body.data, messages);
+      messages = personalBot ? body.data.slice().reverse() : mergeLoaded(body.data, messages);
       await scrollEnd();
     }
   }
@@ -88,7 +91,8 @@
     }).catch(() => null);
     const result = response?.ok ? await response.json().catch(() => null) : null;
     if (!result?.data?.message) return { stored: false, delivered: false };
-    messages = upsertMessage(messages, result.data.message);
+    if (personalBot) await load();
+    else messages = upsertMessage(messages, result.data.message);
     await scrollEnd();
     return { stored: true, delivered: !(result.data.delivered ?? []).some((entry: { ok: boolean }) => !entry.ok) };
   }
@@ -130,15 +134,24 @@
     const onMessage = (event: Event) => {
       const detail = (event as CustomEvent<{ channel?: string; message?: ChannelMessage }>).detail;
       if (detail?.channel !== channel || !detail.message) return;
+      if (personalBot) { void load(); return; }
       messages = upsertMessage(messages, detail.message);
       void scrollEnd();
     };
     window.addEventListener('orkestrai:channel-message', onMessage);
-    return () => window.removeEventListener('orkestrai:channel-message', onMessage);
+    const onHistory = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (personalBot && detail?.workspaceId === workspaceId && detail?.channel === channel) void load();
+    };
+    const reconnect = () => { if (personalBot) void load(); };
+    window.addEventListener('orkestrai:channel-history', onHistory);
+    window.addEventListener('orkestrai:bots-reconnected', reconnect);
+    return () => { loadGeneration++; window.removeEventListener('orkestrai:channel-message', onMessage); window.removeEventListener('orkestrai:channel-history', onHistory); window.removeEventListener('orkestrai:bots-reconnected', reconnect); };
   });
 </script>
 
 <div class="face nodrag nowheel" data-testid="agent-chat-face">
+  {#if personalBot}<div class="flex justify-end border-b border-[var(--app-border)] px-2"><BotHistoryAction {workspaceId} {channel} throughMessageId={messages.at(-1)?.id ?? null} onChanged={load} /></div>{/if}
   <div class="list" bind:this={scroller}>
     {#each timeline as row (row.key)}
       {#if row.type === 'group'}
@@ -148,7 +161,8 @@
             {#if message.kind === 'question'}
               <QuestionCard question={message} answer={answers.get(message.id) ?? null} authorTitle={title} onAnswer={(id, text) => post(text, id).then((result) => result.delivered)} />
             {:else}
-              <div class="bubble">
+              <div class="bubble" class:history-actions={personalBot}>
+                {#if personalBot}<div class="absolute right-1 top-1"><BotHistoryAction {workspaceId} {channel} messageId={message.id} onChanged={load} /></div>{/if}
                 {#if message.meta.attachmentsOnly !== true}<MarkdownView content={personalBot ? botMessageContent(message.body, message.meta, workspaceId) : message.body} compact {workspaceId} />{/if}
                 {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
                 {#if missingNativeFiles(message)}
@@ -242,6 +256,7 @@
   .mine .bubble {
     background: var(--app-accent-soft);
   }
+  .bubble.history-actions { position: relative; padding-right: 42px; min-height: 40px; }
 
   .empty {
     margin: auto;

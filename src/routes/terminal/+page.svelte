@@ -1052,6 +1052,7 @@
           }
           if (message.type === 'attentionChanged') window.dispatchEvent(new CustomEvent('orkestrai:attention-changed'));
           if (message.type === 'attentionChanged' && message.workspaceId === selectedWorkspaceId) scheduleAttentionRefresh();
+          if (message.type === 'channelHistoryChanged' && message.workspaceId === selectedWorkspaceId) window.dispatchEvent(new CustomEvent('orkestrai:channel-history', { detail: message }));
           if (message.type === 'channelMessage' && message.workspaceId === selectedWorkspaceId) {
             window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: { channel: message.channel, message: message.message } }));
           }

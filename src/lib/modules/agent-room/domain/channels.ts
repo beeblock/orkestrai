@@ -19,9 +19,18 @@ export type ChannelMessage = {
   replyToId: string | null;
   answeredAt: string | null;
   createdAt: string;
+  /** Local history tombstone; files, external identities and receipts remain durable. */
+  hiddenAt?: string | null;
 };
 
 export const TEAM_CHANNEL = 'team';
+export type ChannelHistoryChange = {
+  workspaceId: string;
+  channel: string;
+  hiddenAt: string;
+  deletedId?: string;
+  through?: { createdAt: string; id: string };
+};
 export const MAX_CHANNEL_BODY = 8_000;
 export const MAX_QUESTION_OPTIONS = 6;
 export const MAX_OPTION_LENGTH = 80;

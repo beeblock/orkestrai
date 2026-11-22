@@ -70,6 +70,28 @@ export class PersonalBotService {
     if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
     if (workspace.suspendedAt) throw new Error('WORKSPACE_SUSPENDED');
     switch (input.command) {
+      case 'history_delete':
+      case 'history_clear': {
+        let recipients: string[];
+        if (input.channel.startsWith('dm:')) {
+          const bot = await this.requireBot(workspaceId, input.channel.slice(3));
+          if (dto.actorNodeId && dto.actorNodeId !== bot.id) throw new Error('BOT_ACTOR_MISMATCH');
+          recipients = [bot.id];
+        } else {
+          const group = await personalBotGroupRepository.find(workspaceId, input.channel.slice('botgroup:'.length));
+          if (!group || group.archived) throw new Error('BOT_GROUP_NOT_FOUND');
+          if (dto.actorNodeId && !group.memberIds.includes(dto.actorNodeId)) throw new Error('BOT_GROUP_MEMBERSHIP_REQUIRED');
+          recipients = group.memberIds;
+        }
+        const messageId = input.command === 'history_delete' ? input.messageId : input.throughMessageId;
+        const mutate = () => channelRepository.hideHistory(workspaceId, input.channel, messageId, input.command === 'history_clear');
+        const { autonomyPolicyService } = await import('./AutonomyPolicyService.js');
+        const change = dto.actorNodeId ? await autonomyPolicyService.execute({ workspaceId, capability: 'agent', operation: `bot.${input.command}`,
+          target: input.channel, mutation: true, actorType: 'agent', actorId: dto.actorNodeId, input: { channel: input.channel, messageId }, certainty: 'semantic' }, mutate) : await mutate();
+        (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast?.({ type: 'channelHistoryChanged', ...change });
+        for (const nodeId of recipients) agentInboxService.kick(workspaceId, nodeId);
+        return change;
+      }
       case 'preset_list':
         return listBotPresets(input.locale);
       case 'repair_artifact_delivery': {

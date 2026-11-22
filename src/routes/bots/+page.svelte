@@ -93,8 +93,8 @@
       socket = live;
       live.onopen = () => {
         connected = true; lastFrame = Date.now();
-        live.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'workspaceChanged', 'messageDelivery'] }));
-        schedule(); window.dispatchEvent(new CustomEvent('orkestrai:bots-changed'));
+        live.send(JSON.stringify({ type: 'subscribe', events: ['channelMessage', 'channelHistoryChanged', 'workspaceChanged', 'messageDelivery'] }));
+        schedule(); window.dispatchEvent(new CustomEvent('orkestrai:bots-changed')); window.dispatchEvent(new CustomEvent('orkestrai:bots-reconnected'));
       };
       live.onmessage = event => {
         lastFrame = Date.now();
@@ -103,6 +103,8 @@
         if (frame.workspaceId && frame.workspaceId !== workspaceId) return;
         if (frame.type === 'channelMessage' && frame.message) {
           window.dispatchEvent(new CustomEvent('orkestrai:channel-message', { detail: frame }));
+        } else if (frame.type === 'channelHistoryChanged') {
+          window.dispatchEvent(new CustomEvent('orkestrai:channel-history', { detail: frame }));
         } else if (frame.type === 'workspaceChanged') { window.dispatchEvent(new CustomEvent('orkestrai:bots-changed')); schedule(); }
       };
       live.onclose = () => { connected = false; if (!stopped) retry = setTimeout(connect, 2_000); };

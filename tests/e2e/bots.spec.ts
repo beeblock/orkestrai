@@ -19,6 +19,7 @@ test('repair a legacy file reply without starting a model', async ({ page, reque
     await page.route(`**/workspaces/${workspace.id}/bots`, async route => {
       if (route.request().method() !== 'POST') return route.continue();
       expect(route.request().postDataJSON()).toEqual({ command: 'repair_artifact_delivery', nodeId: bot.id, messageId: old.id }); repairs++;
+      (old.meta as Record<string, unknown>).artifactRepairQueued = true;
       return route.fulfill({ json: { data: { ...old, id: '01955555-4444-7444-8444-444444444444', body: '[Report](report.pdf)', meta: { artifacts: [] } } } });
     });
     page.on('request', req => { if (req.method() === 'POST' && req.url().includes('/messages')) prompts++; });
@@ -28,6 +29,40 @@ test('repair a legacy file reply without starting a model', async ({ page, reque
     await expect(action).toBeVisible(); await action.click();
     await expect(action).toHaveCount(0); expect(repairs).toBe(1); expect(prompts).toBe(0);
   } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
+});
+
+test('delete and clear bot history in two tabs without starting a model', async ({ page, request, context }) => {
+  const root = await mkdtemp(join(tmpdir(), 'bot-history-browser-'));
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'History browser', workingDir: root } })).json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  const peer = await context.newPage();
+  try {
+    const botResponse = await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'History helper', provider: 'codex', instructions: 'Return reports.' } } });
+    expect(botResponse.ok(), await botResponse.text()).toBe(true);
+    const { token } = JSON.parse(await readFile(join(root, '.orkestrai/workspace.json'), 'utf8'));
+    const post = async (message: string) => {
+      const response = await request.post('/api/agent-room/bridge/channel', { data: { token, from: 'History helper', message, channel: 'owner' } });
+      expect(response.ok(), await response.text()).toBe(true);
+    };
+    await post('FIRST_TO_DELETE'); await post('KEEP_UNTIL_CLEAR');
+    for (const tab of [page, peer]) {
+      await tab.goto(`/bots?workspace=${workspace.id}`);
+      await tab.locator('.bot-row').filter({ hasText: 'History helper' }).click();
+      await expect(tab.getByTestId('agent-chat-face').getByText('FIRST_TO_DELETE', { exact: true })).toBeVisible();
+    }
+    await page.getByTestId('agent-chat-face').locator('.bubble').filter({ hasText: 'FIRST_TO_DELETE' }).getByRole('button', { name: labels['bots.history_delete'], exact: true }).click();
+    const dialog = page.getByRole('alertdialog'); await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: labels['bots.history_delete'], exact: true }).click();
+    for (const tab of [page, peer]) {
+      await expect(tab.getByTestId('agent-chat-face').getByText('FIRST_TO_DELETE', { exact: true })).toHaveCount(0);
+      await expect(tab.getByTestId('agent-chat-face').getByText('KEEP_UNTIL_CLEAR', { exact: true })).toBeVisible();
+    }
+    await page.getByTestId('agent-chat-face').getByRole('button', { name: labels['bots.history_clear'], exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: labels['bots.history_clear'], exact: true }).click();
+    for (const tab of [page, peer]) await expect(tab.getByTestId('agent-chat-face').getByText('KEEP_UNTIL_CLEAR', { exact: true })).toHaveCount(0);
+    await post('NEW_AFTER_CLEAR');
+    for (const tab of [page, peer]) await expect(tab.getByTestId('agent-chat-face').getByText('NEW_AFTER_CLEAR', { exact: true })).toBeVisible();
+  } finally { await peer.close(); await request.delete(base); await rm(root, { recursive: true, force: true }); }
 });
 
 test('create a native bot, collaborate in a group and keep the development conversation separate', async ({ page, request }) => {
