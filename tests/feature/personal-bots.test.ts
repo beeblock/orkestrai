@@ -206,6 +206,19 @@ describe('personal bot boundaries and persistence', () => {
     expect(await workspaceRepository.getNode(f.peer.id)).not.toBeNull();
   });
 
+  it.each([['dismiss', 'dismiss'], ['connect', 'connectNodes'], ['reassign', 'reassignRole']] as const)('binds %s to the live bot identity rather than a claimed leader', async (method, serviceMethod) => {
+    const f = await fixture();
+    vi.spyOn(bridgeService, 'resolveWorkspaceByToken').mockResolvedValue(f.workspace);
+    vi.spyOn(ptySessionManager, 'resolveBridgeAgent').mockReturnValue(f.bot.id);
+    const invoked = vi.spyOn(bridgeService, serviceMethod).mockResolvedValue({} as never);
+    const url = new URL(`http://localhost/api/agent-room/bridge/${method}`);
+    const response = await new BridgeController()[method]({ params: {}, url, request: new Request(url, { method: 'POST',
+      headers: { authorization: 'Bearer fixture', 'x-orkestrai-agent-token': 'live-token', 'content-type': 'application/json' },
+      body: JSON.stringify({ from: f.developer.id, ...(method === 'connect' ? { to: f.peer.id } : { target: f.peer.id }), ...(method === 'reassign' ? { role: 'Report reviewer' } : {}) }) }) } as any);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(invoked).toHaveBeenCalledWith(f.workspace.id, expect.objectContaining({ from: f.bot.id, verifiedActorNodeId: f.bot.id }));
+  });
+
   it('records agent group messages under the authenticated agent, never as the owner', async () => {
     const f = await fixture(), group = await f.group();
     const release = vi.fn();

@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Let authenticated personal bots connect agents, update specialist roles, dismiss finished specialists and change teammate account profiles without becoming the workspace leader. Bind these calls to the live terminal identity, preserve workspace pauses and protect the actual leader/deputy from dismissal. Public customer workers remain isolated.
+
 - Forward generated PNG/JPEG images, PDFs, spreadsheets, documents and archives as native attachments, including explicit absolute paths confined to the owner workspace or its terminal runtime. Keep realpath/policy/hash checks and public artifact approvals; remove only the verified local links from outgoing text. Older text-only owner replies offer Send files to the original chat, with one durable repair identity and no model run or image regeneration.
 
 ### Added — 0.55.0-beta.10 local preview

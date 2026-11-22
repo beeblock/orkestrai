@@ -1348,7 +1348,15 @@ export class BridgeService {
     const origin = this.findAgent(agents, from);
     const node = await workspaceRepository.getNode(origin.nodeId);
     const coordinator = node?.payload as { maestro?: boolean; deputy?: boolean; personalBot?: boolean } | undefined;
-    const maestro = Boolean(coordinator?.maestro || coordinator?.deputy || verifiedBotActor === origin.nodeId && coordinator?.personalBot);
+    const authenticatedBot = verifiedBotActor === origin.nodeId && coordinator?.personalBot;
+    if (authenticatedBot) {
+      const { autonomyPolicyService } = await import('./AutonomyPolicyService.js');
+      // These operations belong to an existing owner turn. They do not start
+      // another scheduled run or consume an additional concurrency slot.
+      const [workspace, policy] = await Promise.all([workspaceRepository.getWorkspace(workspaceId), autonomyPolicyService.get(workspaceId)]);
+      if (!workspace || workspace.suspendedAt || policy.policy.halted) throw new Error('Workspace execution is paused.');
+    }
+    const maestro = Boolean(coordinator?.maestro || coordinator?.deputy || authenticatedBot);
     if (!maestro) {
       throw new Error(`O agente "${origin.title}" não está no Modo Maestro. Ative no nó do terminal.`);
     }
@@ -1641,14 +1649,14 @@ export class BridgeService {
   }
 
   /** Dispensa um recruta: mata a sessão PTY e remove o no do canvas. */
-  async dismiss(workspaceId: string, input: { from: string; target: string }) {
-    const origin = await this.requireMaestro(workspaceId, input.from);
+  async dismiss(workspaceId: string, input: { from: string; target: string; verifiedActorNodeId?: string | null }) {
+    const origin = await this.requireMaestro(workspaceId, input.from, input.verifiedActorNodeId ?? null);
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.target);
     if (target.nodeId === origin.nodeId) throw new Error('O maestro não pode dispensar a si mesmo.');
     let targetSnapshotPayload: { provider?: string; agentSessionId?: string } = {};
     await Connection.transaction(async () => {
-      await this.requireMaestro(workspaceId, input.from);
+      await this.requireMaestro(workspaceId, input.from, input.verifiedActorNodeId ?? null);
       const current = await workspaceRepository.getActiveNode(workspaceId, target.nodeId);
       const role = current?.payload as { maestro?: boolean; deputy?: boolean } | undefined;
       if (role?.maestro || role?.deputy) throw new Error('leadership_preserve_deputy');
@@ -1668,8 +1676,8 @@ export class BridgeService {
   }
 
   /** Reatribui papel (e opcionalmente prompt) de um recruta, preservando o no. */
-  async reassignRole(workspaceId: string, input: { from: string; target: string; role: string; prompt?: string | null }) {
-    await this.requireMaestro(workspaceId, input.from);
+  async reassignRole(workspaceId: string, input: { from: string; target: string; role: string; prompt?: string | null; verifiedActorNodeId?: string | null }) {
+    await this.requireMaestro(workspaceId, input.from, input.verifiedActorNodeId ?? null);
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.target);
     const node = (await workspaceRepository.getNode(target.nodeId))!;
@@ -1680,8 +1688,8 @@ export class BridgeService {
   }
 
   /** Conecta dois nos do canvas (qualquer par), exigindo maestro. */
-  async connectNodes(workspaceId: string, input: { from: string; source?: string | null; to: string }) {
-    const maestro = await this.requireMaestro(workspaceId, input.from);
+  async connectNodes(workspaceId: string, input: { from: string; source?: string | null; to: string; verifiedActorNodeId?: string | null }) {
+    const maestro = await this.requireMaestro(workspaceId, input.from, input.verifiedActorNodeId ?? null);
     const agents = await this.listAgents(workspaceId);
     const origin = input.source ? this.findAgent(agents, input.source) : maestro;
     const target = this.findAgent(agents, input.to);

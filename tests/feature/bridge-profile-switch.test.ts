@@ -55,6 +55,14 @@ describe('profile switch bridge contract', () => {
     const f = await fixture(true); const response = await f.controller.switchAgentProfile(event({ ...f.body, agent: f.other.id }, f.token) as any); expect(response.status, await response.clone().text()).toBe(200);
     expect(f.change).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: f.workspace.id, nodeId: f.other.id, provider: 'claude', profileId: 'profile-b' }));
   });
+  it('allows a live personal bot to change a recruited teammate account without promoting it to leader', async () => {
+    const f = await fixture();
+    await workspaceRepository.updateNode(f.actor.id, { payload: { ...f.actor.payload, personalBot: true } as never });
+    const response = await f.controller.switchAgentProfile(event({ ...f.body, agent: f.other.id }, f.token) as any);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(f.change).toHaveBeenCalledWith(expect.objectContaining({ nodeId: f.other.id }));
+    expect((await workspaceRepository.getNode(f.actor.id))?.payload).toMatchObject({ maestro: false, personalBot: true });
+  });
   it('honors a workspace pause and leaves the account unchanged', async () => {
     const f = await fixture(); vi.mocked(autonomyPolicyService.runWindow).mockResolvedValue({ allowed: false } as never);
     expect((await f.controller.switchAgentProfile(event(f.body, f.token) as any)).status).toBe(403); expect(f.change).not.toHaveBeenCalled();

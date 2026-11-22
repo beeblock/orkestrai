@@ -1713,7 +1713,8 @@ export class BridgeController extends Controller {
       if (!authenticated || authenticated !== actor) return this.json({ error: 'Account changes require the active agent terminal identity.' }, 403);
       const target = input.agent ? await this.resolveAgentActor(workspace.id, input.agent) : actor;
       const origin = await workspaceRepository.getNode(actor);
-      if (target !== actor && !(origin?.payload as { maestro?: boolean } | undefined)?.maestro) return this.json({ error: 'A specialist can change only its own account.' }, 403);
+      const coordinator = origin?.payload as { maestro?: boolean; personalBot?: boolean } | undefined;
+      if (target !== actor && !(coordinator?.maestro || coordinator?.personalBot)) return this.json({ error: 'A specialist can change only its own account.' }, 403);
       const task = (await taskBoardService.list(workspace.id)).find(item => item.id === input.taskId);
       if (!task || task.assigneeNodeId !== actor || ['todo', 'done'].includes(task.status)) return this.json({ error: 'Account changes require an active assigned task.' }, 403);
       if (!(await autonomyPolicyService.runWindow(workspace.id, 'agent_profile_change')).allowed) return this.json({ error: 'Workspace execution is paused.' }, 403);
@@ -1757,7 +1758,8 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeDismissRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.dismiss(workspace.id, { from: input.from, target: input.target }) });
+      const actor = this.terminalAgent(event, workspace.id);
+      return this.json({ data: await bridgeService.dismiss(workspace.id, { from: actor ?? input.from, verifiedActorNodeId: actor, target: input.target }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao dispensar agente.');
     }
@@ -1767,7 +1769,8 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeConnectRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
-      return this.json({ data: await bridgeService.connectNodes(workspace.id, { from: input.from, source: input.source, to: input.to }) });
+      const actor = this.terminalAgent(event, workspace.id);
+      return this.json({ data: await bridgeService.connectNodes(workspace.id, { from: actor ?? input.from, verifiedActorNodeId: actor, source: input.source, to: input.to }) });
     } catch (error) {
       return this.errorResponse(error, 'Falha ao conectar nos.');
     }
@@ -1779,7 +1782,8 @@ export class BridgeController extends Controller {
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       return this.json({
         data: await bridgeService.reassignRole(workspace.id, {
-          from: input.from,
+          from: this.terminalAgent(event, workspace.id) ?? input.from,
+          verifiedActorNodeId: this.terminalAgent(event, workspace.id),
           target: input.target,
           role: input.role,
           prompt: input.prompt,

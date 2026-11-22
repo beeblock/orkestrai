@@ -17,6 +17,7 @@ import { agentSessionService } from '$lib/modules/agent-room/application/service
 import { agentRuntimeService } from '$lib/modules/agent-room/application/services/AgentRuntimeService.js';
 import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
 import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
+import { autonomyPolicyService } from '$lib/modules/agent-room/application/services/AutonomyPolicyService.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -642,6 +643,23 @@ describe('Modo Maestro', () => {
     expect((await workspaceRepository.getNode(recruited.nodeId))?.payload).toMatchObject({ provider: 'codex' });
     expect((await workspaceRepository.getNode(bot.id))?.payload).toMatchObject({ maestro: false, personalBot: true });
     await expect(bridgeService.dismiss(workspace.id, { from: 'Lider', target: 'Image executor' })).rejects.toThrow('Modo Maestro');
+    await bridgeService.connectNodes(workspace.id, { from: bot.id, to: recruited.nodeId, verifiedActorNodeId: bot.id });
+    await bridgeService.reassignRole(workspace.id, { from: bot.id, target: recruited.nodeId, role: 'Native creative executor', verifiedActorNodeId: bot.id });
+    expect((await workspaceRepository.getNode(recruited.nodeId))?.payload).toMatchObject({ role: 'Native creative executor' });
+    await bridgeService.dismiss(workspace.id, { from: bot.id, target: recruited.nodeId, verifiedActorNodeId: bot.id });
+    expect(await workspaceRepository.getNode(recruited.nodeId)).toBeNull();
+    expect((await workspaceRepository.getNode(bot.id))?.payload).toMatchObject({ maestro: false, personalBot: true });
+  });
+
+  it('keeps workspace pauses and actual leader/deputy nodes protected from bot coordination', async () => {
+    const { workspace, leader: bot } = await setupMaestro(false);
+    await workspaceRepository.updateNode(bot.id, { payload: { ...bot.payload, personalBot: true } as never });
+    const protectedLeader = await workspaceRepository.createNode({ workspaceId: workspace.id, type: 'terminal', title: 'Actual leader', payload: { provider: 'codex', maestro: true } });
+    await expect(bridgeService.dismiss(workspace.id, { from: bot.id, target: protectedLeader.id, verifiedActorNodeId: bot.id })).rejects.toThrow('leadership_preserve_deputy');
+    const policy = await autonomyPolicyService.get(workspace.id);
+    const window = vi.spyOn(autonomyPolicyService, 'get').mockResolvedValue({ ...policy, policy: { ...policy.policy, halted: true } });
+    await expect(bridgeService.connectNodes(workspace.id, { from: bot.id, to: protectedLeader.id, verifiedActorNodeId: bot.id })).rejects.toThrow('paused');
+    expect(await workspaceRepository.getNode(protectedLeader.id)).not.toBeNull(); window.mockRestore();
   });
 
   it('bloqueia acoes sem Modo Maestro ativo', async () => {
