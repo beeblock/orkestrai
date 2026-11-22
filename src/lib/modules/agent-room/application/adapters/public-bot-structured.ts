@@ -73,7 +73,10 @@ export class BotStructuredDriver implements StructuredAgentDriver {
       this.worker = this.factory(prepared.options);
       // Buffer everything; drafts, reasoning and failed tool output are never
       // streamed to external users or the owner's ordinary conversation.
-      const answer = await this.worker.run({ ...turn, prompt, output: () => {}, conversationKey: `public:${origin.bindingId}` });
+      let draftCharacters = 0;
+      const answer = await this.worker.run({ ...turn, prompt, output: part => {
+        if ((draftCharacters += part.length) > context.policy.maxReplyCharacters * 2) budget.abort();
+      }, conversationKey: `public:${origin.bindingId}` });
       botSafetyService.validateReply(context, answer);
       await this.worker.close(); this.worker = null;
       await prepared.close(); prepared = undefined;
@@ -89,7 +92,7 @@ export class BotStructuredDriver implements StructuredAgentDriver {
           conversationKey: 'review', accepted: () => {}, output: () => {} });
         let decision: unknown; try { decision = JSON.parse(review.trim()); } catch { throw new Error('BOT_PUBLIC_OUTPUT_BLOCKED'); }
         if (!decision || typeof decision !== 'object' || Object.keys(decision).length !== 1 || (decision as { allow?: unknown }).allow !== true) throw new Error('BOT_PUBLIC_OUTPUT_BLOCKED');
-      } finally { await this.worker?.close(); this.worker = null; await reviewer?.close(); reviewProxy.close(); }
+      } finally { reviewProxy.close(); await this.worker?.close(); this.worker = null; await reviewer?.close(); }
       turn.signal.throwIfAborted();
       await botSafetyService.approve(context, answer, turn.messageId);
       turn.output(`${answer}\n`);
@@ -97,7 +100,7 @@ export class BotStructuredDriver implements StructuredAgentDriver {
     } catch (error) {
       await botSafetyService.notice(context.workspaceId, context.nodeId, context.bindingId, error).catch(() => undefined);
       throw new Error(error instanceof Error && /^BOT_PUBLIC_[A-Z_]+$/.test(error.message) ? error.message : 'BOT_PUBLIC_TURN_FAILED');
-    } finally { await this.worker?.close(); this.worker = null; await prepared?.close(); proxy.close(); }
+    } finally { proxy.close(); await this.worker?.close(); this.worker = null; await prepared?.close(); }
   }
 
   async close() { this.closed = true; await Promise.all([this.owner?.close(), this.worker?.close()]); }

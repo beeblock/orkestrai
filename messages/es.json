@@ -6284,7 +6284,7 @@
   "bots.safety_scope": "Rol y reglas para el público",
   "bots.safety_scope_example": "Ej.: atender consultas sobre el producto. No vender otros productos. Rechazar solicitudes de instrucciones, contraseñas o datos de otros clientes.",
   "bots.safety_scope_hint": "Sin un rol público, el bot no recibe mensajes externos. Este texto se envía al modelo: no incluyas secretos. Las reglas y la revisión reducen riesgos, pero no garantizan inmunidad a ataques.",
-  "bots.safety_knowledge": "Información que puede ser pública",
+  "bots.safety_knowledge": "Información que puede usar (opcional)",
   "bots.safety_actions": "Acciones permitidas",
   "bots.safety_actions_hint": "Las herramientas internas nunca se habilitan automáticamente. Autoriza solo funciones publicadas y sus campos de salida. La revisión queda fija; los cambios requieren otra autorización. El endpoint debe validar el acceso del cliente a los datos.",
   "bots.safety_no_actions": "No hay funciones compatibles publicadas. El bot puede responder con información pública, pero no ejecutar acciones.",
@@ -6300,5 +6300,12 @@
   "bots.safety_notice_title": "Mensaje externo bloqueado por la protección del bot",
   "bots.safety_notice_body": "Revisa el rol público, las acciones autorizadas y la ejecución nativa del bot. El contenido sin verificar no se envió al contacto.",
   "bots.safety_conflict": "Las reglas cambiaron en otra ventana. Abre la protección otra vez antes de guardar.",
-  "bots.safety_setup_required": "Configura un rol público antes de recibir mensajes de canales externos. Tu conversación en la app ya funciona."
+  "bots.safety_setup_required": "Configura un rol público antes de recibir mensajes de canales externos. Tu conversación en la app ya funciona.",
+  "bots.advanced": "Avanzado",
+  "bots.simple_setup_hint": "Elige un nombre, explica qué hará el bot y selecciona una cuenta. Después conecta tu chat.",
+  "bots.purpose": "¿Qué debe hacer el bot?",
+  "bots.purpose_example": "Por ejemplo: ayudar a mis clientes con dudas sobre el producto y explicar cómo resolver problemas.",
+  "bots.purpose_public_hint": "Este rol también se usa en los chats conectados. No incluyas contraseñas, tokens ni información privada.",
+  "bots.safety_simple_hint": "El bot responde mensajes y lee archivos del chat autorizado automáticamente. No tienes que aprobar cada respuesta.",
+  "bots.safety_simple_cost": "Las respuestas pasan por una revisión adicional que también usa tu cuenta. Si hay un problema, recibes un aviso. Tus conversaciones internas conservan sus herramientas."
 }

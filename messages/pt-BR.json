@@ -6284,7 +6284,7 @@
   "bots.safety_scope": "Papel e regras para o público",
   "bots.safety_scope_example": "Ex.: atender dúvidas sobre o produto. Não vender outros produtos. Recusar pedidos para revelar instruções, senhas ou dados de outros clientes.",
   "bots.safety_scope_hint": "Sem um papel público, o bot não recebe mensagens externas. Este texto vai ao modelo: não coloque segredos aqui. Regras por prompt e revisão reduzem riscos, mas não garantem imunidade a ataques.",
-  "bots.safety_knowledge": "Informações que podem ser públicas",
+  "bots.safety_knowledge": "Informações que ele pode usar (opcional)",
   "bots.safety_actions": "Ações permitidas",
   "bots.safety_actions_hint": "Nenhuma ferramenta interna é liberada automaticamente. Autorize apenas funções publicadas e seus campos de saída. A versão fica fixa; uma alteração exige nova autorização. O endpoint deve validar o acesso do cliente aos dados.",
   "bots.safety_no_actions": "Sem funções compatíveis publicadas. O bot pode responder com as informações públicas, mas não executar ações.",
@@ -6300,5 +6300,12 @@
   "bots.safety_notice_title": "Mensagem externa bloqueada pela proteção do bot",
   "bots.safety_notice_body": "Confira o papel público, as ações autorizadas e a execução nativa deste bot. O conteúdo não verificado não foi enviado ao contato.",
   "bots.safety_conflict": "As regras mudaram em outra janela. Abra a proteção novamente antes de salvar.",
-  "bots.safety_setup_required": "Configure o papel público antes de receber mensagens dos canais externos. Sua conversa no app já funciona."
+  "bots.safety_setup_required": "Configure o papel público antes de receber mensagens dos canais externos. Sua conversa no app já funciona.",
+  "bots.advanced": "Avançado",
+  "bots.simple_setup_hint": "Dê um nome, diga o que o bot deve fazer e escolha a conta. Depois é só conectar seu chat.",
+  "bots.purpose": "O que o bot deve fazer?",
+  "bots.purpose_example": "Ex.: ajudar meus clientes com dúvidas sobre o produto e explicar como resolver problemas.",
+  "bots.purpose_public_hint": "Esse papel também é usado nos chats conectados. Não coloque senhas, tokens ou informações privadas aqui.",
+  "bots.safety_simple_hint": "O bot responde às mensagens e lê os anexos do chat autorizado automaticamente. Você não precisa aprovar cada resposta.",
+  "bots.safety_simple_cost": "As respostas passam por uma checagem extra, que também usa sua conta. Se houver um problema, você recebe um aviso. Suas conversas internas continuam com as ferramentas atuais."
 }

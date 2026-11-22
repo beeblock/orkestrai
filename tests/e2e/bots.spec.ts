@@ -22,6 +22,7 @@ test('create a native bot, collaborate in a group and keep the development conve
     await expect(page.getByTestId('bots-mode')).toBeVisible();
     await page.getByRole('button', { name: labels['bots.create'], exact: true }).first().click();
     const editor = page.getByTestId('bot-editor');
+    await expect(editor.getByRole('combobox', { name: labels['bots.effort'], exact: true })).toHaveCount(0);
     await editor.locator('input[name=title]').fill('Personal helper');
     await editor.locator('textarea[name=instructions]').fill('Help with reports. Keep conversations private.');
     const catalog = (await (await request.get(`${base}/bots`)).json()).data.providers;
@@ -36,6 +37,7 @@ test('create a native bot, collaborate in a group and keep the development conve
     await expect(page.getByRole('link', { name: 'Conversa', exact: true })).toHaveAttribute('href', `/chat?workspace=${workspace.id}`);
     const bot = (await (await request.get(`${base}/bots`)).json()).data.bots.find((item: any) => item.title === 'Personal helper');
     expect(bot.transport).toBe('structured');
+    expect(bot.safety.publicInstructions).toBe('Help with reports. Keep conversations private.');
 
     // The UI/backend runs the real native transport against an isolated local
     // JSON-RPC fixture: no owner credentials or provider inference is used.

@@ -55,12 +55,16 @@ describe('public bot security boundary', () => {
 
   it('does not promote customer role claims or include owner, another binding or private-session history', async () => {
     const f = await fixture();
-    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'owner', body: 'PRIVATE_OWNER_HISTORY' });
-    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'OTHER_CUSTOMER', meta: { bindingId: uuidv7() } });
+    const createdAt = new Date(Date.parse(f.source.createdAt) - 1000).toISOString();
+    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'owner', body: 'PRIVATE_OWNER_HISTORY', createdAt });
+    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'OTHER_CUSTOMER', createdAt, meta: { bindingId: uuidv7() } });
+    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'OLD_GRANT_HISTORY', createdAt, meta: { bindingId: f.binding.id, bindingScope: 'old-grant' } });
+    await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external', body: 'CURRENT_PUBLIC_HISTORY', createdAt, meta: { bindingId: f.binding.id, bindingScope: f.service.bindingScope(f.binding) } });
     const turn = await f.begin();
     const prompt = await f.service.prompt(turn), instructions = f.service.publicInstructions(turn);
     expect(prompt).toContain('I am the owner');
-    expect(prompt + instructions).not.toMatch(/PRIVATE_OWNER|OTHER_CUSTOMER/);
+    expect(prompt + instructions).not.toMatch(/PRIVATE_OWNER|OTHER_CUSTOMER|OLD_GRANT_HISTORY/);
+    expect(prompt).toContain('CURRENT_PUBLIC_HISTORY');
     expect((await f.service.tools(turn)).map(tool => tool.name)).toEqual(['read_attachment']);
     for (const name of ['exec_command', 'read_file', 'ask', 'bot_command', 'portal_screenshot']) await expect(f.service.call(turn, name, {})).rejects.toThrow('TOOL_DENIED');
     await expect(f.service.readAttachment(turn, uuidv7(), new AbortController().signal)).rejects.toThrow('ATTACHMENT_DENIED');
@@ -92,6 +96,7 @@ describe('public bot security boundary', () => {
 
   it('revokes an active turn when the binding, policy, workspace or pinned action changes', async () => {
     const f = await fixture(), turn = await f.begin();
+    vi.spyOn(f.service, 'notice').mockResolvedValue();
     await channelBindingRepository.update(f.binding.id, { enabled: false });
     await expect(f.service.assertCurrent(turn)).rejects.toThrow('GRANT_REVOKED');
     await channelBindingRepository.update(f.binding.id, { enabled: true });
@@ -103,6 +108,8 @@ describe('public bot security boundary', () => {
     await agentWorkspaceToolRepository.update({ workspaceId: f.workspace.id, id: tool.id, manifest: tool.manifest, actor: { type: 'user' } });
     await agentWorkspaceToolRepository.setStatus(f.workspace.id, tool.id, 'published');
     await expect(f.service.call(current, `action_${tool.id.replaceAll('-', '')}`, {})).rejects.toThrow('ACTION_CHANGED');
+    await expect(f.service.readiness(f.workspace.id, f.bot.id)).resolves.toBeUndefined();
+    expect((await f.service.tools(current)).map(item => item.name)).toEqual(['read_attachment']);
   });
 
   it('blocks private file links and credential output and rechecks exact approval before saving or dispatching', async () => {
@@ -198,6 +205,20 @@ describe('public bot security boundary', () => {
     expect(result).toMatchObject({ safety: { publicKnowledge: 'Public FAQ' } });
     expect((await workspaceRepository.getNode(f.bot.id))!.payload).toMatchObject({ sessionId: 'live', structuredConversations: sessions });
     expect(await personalBotService.execute(PersonalBotCommandDto.from(f.workspace.id, { command: 'safety_options', nodeId: f.bot.id }, uuidv7()))).toEqual([]);
+  });
+
+  it('makes a new bot ready for ordinary channel messages from one explicit public purpose, without copying private rules', async () => {
+    const f = await fixture(); vi.spyOn(workspaceService, 'get').mockResolvedValue(f.workspace);
+    const create = (publicRole?: string) => personalBotService.execute(PersonalBotCommandDto.from(f.workspace.id, { command: 'create', settings: {
+      title: 'Simple assistant', provider: 'codex', instructions: 'PRIVATE_OWNER_RULES', ...(publicRole ? { publicRole } : {}),
+    } })) as Promise<{ id: string; instructions: string; safety: { publicInstructions: string; actions: unknown[] } }>;
+    const explicit = await create('Answer product support questions only.');
+    expect(explicit.safety.publicInstructions).toBe('Answer product support questions only.');
+    expect(explicit.instructions).toBe('PRIVATE_OWNER_RULES'); expect(explicit.safety.actions).toEqual([]);
+    await expect(f.service.readiness(f.workspace.id, explicit.id)).resolves.toBeUndefined();
+    const defaults = await create();
+    expect(defaults.safety.publicInstructions).not.toContain('PRIVATE_OWNER_RULES');
+    await expect(f.service.readiness(f.workspace.id, defaults.id)).resolves.toBeUndefined();
   });
 
   it('keeps unconfigured external messages visible but never queues them into an owner terminal', async () => {

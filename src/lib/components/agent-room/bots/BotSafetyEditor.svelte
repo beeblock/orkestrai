@@ -15,7 +15,9 @@
 
   let { workspaceId, bot, onSaved, onClose }: { workspaceId: string; bot: PersonalBotSummary; onSaved: () => void; onClose: () => void } = $props();
   type Action = { id: string; name: string; revision: number; outputFields: string[] };
-  let options = $state<Action[]>([]), loading = $state(true), saving = $state(false), error = $state('');
+  let options = $state<Action[]>([]), loading = $state(false), saving = $state(false), error = $state('');
+  let advanced = $state(false), loaded = false;
+  const controller = new AbortController();
   const form = superForm(defaults(bot.safety, zod(botSafetySchema)), { SPA: true, dataType: 'json', validators: zod(botSafetySchema),
     async onUpdate({ form: validated }) {
       if (!validated.valid || saving) return;
@@ -28,14 +30,17 @@
     },
   });
   const { form: data, enhance, allErrors } = form;
-  onMount(() => {
-    const controller = new AbortController();
+  onMount(() => () => controller.abort());
+  function showAdvanced() {
+    advanced = !advanced;
+    if (!advanced || loaded || loading) return;
+    loading = true;
     void botApi<Action[]>(`/api/agent-room/workspaces/${workspaceId}/bots`, { command: 'safety_options', nodeId: bot.id }, controller.signal)
-      .then(items => { if (!controller.signal.aborted) options = items; })
+      .then(items => { if (!controller.signal.aborted) { options = items; loaded = true; } })
       .catch(() => { if (!controller.signal.aborted) error = m['bots.error'](); })
       .finally(() => { if (!controller.signal.aborted) loading = false; });
-    return () => controller.abort();
-  });
+  }
+
   function toggleAction(action: Action, enabled: boolean) {
     $data.actions = enabled ? [...$data.actions, { toolId: action.id, revision: action.revision, outputFields: [], artifactFields: [] }]
       : $data.actions.filter(item => item.toolId !== action.id);
@@ -59,11 +64,14 @@
     </Dialog.Header>
     <form use:enhance class="flex min-h-0 flex-col gap-4">
       <div class="min-h-0 space-y-5 overflow-y-auto px-1 pb-2">
-        <div class="rounded-lg border border-[var(--app-border)] bg-[var(--app-canvas)] p-3 text-sm leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_private_hint']()}</div>
+        <p class="text-sm leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_simple_hint']()}</p>
         {#if bot.transport !== 'structured'}<p role="alert" class="text-sm text-[var(--app-danger)]">{m['bots.safety_structured_required']()}</p>{/if}
         <label class="grid gap-2 text-sm font-medium">{m['bots.safety_scope']()}<Textarea name="publicInstructions" bind:value={$data.publicInstructions} maxlength={6000} rows={5} placeholder={m['bots.safety_scope_example']()} /></label>
-        <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_scope_hint']()}</p>
+        <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.purpose_public_hint']()}</p>
         <label class="grid gap-2 text-sm font-medium">{m['bots.safety_knowledge']()}<Textarea name="publicKnowledge" bind:value={$data.publicKnowledge} maxlength={24000} rows={4} /></label>
+        <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_simple_cost']()}</p>
+        <Button type="button" variant="ghost" size="sm" class="justify-start" aria-expanded={advanced} onclick={showAdvanced}>{m['bots.advanced']()}</Button>
+        {#if advanced}
         <section class="space-y-3 border-t border-[var(--app-border)] pt-4" aria-label={m['bots.safety_actions']()}>
           <h3 class="text-sm font-medium">{m['bots.safety_actions']()}</h3><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_actions_hint']()}</p>
           {#if loading}<LoaderCircle size={18} class="animate-spin" />{:else if !options.length}<p class="text-sm text-[var(--app-text-muted)]">{m['bots.safety_no_actions']()}</p>{/if}
@@ -86,10 +94,11 @@
           {/each}
         </div>
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_review_cost']()}</p>
+        {/if}
         {#if $allErrors.length}<p role="alert" class="text-sm text-[var(--app-danger)]">{m['bots.safety_invalid']()}</p>{/if}
         {#if error}<p role="alert" class="flex gap-2 text-sm text-[var(--app-danger)]"><CircleAlert size={16} />{error}</p>{/if}
       </div>
-      <Dialog.Footer class="shrink-0 border-t border-[var(--app-border)] pt-4"><Button variant="outline" type="button" onclick={onClose}>{m['bots.cancel']()}</Button><Button type="submit" disabled={loading || saving}>{#if saving}<LoaderCircle class="animate-spin" size={15} />{/if}{m['bots.save']()}</Button></Dialog.Footer>
+      <Dialog.Footer class="shrink-0 border-t border-[var(--app-border)] pt-4"><Button variant="outline" type="button" onclick={onClose}>{m['bots.cancel']()}</Button><Button type="submit" disabled={saving}>{#if saving}<LoaderCircle class="animate-spin" size={15} />{/if}{m['bots.save']()}</Button></Dialog.Footer>
     </form>
   </Dialog.Content>
 </Dialog.Root>

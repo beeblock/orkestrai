@@ -6,6 +6,8 @@ import { botSafetySchema, type BotSafetySettings } from './bot-safety.schema.js'
 export const personalBotSettingsSchema = z.object({
   title: z.string().trim().min(1).max(48),
   instructions: z.string().trim().min(1).max(24_000),
+  /** Explicitly public purpose; never inferred from existing private instructions. */
+  publicRole: z.string().trim().min(1).max(6_000).optional(),
   provider: z.string().trim().min(1).max(60),
   model: z.string().trim().max(160).nullable().default(null),
   effort: z.string().trim().max(24).nullable().default(null),
@@ -22,7 +24,7 @@ export const botGroupSettingsSchema = z.object({
 
 export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('create'), settings: personalBotSettingsSchema }).strict(),
-  z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema }).strict(),
+  z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema.omit({ publicRole: true }) }).strict(),
   z.object({ command: z.literal('remove'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_options'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_update'), nodeId: z.string().uuid(), revision: z.number().int().min(0), settings: botSafetySchema }).strict(),

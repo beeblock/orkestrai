@@ -105,8 +105,14 @@ notification; temporary outages notify after one minute. Open the item to return
 to Bots and relink by QR when required. Reconnection resolves the item without
 waking a model, and deliberate disconnects do not raise alarms.
 
-**External channel protection:** open the selected bot’s protection settings and
-write its public role and knowledge. Existing connections require this explicit
+**Simple bot setup:** enter a name, a public purpose and an account, then connect
+your chat. The public purpose is configured automatically; ordinary messages and
+attachments do not ask for per-response approval. Advanced contains execution
+settings and optional detailed function grants. Existing private instructions
+are never copied into a public role.
+
+**External channel protection:** open the selected bot’s protection settings to
+adjust its public role and knowledge. Existing connections require this explicit
 configuration; unconfigured or unsupported messages stay visible and raise an
 Attention Center notice instead of entering an unrestricted terminal. In-app
 owner chats keep their existing account, context and full bridge.

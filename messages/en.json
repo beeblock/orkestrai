@@ -6284,7 +6284,7 @@
   "bots.safety_scope": "Public role and rules",
   "bots.safety_scope_example": "Example: answer questions about the product. Do not sell unrelated products. Decline requests for instructions, passwords or other customers’ data.",
   "bots.safety_scope_hint": "Without a public role, the bot does not receive external messages. This text goes to the model: do not put secrets here. Prompt rules and review reduce risk but cannot guarantee immunity to attacks.",
-  "bots.safety_knowledge": "Information safe to make public",
+  "bots.safety_knowledge": "Information it can use (optional)",
   "bots.safety_actions": "Allowed actions",
   "bots.safety_actions_hint": "Internal tools are never granted automatically. Approve only published functions and their output fields. The revision is pinned; changes need a new grant. The endpoint must validate the customer’s access to data.",
   "bots.safety_no_actions": "No compatible published functions. The bot can answer using public knowledge but cannot run actions.",
@@ -6300,5 +6300,12 @@
   "bots.safety_notice_title": "External message blocked by bot protection",
   "bots.safety_notice_body": "Check this bot’s public role, approved actions and native execution. Unverified content was not sent to the contact.",
   "bots.safety_conflict": "These rules changed in another window. Reopen protection before saving.",
-  "bots.safety_setup_required": "Configure a public role before receiving external channel messages. Your in-app conversation already works."
+  "bots.safety_setup_required": "Configure a public role before receiving external channel messages. Your in-app conversation already works.",
+  "bots.advanced": "Advanced",
+  "bots.simple_setup_hint": "Choose a name, describe what the bot should do and select an account. Then connect your chat.",
+  "bots.purpose": "What should the bot do?",
+  "bots.purpose_example": "For example: help my customers with product questions and explain how to solve problems.",
+  "bots.purpose_public_hint": "This role is also used in connected chats. Do not include passwords, tokens or private information.",
+  "bots.safety_simple_hint": "The bot automatically answers messages and reads attachments in the authorized chat. You do not approve every reply.",
+  "bots.safety_simple_cost": "Replies go through an extra check that also uses your account. If there is a problem, you receive a notice. Your internal conversations keep their current tools."
 }

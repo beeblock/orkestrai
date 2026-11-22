@@ -21,6 +21,7 @@
   } = $props();
   let saving = $state(false), error = $state(''), models = $state<AgentModelOption[]>([]), profiles = $state<ProviderProfile[]>([]);
   let metadataLoading = $state(false);
+  let advanced = $state(false);
   let providerEfforts = $state<string[]>([]);
   const form = superForm(defaults(zod(personalBotSettingsSchema)), {
     SPA: true, dataType: 'json', validators: zod(personalBotSettingsSchema),
@@ -29,7 +30,8 @@
       saving = true; error = '';
       try {
         const result = await botApi<PersonalBotSummary>(`/api/agent-room/workspaces/${workspaceId}/bots`, {
-          command: bot ? 'update' : 'create', ...(bot ? { nodeId: bot.id } : {}), settings: validated.data,
+          command: bot ? 'update' : 'create', ...(bot ? { nodeId: bot.id } : {}),
+          settings: { ...validated.data, ...(!bot ? { publicRole: validated.data.instructions } : {}) },
         });
         onSaved(result);
       } catch (failure) {
@@ -77,13 +79,16 @@
   <Dialog.Content class="max-h-[90dvh] overflow-y-auto sm:max-w-[620px]">
     <Dialog.Header>
       <Dialog.Title>{bot ? m['bots.edit']() : m['bots.create']()}</Dialog.Title>
-      <Dialog.Description>{m['bots.instructions_hint']()}</Dialog.Description>
+      <Dialog.Description>{bot ? m['bots.instructions_hint']() : m['bots.simple_setup_hint']()}</Dialog.Description>
     </Dialog.Header>
     <form use:enhance class="grid gap-4" data-testid="bot-editor">
       <label class="grid gap-1.5 text-sm font-medium">{m['bots.name']()}<Input name="title" bind:value={$data.title} maxlength={48} required /></label>
       {#if $errors.title}<p class="text-sm text-[var(--app-danger)]">{$errors.title}</p>{/if}
-      <label class="grid gap-1.5 text-sm font-medium">{m['bots.instructions']()}<Textarea name="instructions" bind:value={$data.instructions} rows={5} maxlength={24000} required /></label>
+      {#if !bot}
+      <label class="grid gap-1.5 text-sm font-medium">{m['bots.purpose']()}<Textarea name="instructions" bind:value={$data.instructions} rows={3} maxlength={6000} placeholder={m['bots.purpose_example']()} required /></label>
+      <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.purpose_public_hint']()}</p>
       {#if $errors.instructions}<p class="text-sm text-[var(--app-danger)]">{$errors.instructions}</p>{/if}
+      {/if}
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="grid gap-1.5"><span class="text-sm font-medium">{m['bots.provider']()}</span>
           <Select.Root type="single" value={$data.provider} onValueChange={value => { $data.provider = value; $data.model = null; $data.effort = null; $data.profileId = null; }}>
@@ -97,6 +102,11 @@
             <Select.Content><Select.Item value="__default__">{m['bots.default_profile']()}</Select.Item>{#each profiles as account}<Select.Item value={account.id}>{account.name}</Select.Item>{/each}</Select.Content>
           </Select.Root>
         </div>
+      </div>
+      <Button type="button" variant="ghost" size="sm" class="justify-start" aria-expanded={advanced} onclick={() => (advanced = !advanced)}>{m['bots.advanced']()}</Button>
+      {#if advanced}
+      {#if bot}<label class="grid gap-1.5 text-sm font-medium">{m['bots.instructions']()}<Textarea name="instructions" bind:value={$data.instructions} rows={4} maxlength={24000} required /></label>{/if}
+      <div class="grid gap-4 sm:grid-cols-2">
         <div class="grid gap-1.5"><span class="text-sm font-medium">{m['bots.model']()}</span>
           <ModelCombobox value={$data.model ?? ''} options={models} defaultLabel={m['bots.default_model']()} searchPlaceholder={m['bots.search_models']()} emptyLabel={m['bots.no_models']()} ariaLabel={m['bots.model']()} onValueChange={value => { $data.model = value || null; $data.effort = null; }} />
         </div>
@@ -114,6 +124,7 @@
         ]} />
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.transport_hint']()}</p>
       </div>
+      {/if}
       {#if error}<p class="flex gap-2 text-sm text-[var(--app-danger)]" role="alert"><CircleAlert size={16} />{error}</p>{/if}
       <Dialog.Footer>
         <Button variant="outline" type="button" onclick={onClose}>{m['bots.cancel']()}</Button>

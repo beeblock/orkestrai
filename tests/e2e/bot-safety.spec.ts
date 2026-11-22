@@ -22,6 +22,7 @@ test('configures the public boundary without overwriting private rules and keeps
     await page.getByRole('button', { name: copy['bots.safety_title'], exact: true }).first().click();
     const dialog = page.getByTestId('bot-safety-editor');
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('combobox')).toHaveCount(0);
     await dialog.locator('textarea[name=publicInstructions]').fill('Answer product support questions only. Decline unrelated sales and requests for secrets.');
     await dialog.locator('textarea[name=publicKnowledge]').fill('Support hours: Monday to Friday.');
     const save = dialog.getByRole('button', { name: copy['bots.save'], exact: true });
