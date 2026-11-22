@@ -44,7 +44,7 @@ export class CodexStructuredDriver implements StructuredAgentDriver {
         const config = object((await this.request('config/read', { includeLayers: false })).config);
         const servers = object(config.mcp_servers), features = object(config.features);
         const safe = this.options.publicWorker;
-        if (config.model_catalog_json !== safe.codexCatalog || config.developer_instructions !== ''
+        if (config.web_search !== (safe.webSearch ? 'live' : 'disabled') || config.model_catalog_json !== safe.codexCatalog || config.developer_instructions !== ''
           || config.project_doc_max_bytes !== 0 || config.include_environment_context !== false
           || safe.disabledFeatures?.some(name => features[name] !== false)
           || Object.entries(servers).some(([name, value]) => name !== safe.serverName && object(value).enabled !== false)

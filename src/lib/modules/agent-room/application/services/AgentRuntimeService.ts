@@ -1,3 +1,4 @@
+import { runtimeUsageBlock } from '../../domain/runtime-usage.js';
 import { taskExecutionService } from './TaskExecutionService.js';
 import { taskExecutionRepository } from '../../infrastructure/repositories/TaskExecutionRepository.js';
 import { uuidv7 } from '@beeblock/svelar/support';
@@ -15,7 +16,6 @@ import { agentInboxService } from './AgentInboxService.js';
 import { autonomyPolicyService } from './AutonomyPolicyService.js';
 import { controlCenterService } from './ControlCenterService.js';
 import { usageService } from './UsageService.js';
-import { usageRoutingId } from '../../domain/usage-routing.js';
 import { attentionService } from './AttentionService.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 
@@ -82,6 +82,7 @@ function leaderWorkFingerprint(tasks: AgentBoardTask[]): string {
 }
 
 export class AgentRuntimeService {
+  private usageSignals = new Map<string, string>();
   private orphanRepairsAt = new Map<string, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly idleChecks = new Set<string>();
@@ -97,7 +98,8 @@ export class AgentRuntimeService {
     const session = payload.sessionId ? ptySessionManager.get(payload.sessionId) : null;
     const activeRuns = await this.activeRuns(nodeId);
     const settings = config(payload);
-    const state = payload.agentRuntimeLastError ? 'error' : session && !session.exited ? 'awake' : settings.mode === 'persistent' ? 'starting' : 'sleeping';
+    const usageBlock = this.usageBlock(payload);
+    const state = payload.agentRuntimeLastError ? 'error' : session && !session.exited ? 'awake' : usageBlock ? 'blocked' : settings.mode === 'persistent' ? 'starting' : 'sleeping';
     return {
       workspaceId,
       nodeId,
@@ -110,6 +112,7 @@ export class AgentRuntimeService {
       lastWakeAt: payload.agentRuntimeLastWakeAt ?? null,
       lastSleepAt: payload.agentRuntimeLastSleepAt ?? null,
       lastError: payload.agentRuntimeLastError ?? null,
+      usageBlock,
       activeRuns,
     };
   }
@@ -210,6 +213,15 @@ export class AgentRuntimeService {
     return this.status(workspaceId, nodeId);
   }
 
+  usageBlock(payload: TerminalNodePayload) {
+    if (payload.sessionId) {
+      const session = ptySessionManager.get(payload.sessionId);
+      if (session && !session.exited) return null;
+    }
+    const cached = payload.provider ? usageService.cachedAccount(payload.provider, payload.profileId ?? null) : null;
+    return runtimeUsageBlock(payload, cached ? [cached] : []);
+  }
+
   async assertAutomaticWorkAllowed(nodeId: string, runId?: string): Promise<void> {
     const node = await workspaceRepository.getNode(nodeId);
     if (!node || node.type !== 'terminal') throw new Error('AGENT_NOT_FOUND');
@@ -219,27 +231,35 @@ export class AgentRuntimeService {
       const position = active.findIndex((run) => String(run.getAttribute('id')) === runId);
       if (position < 0 || position >= settings.concurrency) throw new AgentRuntimePolicyError('AGENT_CONCURRENCY_LIMIT');
     }
-    const { provider, profileId } = node.payload as TerminalNodePayload;
+    const { provider } = node.payload as TerminalNodePayload;
     if (!provider) return;
     const rows = await usageService.getAll(false).catch(() => []);
     // Only the account this agent runs on: another profile of the same provider near its limit does not stop it.
-    const account = usageRoutingId({ provider, profileId: profileId ?? null });
-    const relevant = rows.filter((row) => usageRoutingId(row) === account && !row.error);
-    const exhausted = relevant.flatMap((row) => row.windows.filter((window) => window.usedPercent >= settings.usageLimit));
-    if (exhausted.length) {
+    const blocked = runtimeUsageBlock(node.payload as TerminalNodePayload, rows);
+    if (blocked) {
+      const signal = JSON.stringify(blocked);
+      if (this.usageSignals.get(nodeId) !== signal) {
+        if (this.usageSignals.size >= 1024) this.usageSignals.delete(this.usageSignals.keys().next().value!);
+        this.usageSignals.set(nodeId, signal);
+        broadcast(node.workspaceId);
+      }
       // Automatic work stops here; tell the owner once instead of failing quietly.
       await attentionService.raiseOnce({
         workspaceId: node.workspaceId,
         nodeId,
         category: 'usage',
         severity: 'warning',
-        title: `${node.title ?? provider}: ${Math.round(Math.max(...exhausted.map((window) => window.usedPercent)))}%`,
+        title: `${node.title ?? provider}: ${blocked.usedPercent}%`,
         body: `${provider} · ${settings.usageLimit}%`,
         sourceType: 'usage_limit',
         sourceId: nodeId,
         correlationId: `usage_limit:${nodeId}`,
       }).catch(() => undefined);
       throw new AgentRuntimePolicyError('AGENT_USAGE_LIMIT');
+    }
+    if (this.usageSignals.delete(nodeId)) {
+      await attentionService.resolveSource(node.workspaceId, 'usage_limit', nodeId);
+      broadcast(node.workspaceId);
     }
   }
 

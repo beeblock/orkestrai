@@ -15,7 +15,7 @@ export type StructuredAgentOptions = {
   launchArgs: string[];
   bridgeMcp: { command: string; args: string[]; env?: Record<string, string> };
   /** Issued only by the public bot boundary, never deserialized from a request. */
-  publicWorker?: { serverName: string; codexCatalog?: string; disabledServers?: string[]; disabledFeatures?: string[] };
+  publicWorker?: { serverName: string; webSearch?: boolean; codexCatalog?: string; disabledServers?: string[]; disabledFeatures?: string[] };
   session: (conversationKey: string) => string | null;
   saveSession: (conversationKey: string, sessionId: string) => Promise<void>;
 };

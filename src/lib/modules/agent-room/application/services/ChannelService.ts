@@ -121,11 +121,11 @@ function envelopeMessage(envelope: AgentMessageEnvelope): ChannelMessage {
  * boundary); agents post and ask the owner through the bridge.
  */
 export class ChannelService {
-  async modelFailure(workspaceId: string, messageId: string, phase: 'start' | 'turn'): Promise<void> {
+  async modelFailure(workspaceId: string, messageId: string, phase: 'start' | 'turn', errorCode?: string): Promise<void> {
     const updated = await Connection.transaction(async () => {
       const current = await channelRepository.find(workspaceId, messageId);
       if (!current || !['owner', 'external'].includes(current.authorKind)) return null;
-      return channelRepository.mergeMeta(workspaceId, messageId, { modelFailure: phase });
+      return channelRepository.mergeMeta(workspaceId, messageId, { modelFailure: phase, ...(/^BOT_PUBLIC_[A-Z_]+$/.test(errorCode ?? '') ? { modelFailureCode: errorCode } : {}) });
     });
     if (updated) broadcast(updated);
   }
@@ -146,7 +146,10 @@ export class ChannelService {
     if (previous) return previous;
     // An external answer must carry the server's exact post-review approval.
     // A generic channel_post or a recovered old draft cannot mint one.
-    const publicApproval = original.authorKind === 'external'
+    const safety = (await import('./BotSafetyService.js')).botSafetyService;
+    const ownerSource = original.authorKind === 'external' && typeof original.meta.bindingId === 'string'
+      ? await safety.ownerSource(workspaceId, nodeId, original.meta.bindingId, sourceId) : null;
+    let publicApproval = original.authorKind === 'external' && !ownerSource
       ? await (await import('./BotSafetyService.js')).botSafetyService.approved(workspaceId, nodeId, sourceId, body, turnId) : null;
     const attachments: WorkspaceAttachment[] = [];
     let visible = body;
@@ -169,6 +172,12 @@ export class ChannelService {
       const bytes = await integrationExecutionService.readBotArtifact(workspaceId, nodeId, attachment.path!);
       artifacts.push({ path: attachment.path!, name: attachment.name, mimeType: attachment.mimeType!, image: false, sha256: createHash('sha256').update(bytes).digest('hex') });
     }
+    } catch (error) {
+      for (const attachment of attachments) await workspaceAttachmentService.remove(workspaceId, WorkspaceAttachmentDeleteDto.fromAttachment(attachment)).catch(() => undefined);
+      throw error;
+    }
+    try {
+      if (ownerSource) publicApproval = await safety.approveOwner(workspaceId, nodeId, sourceId, clippedBody(visible), turnId, artifacts);
     } catch (error) {
       for (const attachment of attachments) await workspaceAttachmentService.remove(workspaceId, WorkspaceAttachmentDeleteDto.fromAttachment(attachment)).catch(() => undefined);
       throw error;
@@ -491,7 +500,7 @@ export class ChannelService {
   async postExternal(
     workspaceId: string,
     nodeId: string,
-    input: { body: string; via: 'telegram' | 'slack' | 'whatsapp'; bindingId: string; expectedBindingScope?: string; senderId?: string; sender: string; externalId: string; attachments?: readonly WorkspaceAttachment[] },
+    input: { body: string; via: 'telegram' | 'slack' | 'whatsapp'; bindingId: string; expectedBindingScope?: string; ownerProof?: string; senderId?: string; sender: string; externalId: string; attachments?: readonly WorkspaceAttachment[] },
   ): Promise<ChannelMessage> {
     const attachments = input.attachments ?? [];
     const body = ownerBody(input.body, attachments);
@@ -500,8 +509,10 @@ export class ChannelService {
     if (!node || node.workspaceId !== workspaceId || node.type !== 'terminal') throw new Error('PERSONAL_BOT_NOT_FOUND');
     const structured = (node.payload as TerminalNodePayload).agentTransport === 'structured';
     const { botSafetyService } = await import('./BotSafetyService.js');
+    const policy = botSafetyService.settings((node.payload as TerminalNodePayload).botSafety);
+    const ownerCandidate = policy.ownerMessages && (Boolean(input.ownerProof) || policy.ownerSenders.some(owner => owner.kind === input.via && owner.senderId === input.senderId));
     let publicBlocked = false;
-    try { await botSafetyService.readiness(workspaceId, nodeId); }
+    try { if (!ownerCandidate) await botSafetyService.readiness(workspaceId, nodeId); }
     catch (error) { publicBlocked = true; await botSafetyService.notice(workspaceId, nodeId, input.bindingId, error); }
     const channel = directChannel(nodeId);
     const externalId = input.externalId.slice(0, 120);
@@ -529,7 +540,7 @@ export class ChannelService {
           authorKind: 'external',
           kind: 'text',
           body,
-          meta: { via: input.via, sender: input.sender.slice(0, 120), bindingId: input.bindingId, bindingScope: input.expectedBindingScope ?? '', senderId: input.senderId?.slice(0, 200) ?? '', externalId, ...(publicBlocked ? { publicBotBlocked: true } : {}), ...(attachments.length ? { attachments } : {}) },
+          meta: { via: input.via, sender: input.sender.slice(0, 120), bindingId: input.bindingId, bindingScope: input.expectedBindingScope ?? '', senderId: input.senderId?.slice(0, 200) ?? '', externalId, ...(input.ownerProof ? { ownerProof: input.ownerProof } : {}), ...(ownerCandidate ? { ownerIntent: true } : {}), ...(publicBlocked ? { publicBotBlocked: true } : {}), ...(attachments.length ? { attachments } : {}) },
         });
         created = !stored;
         if (publicBlocked) return saved;

@@ -1,3 +1,4 @@
+import type { AgentUsageBlock } from './agent-runtime.schema.js';
 import { z } from 'zod/v3';
 import { workspaceAttachmentSchema, MAX_WORKSPACE_ATTACHMENTS } from './workspaceAttachmentSchemas.js';
 import { createChannelBindingSchema, updateChannelBindingSchema } from './channel.schema.js';
@@ -43,6 +44,7 @@ export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('preset_list'), locale: z.enum(botPresetLocales).default('en') }).strict(),
   z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema.omit({ publicRole: true }) }).strict(),
   z.object({ command: z.literal('remove'), nodeId: z.string().uuid() }).strict(),
+  z.object({ command: z.literal('owner_senders'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_options'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_update'), nodeId: z.string().uuid(), revision: z.number().int().min(0), settings: botSafetySchema }).strict(),
   z.object({ command: z.literal('group_create'), settings: botGroupSettingsSchema }).strict(),
@@ -67,6 +69,7 @@ export type PersonalBotSummary = {
   id: string; title: string; provider: string; model: string | null; effort: string | null;
   profileId: string | null; instructions: string; transport: 'terminal' | 'structured'; sessionId: string | null;
   runtimeMode: 'interactive' | 'on_demand' | 'persistent';
+  usageBlock?: AgentUsageBlock | null;
   safety: BotSafetySettings; safetyRevision: number;
 };
 export type PersonalBotGroup = BotGroupSettings & { id: string; workspaceId: string; revision: number; archived: boolean };

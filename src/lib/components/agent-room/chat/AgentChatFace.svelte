@@ -132,7 +132,7 @@
                 {#if personalBot && message.meta.publicBotBlocked}
                   <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{m['bots.safety_notice_body']()}</p>
                 {:else if personalBot && message.meta.modelFailure}
-                  <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{message.meta.modelFailure === 'start' ? m['bots.model_start_failed']() : m['bots.model_turn_failed']()}</p>
+                  <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{typeof message.meta.modelFailureCode === 'string' && ['BOT_PUBLIC_OUTPUT_BLOCKED', 'BOT_PUBLIC_REPLY_UNAPPROVED', 'BOT_PUBLIC_GRANT_REVOKED', 'BOT_PUBLIC_ARTIFACT_DENIED', 'BOT_PUBLIC_NOT_CONFIGURED', 'BOT_PUBLIC_ACTION_LIMIT', 'BOT_PUBLIC_RATE_LIMIT'].includes(message.meta.modelFailureCode) ? m['bots.model_safety_failed']() : message.meta.modelFailure === 'start' ? m['bots.model_start_failed']() : m['bots.model_turn_failed']()}</p>
                 {/if}
               </div>
             {/if}

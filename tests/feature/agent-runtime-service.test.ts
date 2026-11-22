@@ -262,6 +262,39 @@ describe('AgentRuntimeService', () => {
     await expect(agentRuntimeService.wake(workspace.id, node.id, true)).resolves.toMatchObject({ state: 'awake' });
   });
 
+  it('exposes a cached quota block to runtime and bots without fetching usage per UI poll', async () => {
+    const { workspace, node } = await setup();
+    const payload = { ...node.payload, personalBot: true, agentTransport: 'structured' as const, agentRuntimeMode: 'on_demand' as const, agentRuntimeUsageLimit: 95 };
+    await workspaceRepository.updateNode(node.id, { payload });
+    const usage = { provider: 'runtime-test', plan: null, error: null, fetchedAt: new Date().toISOString(),
+      windows: [{ kind: 'weekly' as const, label: 'Weekly', usedPercent: 97, resetsAt: null }] };
+    vi.spyOn(usageService, 'cachedAccount').mockReturnValue(usage);
+    const fetch = vi.spyOn(usageService, 'getAll');
+    expect(await agentRuntimeService.status(workspace.id, node.id)).toMatchObject({ state: 'blocked', usageBlock: { usedPercent: 97, limit: 95 } });
+    const { personalBotService } = await import('$lib/modules/agent-room/application/services/PersonalBotService.js');
+    expect((await personalBotService.list(workspace.id)).bots[0]).toMatchObject({ usageBlock: { usedPercent: 97, limit: 95 } });
+    expect(fetch).not.toHaveBeenCalled();
+    vi.mocked(usageService.cachedAccount).mockReturnValue(null);
+    expect(await agentRuntimeService.status(workspace.id, node.id)).toMatchObject({ state: 'sleeping', usageBlock: null });
+  });
+
+  it('broadcasts a quota block once and clears the notice after the selected account can work', async () => {
+    const { workspace, node } = await setup();
+    const usage = { provider: 'runtime-test', plan: null, error: null, fetchedAt: new Date().toISOString(), windows: [{ kind: 'weekly' as const, label: 'Weekly', usedPercent: 97, resetsAt: null }] };
+    const get = vi.spyOn(usageService, 'getAll').mockResolvedValue([usage]);
+    const send = vi.fn(), state = globalThis as typeof globalThis & { __orkestraiBroadcast?: (frame: unknown) => void };
+    const previous = state.__orkestraiBroadcast; state.__orkestraiBroadcast = send;
+    try {
+      const service = new AgentRuntimeService();
+      await expect(service.assertAutomaticWorkAllowed(node.id)).rejects.toMatchObject({ code: 'AGENT_USAGE_LIMIT' });
+      await expect(service.assertAutomaticWorkAllowed(node.id)).rejects.toMatchObject({ code: 'AGENT_USAGE_LIMIT' });
+      expect(send.mock.calls.filter(([frame]) => frame.type === 'workspaceChanged')).toHaveLength(1);
+      get.mockResolvedValue([{ ...usage, windows: [{ ...usage.windows[0], usedPercent: 20 }] }]);
+      await service.assertAutomaticWorkAllowed(node.id);
+      expect(send.mock.calls.filter(([frame]) => frame.type === 'workspaceChanged')).toHaveLength(2);
+    } finally { state.__orkestraiBroadcast = previous; }
+  });
+
   it('starts persistent agents immediately when the policy allows it', async () => {
     const { workspace, node } = await setup();
     vi.spyOn(usageService, 'getAll').mockResolvedValue([]);

@@ -4,8 +4,9 @@ import type { StructuredAgentOptions } from '$lib/modules/agent-room/application
 import type { StructuredTurn } from '$lib/modules/agent-room/infrastructure/pty/StructuredAgentProcess.ts';
 import { publicWorkerEnvironment } from '$lib/modules/agent-room/application/adapters/public-bot-worker.js';
 
-const state = vi.hoisted(() => ({ begin: vi.fn(), prompt: vi.fn(), tools: vi.fn(), assertCurrent: vi.fn(), call: vi.fn(), readAttachment: vi.fn(),
+const state = vi.hoisted(() => ({ ownerSource: vi.fn(), begin: vi.fn(), prompt: vi.fn(), tools: vi.fn(), assertCurrent: vi.fn(), call: vi.fn(), readAttachment: vi.fn(),
   publicInstructions: vi.fn(), validateReply: vi.fn(), approve: vi.fn(), notice: vi.fn(), prepare: vi.fn() }));
+vi.mock('$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js', () => ({ channelRepository: { find: async () => null } }));
 vi.mock('$lib/modules/agent-room/application/services/BotSafetyService.js', () => ({ botSafetyService: state }));
 vi.mock('$lib/modules/agent-room/application/adapters/public-bot-worker.js', async original => ({ ...await original(), preparePublicWorker: state.prepare }));
 
@@ -16,12 +17,32 @@ describe('public turn runtime versus owner runtime', () => {
   const turn = (): StructuredTurn => ({ prompt: 'POISONED BRIDGE PROMPT', conversationKey: 'binding:binding', messageId: 'turn-id', publicOrigin: { type: 'external', bindingId: 'binding', channelMessageId: 'source' },
     signal: new AbortController().signal, output: vi.fn(), accepted: vi.fn() });
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.clearAllMocks(); state.ownerSource.mockResolvedValue(null);
     state.begin.mockResolvedValue({ workspaceId: 'workspace', nodeId: 'bot', bindingId: 'binding', source: { body: 'customer question' }, policy: { publicInstructions: 'Public scope', publicKnowledge: '' } });
     state.prompt.mockResolvedValue('CUSTOMER_DATA_ONLY'); state.tools.mockResolvedValue([]); state.publicInstructions.mockReturnValue('PUBLIC_RULES');
     state.assertCurrent.mockResolvedValue(undefined); state.approve.mockResolvedValue(undefined); state.notice.mockResolvedValue(undefined);
     state.prepare.mockImplementation(async (_provider, _owner, _proxy, instructions) => ({ options: { ...options, instructions, publicWorker: { serverName: 'public' }, session: () => null }, close: vi.fn() }));
   });
+  it('uses the native owner tools for a server-authenticated phone command without a public reviewer', async () => {
+    state.ownerSource.mockResolvedValue({ id: 'source' });
+    const run = vi.fn(async (_input: StructuredTurn) => 'Native image and routine completed');
+    const create = vi.fn(() => ({ run, close: vi.fn() }));
+    const driver = new BotStructuredDriver('claude', options, create);
+    expect(await driver.run(turn())).toBe('Native image and routine completed');
+    expect(create).toHaveBeenCalledWith(options);
+    expect(run.mock.calls[0][0].prompt).toContain('Authenticated owner command');
+    expect(state.begin).not.toHaveBeenCalled(); expect(state.prepare).not.toHaveBeenCalled();
+    expect(state.ownerSource).toHaveBeenCalledTimes(2);
+    await driver.close();
+  });
+
+  it('rejects an owner command revoked during execution instead of publishing its native answer', async () => {
+    state.ownerSource.mockResolvedValueOnce({ id: 'source' }).mockResolvedValueOnce(null);
+    const driver = new BotStructuredDriver('codex', options, () => ({ run: async () => 'Private result', close: vi.fn() }));
+    await expect(driver.run(turn())).rejects.toThrow('BOT_PUBLIC_GRANT_REVOKED');
+    expect(state.begin).not.toHaveBeenCalled(); await driver.close();
+  });
+
   it('keeps owner tools, context, profiles, streaming and resume behavior unchanged', async () => {
     const run = vi.fn(async (input: StructuredTurn) => { input.output('owner stream'); return 'owner answer'; });
     const create = vi.fn(() => ({ run, close: vi.fn() }));

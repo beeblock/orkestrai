@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
 import { uuidv7 } from '@beeblock/svelar/support';
 import { mkdtemp, rm } from 'node:fs/promises';
+import * as whatsappMedia from '$lib/modules/agent-room/infrastructure/integrations/WhatsAppMedia.js';
+import { readFile } from 'node:fs/promises';
+import { botAudioService } from '$lib/modules/agent-room/application/services/BotAudioService.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -82,6 +85,36 @@ describe('multiple personal bots in one linked WhatsApp group', () => {
       expect.objectContaining({ nodeId: f.bots[1].id, bindingId: support.id }),
     ]));
     expect(outbox).toHaveLength(2);
+  });
+
+  it('transcribes one permitted voice note, routes its leading spoken name and retains the original audio', async () => {
+    const f = await fixture();
+    const one = await f.create(f.bots[0].id, ['#jarvis'], [ana]);
+    await f.create(f.bots[1].id, ['#sales'], [ana]);
+    const bytes = await readFile(new URL('../fixtures/channel-audio/tone.ogg', import.meta.url));
+    const download = vi.spyOn(whatsappMedia, 'downloadWhatsAppMedia').mockResolvedValue(bytes);
+    const stt = vi.spyOn(botAudioService, 'transcribe').mockResolvedValue('Jarvis, me lembre amanhã');
+    await (f.service as any).dispatch(f.link, { key: { remoteJid: group, participant: ana, id: uuidv7() },
+      message: { audioMessage: { url: 'https://mmg.whatsapp.net/voice.ogg', mimetype: 'audio/ogg', fileLength: bytes.length, seconds: 1 } } });
+    const messages = await channelRepository.list(f.workspace.id, `dm:${f.bots[0].id}`);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ body: '#jarvis, me lembre amanhã', meta: { bindingId: one.id, attachments: [{ mimeType: 'audio/ogg' }] } });
+    expect(await channelRepository.list(f.workspace.id, `dm:${f.bots[1].id}`)).toHaveLength(0);
+    expect(download).toHaveBeenCalledOnce(); expect(stt).toHaveBeenCalledExactlyOnceWith(bytes);
+    expect(await controlCenterRepository.inboxEnvelopes(f.bots[0].id, ['queued'])).toHaveLength(1);
+  });
+
+  it('checks allowed senders before downloading or decoding audio and checks media URLs before transcription', async () => {
+    const f = await fixture();
+    await f.create(f.bots[0].id, ['#jarvis'], [ana]);
+    const stt = vi.spyOn(botAudioService, 'transcribe').mockResolvedValue('Jarvis hello');
+    const message = { key: { remoteJid: group, participant: bob, id: uuidv7() }, message: { audioMessage: { url: 'https://private.invalid/voice.ogg', fileLength: 200, seconds: 1, mimetype: 'audio/ogg' } } };
+    await expect((f.service as any).dispatch(f.link, message)).resolves.toBeUndefined();
+    expect(stt).not.toHaveBeenCalled();
+    message.key.participant = ana;
+    await expect((f.service as any).dispatch(f.link, message)).rejects.toThrow('CHANNEL_ATTACHMENT_DENIED');
+    expect(stt).not.toHaveBeenCalled();
+    expect(await channelRepository.list(f.workspace.id, `dm:${f.bots[0].id}`)).toEqual([]);
   });
 
   it('supports the same prefix for distinct verified senders', async () => {

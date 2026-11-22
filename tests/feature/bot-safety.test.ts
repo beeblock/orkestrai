@@ -255,4 +255,32 @@ describe('public bot security boundary', () => {
     expect(send).not.toHaveBeenCalled(); expect(await botDeliveryRepository.pending()).toEqual([]);
     expect(await channelBindingRepository.find(f.workspace.id, f.binding.id)).toMatchObject({ lastError: 'BOT_PUBLIC_ARTIFACT_DENIED' });
   });
+  it('decodes a real submitted image as image content for the scoped model tool', async () => {
+    const f = await fixture();
+    const { PNG } = await import('pngjs');
+    const png = new PNG({ width: 2, height: 2 }); png.data.fill(255);
+    const bytes = PNG.sync.write(png), id = uuidv7();
+    const attachment = { id, kind: 'file', name: 'test.png', path: `.orkestrai/attachments/${id}-test.png`, url: null, mimeType: 'image/png', size: bytes.length };
+    await channelRepository.mergeMeta(f.workspace.id, f.source.id, { attachments: [attachment] });
+    vi.spyOn(integrationExecutionService, 'readBotArtifact').mockResolvedValue(bytes);
+    const turn = await f.begin();
+    expect(await f.service.readAttachment(turn, id, new AbortController().signal)).toMatchObject({ type: 'image', mimeType: 'image/png', data: bytes.toString('base64') });
+  });
+
+  it('extracts a real submitted PDF before returning bounded document text to the model', async () => {
+    const f = await fixture();
+    const { default: PDFDocument } = await import('pdfkit');
+    const bytes = await new Promise<Buffer>((resolve, reject) => {
+      const pdf = new PDFDocument(), parts: Buffer[] = [];
+      pdf.on('data', chunk => parts.push(Buffer.from(chunk))); pdf.on('error', reject); pdf.on('end', () => resolve(Buffer.concat(parts)));
+      pdf.text('Customer report: the checkout button fails.'); pdf.end();
+    });
+    const id = uuidv7(), attachment = { id, kind: 'file', name: 'details.pdf', path: `.orkestrai/attachments/${id}-details.pdf`, url: null, mimeType: 'application/pdf', size: bytes.length };
+    await channelRepository.mergeMeta(f.workspace.id, f.source.id, { attachments: [attachment] });
+    vi.spyOn(integrationExecutionService, 'readBotArtifact').mockResolvedValue(bytes);
+    const turn = await f.begin();
+    const answer = await f.service.readAttachment(turn, id, new AbortController().signal);
+    expect(answer).toMatchObject({ type: 'text', text: expect.stringContaining('checkout button fails') });
+  }, 25_000);
+
 });

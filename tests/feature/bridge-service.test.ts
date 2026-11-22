@@ -634,6 +634,16 @@ describe('Modo Maestro', () => {
     expect(await workspaceRepository.listEdges(workspace.id)).toHaveLength(0);
   });
 
+  it('lets an authenticated personal bot recruit a Codex image specialist without becoming leader', async () => {
+    const { workspace, leader: bot } = await setupMaestro(false);
+    await workspaceRepository.updateNode(bot.id, { payload: { ...bot.payload, personalBot: true } as never });
+    await expect(bridgeService.recruit(workspace.id, { from: 'Lider', title: 'Unverified', provider: 'codex' })).rejects.toThrow('Modo Maestro');
+    const recruited = await bridgeService.recruit(workspace.id, { from: 'Lider', title: 'Image executor', provider: 'codex', verifiedActorNodeId: bot.id });
+    expect((await workspaceRepository.getNode(recruited.nodeId))?.payload).toMatchObject({ provider: 'codex' });
+    expect((await workspaceRepository.getNode(bot.id))?.payload).toMatchObject({ maestro: false, personalBot: true });
+    await expect(bridgeService.dismiss(workspace.id, { from: 'Lider', target: 'Image executor' })).rejects.toThrow('Modo Maestro');
+  });
+
   it('bloqueia acoes sem Modo Maestro ativo', async () => {
     const { workspace } = await setupMaestro(false);
     await expect(bridgeService.recruit(workspace.id, { from: 'Lider', title: 'X' })).rejects.toThrow('Modo Maestro');

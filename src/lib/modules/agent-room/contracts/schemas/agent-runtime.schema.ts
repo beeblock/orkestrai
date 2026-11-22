@@ -1,5 +1,12 @@
 import { z } from 'zod/v3';
 
+export const agentUsageBlockSchema = z.object({
+  provider: z.string().min(1).max(60), profileId: z.string().uuid().nullable(),
+  usedPercent: z.number().int().min(0).max(100), limit: z.number().int().min(50).max(100),
+  window: z.enum(['5h', 'weekly', 'monthly']), resetsAt: z.string().max(80).nullable(),
+});
+export type AgentUsageBlock = z.infer<typeof agentUsageBlockSchema>;
+
 export const agentRuntimeModeSchema = z.enum(['interactive', 'on_demand', 'persistent']);
 
 export const updateAgentRuntimeSchema = z.object({
@@ -25,6 +32,7 @@ export const agentRuntimeSchema = updateAgentRuntimeSchema.extend({
   lastWakeAt: z.string().datetime().nullable(),
   lastSleepAt: z.string().datetime().nullable(),
   lastError: z.string().nullable(),
+  usageBlock: agentUsageBlockSchema.nullable().optional(),
   activeRuns: z.number().int().nonnegative(),
 });
 

@@ -15,6 +15,7 @@
 
   let { workspaceId, bot, onSaved, onClose }: { workspaceId: string; bot: PersonalBotSummary; onSaved: () => void; onClose: () => void } = $props();
   type Action = { id: string; name: string; revision: number; outputFields: string[] };
+  let ownerContacts = $state<Array<{ kind: 'whatsapp' | 'telegram' | 'slack'; senderId: string; name: string }>>([]);
   let options = $state<Action[]>([]), loading = $state(false), saving = $state(false), error = $state('');
   let advanced = $state(false), loaded = false;
   const controller = new AbortController();
@@ -30,7 +31,11 @@
     },
   });
   const { form: data, enhance, allErrors } = form;
-  onMount(() => () => controller.abort());
+  onMount(() => {
+    void botApi<typeof ownerContacts>(`/api/agent-room/workspaces/${workspaceId}/bots`, { command: 'owner_senders', nodeId: bot.id }, controller.signal)
+      .then(contacts => { if (!controller.signal.aborted) ownerContacts = contacts; }).catch(() => {});
+    return () => controller.abort();
+  });
   function showAdvanced() {
     advanced = !advanced;
     if (!advanced || loaded || loading) return;
@@ -66,6 +71,16 @@
       <div class="min-h-0 space-y-5 overflow-y-auto px-1 pb-2">
         <p class="text-sm leading-relaxed text-[var(--app-text-muted)]">{m['bots.safety_simple_hint']()}</p>
         {#if bot.transport !== 'structured'}<p role="alert" class="text-sm text-[var(--app-danger)]">{m['bots.safety_structured_required']()}</p>{/if}
+        <div class="space-y-3 rounded-lg border border-[var(--app-border)] p-3">
+          <label class="flex items-start gap-3 text-sm"><Checkbox checked={$data.ownerMessages} onCheckedChange={value => ($data.ownerMessages = value === true)} /><span><strong class="font-medium">{m['bots.owner_phone_access']()}</strong><span class="mt-1 block text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.owner_phone_access_hint']()}</span></span></label>
+          {#if $data.ownerMessages}
+            <div class="border-t border-[var(--app-border)] pt-3"><p class="text-sm font-medium">{m['bots.owner_contacts']()}</p><p class="mt-1 text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.owner_contacts_hint']()}</p>
+              {#each ownerContacts as contact (`${contact.kind}:${contact.senderId}`)}<label class="mt-3 flex items-start gap-3 text-sm"><Checkbox checked={$data.ownerSenders.some(owner => owner.kind === contact.kind && owner.senderId === contact.senderId)} onCheckedChange={value => { $data.ownerSenders = value === true ? [...$data.ownerSenders.filter(owner => owner.kind !== contact.kind || owner.senderId !== contact.senderId), { kind: contact.kind, senderId: contact.senderId }] : $data.ownerSenders.filter(owner => owner.kind !== contact.kind || owner.senderId !== contact.senderId); }} /><span class="min-w-0"><span class="block break-words">{contact.name}</span><span class="block break-all text-xs text-[var(--app-text-muted)]">{contact.kind} · {contact.senderId}</span></span></label>{/each}
+              {#if !ownerContacts.length}<p class="mt-2 text-xs text-[var(--app-text-muted)]">{m['bots.owner_contacts_empty']()}</p>{/if}
+            </div>
+          {/if}
+          <label class="flex items-start gap-3 text-sm"><Checkbox checked={$data.webSearch} onCheckedChange={value => ($data.webSearch = value === true)} /><span><strong class="font-medium">{m['bots.public_web_search']()}</strong><span class="mt-1 block text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.public_web_search_hint']()}</span></span></label>
+        </div>
         <label class="grid gap-2 text-sm font-medium">{m['bots.safety_scope']()}<Textarea name="publicInstructions" bind:value={$data.publicInstructions} maxlength={6000} rows={5} placeholder={m['bots.safety_scope_example']()} /></label>
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.purpose_public_hint']()}</p>
         <label class="grid gap-2 text-sm font-medium">{m['bots.safety_knowledge']()}<Textarea name="publicKnowledge" bind:value={$data.publicKnowledge} maxlength={24000} rows={4} /></label>

@@ -32,7 +32,7 @@ export async function publicWorkerProbe(command: string, args: string[], options
 }
 
 export async function preparePublicWorker(provider: 'claude' | 'codex', original: StructuredAgentOptions,
-  proxy: { url: string; token: string }, instructions: string) {
+  proxy: { url: string; token: string }, instructions: string, capabilities: { webSearch?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'orkestrai-public-bot-'));
   try {
     const guest = async (path: string) => original.runtime.kind === 'wsl'
@@ -70,7 +70,7 @@ export async function preparePublicWorker(provider: 'claude' | 'codex', original
     const options: StructuredAgentOptions = { ...original, hostCwd: directory, cwd, workspaceRoot: directory, env,
       instructions, launchArgs: [], session: () => null, saveSession: async () => {},
       bridgeMcp: { command: await guest(process.execPath), args: [await guest(resolve('packages/orkestrai-cli/src/inference-proxy.mjs'))],
-        env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {} }, publicWorker: { serverName } };
+        env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {} }, publicWorker: { serverName, webSearch: capabilities.webSearch === true } };
     if (provider === 'codex') {
       const version = await publicWorkerProbe('codex', ['--version'], options);
       // A new CLI contract must be verified before it can handle public input.
@@ -96,9 +96,9 @@ export async function preparePublicWorker(provider: 'claude' | 'codex', original
       await writeFile(file, JSON.stringify({ models: [{ ...inferenceOnlyModel(selected), base_instructions: instructions }] }), { mode: 0o600 });
       await mkdir(join(directory, 'state')); await mkdir(join(directory, 'logs'));
       const catalogPath = await guest(file);
-      options.publicWorker = { serverName, codexCatalog: catalogPath, disabledServers, disabledFeatures };
+      options.publicWorker = { serverName, webSearch: capabilities.webSearch === true, codexCatalog: catalogPath, disabledServers, disabledFeatures };
       options.model = selected.slug;
-      options.launchArgs = ['--strict-config', '-c', 'web_search="disabled"', '-c', 'project_doc_max_bytes=0',
+      options.launchArgs = ['--strict-config', '-c', `web_search=${JSON.stringify(capabilities.webSearch ? 'live' : 'disabled')}`, '-c', 'project_doc_max_bytes=0',
         '-c', 'include_environment_context=false', '-c', 'developer_instructions=""', '-c', 'history.persistence="none"',
         '-c', `sqlite_home=${JSON.stringify(await guest(join(directory, 'state')))}`, '-c', `log_dir=${JSON.stringify(await guest(join(directory, 'logs')))}`,
         '-c', `model_catalog_json=${JSON.stringify(catalogPath)}`,

@@ -950,7 +950,7 @@ export class AgentInboxService {
         onFailed: async (error) => {
           const { channelService } = await import('./ChannelService.js');
           for (const envelope of batch.envelopes) {
-            if (typeof envelope.metadata.channelMessageId === 'string') await channelService.modelFailure(batch.workspaceId, envelope.metadata.channelMessageId, 'turn');
+            if (typeof envelope.metadata.channelMessageId === 'string') await channelService.modelFailure(batch.workspaceId, envelope.metadata.channelMessageId, 'turn', error instanceof Error ? error.message : undefined);
           }
           const publicBinding = batch.envelopes[0].metadata.bindingId;
           if (typeof publicBinding === 'string') {

@@ -7,7 +7,12 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.7 local preview
+### Added — 0.55.0-beta.8 local preview
+
+- Authenticate workspace commands from the linked WhatsApp account outside the model. These owner requests retain native Canvas tools, Codex image-workflow delegation, routines and integrations without promoting the bot to leader. Other contacts keep the restricted public worker; explicitly trusted verified contacts can be selected in the bot protection dialog. Recheck grants before forwarding each exact, hash-verified file to its originating chat.
+- Enable native public web search for current information without granting host files, shell commands or private workspace context. Keep the output reviewer tool-free.
+- Transcribe WhatsApp voice notes (OGG/Opus, MP3 and WAV, up to 5 minutes / 10 MB) with the existing speech service, after sender authorization. Decode off the Core with a bounded subprocess and match a leading spoken bot name. Missing speech models and unsupported audio raise a specific notice.
+- Show the selected account usage and automatic bot cap when quota pauses delivery; keep messages queued and expose account/runtime controls. Show a protection-specific message when output is blocked instead of blaming account connectivity.
 
 - Add 16 searchable bot presets with localized purpose, personality and behavior rules. Keep all text editable, preserve the typed name/provider/account on selection, offer a blank custom option, and keep creation actions visible in short windows. Expose the same public-safe catalog and preset-based creation to authenticated leaders and specialists through CLI/MCP, without changing existing bots or granting tools/connections. Add a guided use case and tour in all three languages.
 

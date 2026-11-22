@@ -134,7 +134,7 @@ export class BridgeController extends Controller {
       if (event.request.method === 'GET') return this.json({ data: await personalBotService.list(workspace.id) });
       const raw = z.object({ taskId: z.string().uuid().optional(), input: z.unknown() }).strict().parse(await event.request.json());
       const dto = PersonalBotCommandDto.from(workspace.id, raw.input, actor);
-      if (!['group_post', 'group_send', 'preset_list'].includes(dto.input.command)) {
+      if (!['group_post', 'group_send', 'preset_list', 'owner_senders'].includes(dto.input.command)) {
         const task = raw.taskId ? (await taskBoardService.list(workspace.id)).find(item => item.id === raw.taskId) : null;
         if (!task || task.assigneeNodeId !== actor || task.status !== 'doing') return this.json({ error: 'BOT_ASSIGNED_TASK_REQUIRED' }, 403);
       }
@@ -1733,7 +1733,8 @@ export class BridgeController extends Controller {
       const input = await BridgeRecruitRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const result = await bridgeService.recruit(workspace.id, {
-        from: input.from,
+        from: this.terminalAgent(event, workspace.id) ?? input.from,
+        verifiedActorNodeId: this.terminalAgent(event, workspace.id),
         title: input.title,
         provider: input.provider,
         profile: input.profile,
@@ -1867,7 +1868,8 @@ export class BridgeController extends Controller {
         .parse(await event.request.json());
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
       const result = await bridgeService.createPortal(workspace.id, {
-        from: input.from,
+        from: this.terminalAgent(event, workspace.id) ?? input.from,
+        verifiedActorNodeId: this.terminalAgent(event, workspace.id),
         url: input.url,
         title: input.title,
         connect: input.connect,

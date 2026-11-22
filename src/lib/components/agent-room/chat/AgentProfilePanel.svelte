@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AgentUsageBlock } from '$lib/modules/agent-room/contracts/schemas/agent-runtime.schema.js';
   import { Brain, CalendarClock, Focus, MessageSquare, Network, X } from '@lucide/svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
@@ -25,6 +26,7 @@
     onClose,
     onDirect,
     embedded = false,
+    usageBlock = null,
     children,
     onSetupChannel,
   }: {
@@ -35,6 +37,7 @@
     onClose: () => void;
     onDirect: (nodeId: string) => void;
     embedded?: boolean;
+    usageBlock?: AgentUsageBlock | null;
     children?: import('svelte').Snippet;
     onSetupChannel?: (provider: 'telegram' | 'slack') => void;
   } = $props();
@@ -70,8 +73,8 @@
   let routines = $state<Routine[]>([]);
 
   const status = $derived(agentStatus.agents[nodeId] ?? null);
-  const activity = $derived(status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle');
-  const sleeping = $derived(embedded && payload.agentRuntimeMode === 'on_demand' && !status?.sessionAlive
+  const activity = $derived(usageBlock ? 'blocked' : status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle');
+  const sleeping = $derived(!usageBlock && embedded && payload.agentRuntimeMode === 'on_demand' && !status?.sessionAlive
     && (!status || status.state === 'disconnected' || status.state === 'idle'));
   const since = $derived.by(() => {
     const parts = status ? elapsedParts(status.stateSince, statusClock.now) : null;
@@ -138,7 +141,7 @@
     <AgentAvatar {nodeId} {title} size={56} />
     <h2 class="headline">{title}</h2>
     {#if payload.role}<p class="role">{payload.role}</p>{/if}
-    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
+    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
   </div>
   {#if !embedded}<div class="actions">
     <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>

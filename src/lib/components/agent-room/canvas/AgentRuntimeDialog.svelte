@@ -114,7 +114,7 @@
           <span class="state-dot" class:awake={runtime?.state === 'awake'} aria-hidden="true"></span>
           <div class="min-w-0">
             <p class="text-ui-lg font-medium">
-              {m['agent_runtime.state']()} · <span class={runtime?.state === 'awake' ? 'text-[var(--app-success)]' : 'text-[var(--app-text-soft)]'}>{runtime?.state === 'awake' ? m['agent_runtime.awake']() : m['agent_runtime.sleeping']()}</span>
+              {m['agent_runtime.state']()} · <span class={runtime?.state === 'awake' ? 'text-[var(--app-success)]' : 'text-[var(--app-text-soft)]'}>{runtime?.state === 'awake' ? m['agent_runtime.awake']() : runtime?.usageBlock ? m['bots.quota_paused']() : m['agent_runtime.sleeping']()}</span>
             </p>
             <p class="text-ui-md text-muted-foreground"><span class="tabular-nums">{runtime?.activeRuns ?? 0}</span> {m['agent_runtime.active_runs']()}</p>
           </div>
@@ -125,6 +125,8 @@
           <Button type="button" size="sm" variant="outline" class="shrink-0" disabled={busy} onclick={() => act('wake')}><Sun aria-hidden="true" />{m['agent_runtime.wake']()}</Button>
         {/if}
       </div>
+
+      {#if runtime?.usageBlock}<p class="rounded-lg border border-[var(--app-border)] px-3 py-2 text-sm leading-relaxed" role="status">{m['bots.quota_notice']({ provider: runtime.usageBlock.provider, used: runtime.usageBlock.usedPercent, limit: runtime.usageBlock.limit })}</p>{/if}
 
       <div class="grid gap-1.5">
         <span class="text-ui-lg font-medium" id="agent-runtime-mode-label">{m['agent_runtime.mode']()}</span>

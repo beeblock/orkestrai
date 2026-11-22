@@ -55,9 +55,19 @@ export class BotStructuredDriver implements StructuredAgentDriver {
     }
     const origin = turn.publicOrigin;
     if (!origin?.bindingId || !origin.channelMessageId || !this.options.workspaceId || !this.options.nodeId) throw new Error('BOT_PUBLIC_ORIGIN_INVALID');
+    const { botSafetyService } = await import('../services/BotSafetyService.js');
+    const owner = await botSafetyService.ownerSource(this.options.workspaceId, this.options.nodeId, origin.bindingId, origin.channelMessageId);
+    if (owner) {
+      const answer = await (this.owner ??= this.factory(this.options)).run({ ...turn,
+        prompt: `Authenticated owner command from a verified trusted chat account. Use the native Orkestrai bridge and existing Canvas tools, routines and integrations to complete this task. You may recruit specialists without becoming the workspace leader. For an image, recruit or ask Codex and use the native image workflow; return its actual file link in your final answer. Create a persistent routine for recurring work, rather than promising to remember it in conversation. Respect explicit owner rules, pauses and configured gates. Final delivery to this exact chat is automatic.\n\n${turn.prompt}` });
+      if (!await botSafetyService.ownerSource(this.options.workspaceId, this.options.nodeId, origin.bindingId, origin.channelMessageId)) throw new Error('BOT_PUBLIC_GRANT_REVOKED');
+      return answer;
+    }
+    const { channelRepository } = await import('../../infrastructure/repositories/ChannelRepository.js');
+    const source = await channelRepository.find(this.options.workspaceId, origin.channelMessageId);
+    if (source?.meta.ownerIntent === true) throw new Error('BOT_PUBLIC_GRANT_REVOKED');
     const budget = new AbortController();
     turn = { ...turn, signal: AbortSignal.any([turn.signal, budget.signal, AbortSignal.timeout(180_000)]) };
-    const { botSafetyService } = await import('../services/BotSafetyService.js');
     const context = await botSafetyService.begin(this.options.workspaceId, this.options.nodeId, origin.bindingId, origin.channelMessageId, turn.signal);
     const prompt = await botSafetyService.prompt(context);
     const tools = await botSafetyService.tools(context);
@@ -68,7 +78,7 @@ export class BotStructuredDriver implements StructuredAgentDriver {
     });
     let prepared: Awaited<ReturnType<typeof preparePublicWorker>> | undefined;
     try {
-      prepared = await preparePublicWorker(this.provider, this.options, proxy, botSafetyService.publicInstructions(context));
+      prepared = await preparePublicWorker(this.provider, this.options, proxy, botSafetyService.publicInstructions(context), { webSearch: context.policy.webSearch });
       await botSafetyService.assertCurrent(context);
       this.worker = this.factory(prepared.options);
       // Buffer everything; drafts, reasoning and failed tool output are never

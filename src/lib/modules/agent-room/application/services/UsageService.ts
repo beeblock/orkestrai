@@ -114,6 +114,12 @@ export class UsageService {
     return [...base, ...profileRows.flat()];
   }
 
+  /** Cached-only exact account read for lightweight runtime/UI projections. */
+  cachedAccount(provider: string, profileId: string | null = null): ProviderUsage | null {
+    const entry = this.cache.get(profileId ? `${provider}::${profileId}` : provider);
+    return entry && Date.now() - entry.at < USAGE_REFRESH_INTERVAL_MS ? entry.usage : null;
+  }
+
   cached(): ProviderUsage[] {
     return USAGE_PROVIDERS
       .map((provider) => this.cache.get(provider.id)?.usage ?? null)

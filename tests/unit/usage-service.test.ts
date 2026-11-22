@@ -47,6 +47,19 @@ const KIMI_USAGE = {
 };
 
 describe('UsageService', () => {
+  it('projects cached exact-account usage without network work and omits expired readings', async () => {
+    const home = homeWith({ '.claude/.credentials.json': JSON.stringify({ claudeAiOauth: { accessToken: 'test-local-only' } }) });
+    const fetcher = vi.fn(fakeFetch({ 'https://api.anthropic.com/api/oauth/usage': CLAUDE_USAGE }));
+    const service = new UsageService(fetcher, home, async () => null);
+    expect(service.cachedAccount('claude')).toBeNull();
+    await service.getUsage('claude');
+    expect(service.cachedAccount('claude')?.provider).toBe('claude');
+    expect(service.cachedAccount('claude', 'different-profile')).toBeNull();
+    expect(fetcher).toHaveBeenCalledOnce();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + USAGE_REFRESH_INTERVAL_MS + 1);
+    expect(service.cachedAccount('claude')).toBeNull();
+    now.mockRestore();
+  });
   it('claude: le credencial do arquivo e normaliza 5h + semanal', async () => {
     const home = homeWith({ '.claude/.credentials.json': JSON.stringify({ claudeAiOauth: { accessToken: 'tok' } }) });
     const service = new UsageService(fakeFetch({ 'https://api.anthropic.com/api/oauth/usage': CLAUDE_USAGE }), home, async () => null);

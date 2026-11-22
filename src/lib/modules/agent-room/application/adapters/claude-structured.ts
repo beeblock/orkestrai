@@ -60,8 +60,8 @@ export class ClaudeStructuredDriver implements StructuredAgentDriver {
       const serverName = this.options.publicWorker.serverName;
       options.permissionMode = 'dontAsk';
       options.allowDangerouslySkipPermissions = false;
-      options.tools = [];
-      options.allowedTools = [`mcp__${serverName}__*`];
+      options.tools = this.options.publicWorker.webSearch ? ['WebSearch'] : [];
+      options.allowedTools = [`mcp__${serverName}__*`, ...(this.options.publicWorker.webSearch ? ['WebSearch'] : [])];
       options.settingSources = [];
       options.systemPrompt = this.options.instructions;
       options.persistSession = false;

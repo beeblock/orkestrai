@@ -14,8 +14,8 @@ import type { StructuredAgentOptions } from '$lib/modules/agent-room/application
 describe.skipIf(!process.env.PUBLIC_BOT_NATIVE_CONTRACT)('public native CLI isolation (mock inference)', () => {
   const roots: string[] = [];
   afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
-  for (const provider of ['codex', 'claude'] as const) for (const forcedTool of [false, true]) {
-    it(`forced tool=${forcedTool}: exposes only the scoped MCP to ${provider}, without owner context or global MCP`, async () => {
+  for (const provider of ['codex', 'claude'] as const) for (const forcedTool of [false, true]) for (const webSearch of [false, true]) {
+    it(`web=${webSearch}, forced tool=${forcedTool}: exposes only the scoped MCP to ${provider}, without owner context or global MCP`, async () => {
       const root = await mkdtemp(join(tmpdir(), 'orkestrai-public-contract-')); roots.push(root);
       const home = join(root, 'home'), workspace = join(root, 'workspace');
       await mkdir(join(home, '.codex'), { recursive: true }); await mkdir(join(home, '.claude')); await mkdir(workspace);
@@ -82,7 +82,7 @@ describe.skipIf(!process.env.PUBLIC_BOT_NATIVE_CONTRACT)('public native CLI isol
       if (provider === 'claude' && !forcedTool) delete original.env.CLAUDE_CONFIG_DIR;
       let prepared: Awaited<ReturnType<typeof preparePublicWorker>> | undefined, driver: CodexStructuredDriver | ClaudeStructuredDriver | undefined;
       try {
-        prepared = await preparePublicWorker(provider, original, proxy, 'Public role: answer product support questions only.');
+        prepared = await preparePublicWorker(provider, original, proxy, 'Public role: answer product support questions only.', { webSearch });
         expect(prepared.options.env).not.toHaveProperty('ORKESTRAI_AGENT_TOKEN');
         expect(prepared.options.env).not.toHaveProperty('ORKESTRAI_WORKSPACE_CONFIG');
         if (provider === 'claude') {
@@ -97,8 +97,9 @@ describe.skipIf(!process.env.PUBLIC_BOT_NATIVE_CONTRACT)('public native CLI isol
         const payload = JSON.stringify(requests);
         expect(payload).not.toContain(canary); expect(payload).not.toContain('PRIVATE_BRIDGE_TOKEN'); expect(payload).not.toContain('PRIVATE_OWNER_SESSION');
         const toolNames = requests.flatMap(request => request.tools ?? []).flatMap(tool => tool.type === 'namespace' ? tool.tools.map((child: any) => `${tool.name}__${child.name}`) : [tool.name ?? tool.function?.name ?? tool.type]);
-        expect(toolNames.some(name => /^mcp__p_[a-f0-9]+__read_attachment$/.test(name))).toBe(true);
-        expect(toolNames.every(name => ['request_user_input', 'list_mcp_resources', 'list_mcp_resource_templates', 'read_mcp_resource'].includes(name) || /^mcp__p_[a-f0-9]+__read_attachment$/.test(name))).toBe(true);
+        expect(toolNames.some(name => /^mcp__p_[a-f0-9]+__read_attachment$/.test(name)), JSON.stringify(toolNames)).toBe(true);
+        expect(toolNames.every(name => ['request_user_input', 'list_mcp_resources', 'list_mcp_resource_templates', 'read_mcp_resource', ...(webSearch ? ['WebSearch', 'web_search', 'web_search_preview'] : [])].includes(name) || /^mcp__p_[a-f0-9]+__read_attachment$/.test(name))).toBe(true);
+        expect(toolNames.some(name => ['WebSearch', 'web_search', 'web_search_preview'].includes(name))).toBe(webSearch);
         expect(await access(started).then(() => true, () => false)).toBe(false);
         const files = await readdir(prepared.options.hostCwd);
         expect(files.some(file => /context|auth|credential/.test(file))).toBe(false);

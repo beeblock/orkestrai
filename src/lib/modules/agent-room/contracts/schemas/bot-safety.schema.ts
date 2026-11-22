@@ -6,6 +6,9 @@ const publicField = z.string().trim().min(1).max(160)
 
 /** Owner-controlled capabilities; never inferred from a customer's message. */
 export const botSafetySchema = z.object({
+  ownerMessages: z.boolean().default(true),
+  ownerSenders: z.array(z.object({ kind: z.enum(['whatsapp', 'telegram', 'slack']), senderId: z.string().min(1).max(200).regex(/^[A-Za-z0-9@._:-]+$/) }).strict()).max(20).default([]),
+  webSearch: z.boolean().default(true),
   publicInstructions: z.string().trim().max(6_000).default(''),
   publicKnowledge: z.string().trim().max(24_000).default(''),
   actions: z.array(z.object({

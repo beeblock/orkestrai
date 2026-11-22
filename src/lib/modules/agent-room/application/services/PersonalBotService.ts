@@ -1,3 +1,4 @@
+import { agentRuntimeService } from './AgentRuntimeService.js';
 import { Connection } from '@beeblock/svelar/database';
 import type { PersonalBotCommandDto } from '../dto/PersonalBotCommandDto.js';
 import { CreateCanvasNodeDto } from '../dto/WorkspaceDtos.js';
@@ -22,6 +23,7 @@ function summary(node: { id: string; title: string | null; payload: unknown }): 
   return { id: node.id, title: node.title ?? 'Bot', provider: payload.provider ?? '', model: payload.model ?? null,
     effort: payload.effort ?? null, profileId: payload.profileId ?? null, instructions: payload.botInstructions ?? '',
     transport: payload.agentTransport ?? 'terminal', sessionId: payload.sessionId ?? null, runtimeMode: payload.agentRuntimeMode ?? 'interactive',
+    usageBlock: agentRuntimeService.usageBlock(payload),
     safety: botSafetyService.settings(payload.botSafety), safetyRevision: payload.botSafetyRevision ?? 0 };
 }
 
@@ -119,6 +121,19 @@ export class PersonalBotService {
         const node = await this.requireBot(workspaceId, input.nodeId);
         await workspaceService.deleteNode(workspaceId, node.id);
         return { removed: true };
+      }
+      case 'owner_senders': {
+        const bot = await this.requireBot(workspaceId, input.nodeId);
+        const settings = botSafetyService.settings((bot.payload as TerminalNodePayload).botSafety);
+        const contacts = new Map<string, { kind: string; senderId: string; name: string }>();
+        for (const source of await channelRepository.list(workspaceId, `dm:${bot.id}`, { limit: 60 })) {
+          if (source.authorKind !== 'external' || !['whatsapp', 'telegram', 'slack'].includes(String(source.meta.via)) || typeof source.meta.senderId !== 'string' || !/^[A-Za-z0-9@._:-]{1,200}$/.test(source.meta.senderId)) continue;
+          const key = `${source.meta.via}:${source.meta.senderId}`;
+          if (!contacts.has(key)) contacts.set(key, { kind: String(source.meta.via), senderId: source.meta.senderId,
+            name: typeof source.meta.sender === 'string' ? source.meta.sender.slice(0, 120) : source.meta.senderId });
+        }
+        for (const trusted of settings.ownerSenders) if (!contacts.has(`${trusted.kind}:${trusted.senderId}`)) contacts.set(`${trusted.kind}:${trusted.senderId}`, { ...trusted, name: trusted.senderId });
+        return [...contacts.values()];
       }
       case 'safety_options':
         await this.requireBot(workspaceId, input.nodeId);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { replaceState } from '$app/navigation';
-  import { Bot, UsersRound, Plus, Settings2, RadioTower, Wrench, PanelRight, LoaderCircle, X } from '@lucide/svelte';
+  import { CircleAlert, Bot, UsersRound, Plus, Settings2, RadioTower, Wrench, PanelRight, LoaderCircle, X } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Select from '$lib/components/ui/select';
   import BotEditor from '$lib/components/agent-room/bots/BotEditor.svelte';
@@ -126,6 +126,7 @@
   function saved(bot: PersonalBotSummary) { selectedId = bot.id; groupId = ''; editorOpen = false; void refresh(); }
   function edit(bot: PersonalBotSummary | null) { editing = bot; editorOpen = true; }
   function botStatus(bot: PersonalBotSummary) {
+    if (bot.usageBlock) return m['bots.quota_paused']();
     const status = agentStatus.agents[bot.id];
     return bot.runtimeMode === 'on_demand' && !status?.sessionAlive && (!status || status.state === 'disconnected' || status.state === 'idle')
       ? m['agent_runtime.sleeping']() : agentStateLabel(status?.state ?? 'idle');
@@ -155,6 +156,13 @@
     {#if loading}<div class="bot-empty"><LoaderCircle class="animate-spin" size={24} /><p>{m['bots.loading']()}</p></div>
     {:else if selected || group}
       <header class="chat-heading"><div><h2>{selected?.title ?? group?.title}</h2><p>{selected ? providers.find(item => item.id === selected?.provider)?.displayName : m['bots.group_hint']()}</p></div><div class="heading-actions">{#if group}<Button variant="ghost" size="icon-sm" aria-label={m['bots.edit_group']()} onclick={() => { groupEditing = group; groupEditor = true; }}><Settings2 size={16} /></Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.archive_group']()}</Button>{/if}{#if selected}<Button variant="ghost" size="icon-sm" aria-label={m['bots.edit']()} onclick={() => edit(selected)}><Settings2 size={16} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['bots.profile_tab']()} onclick={() => (profileOpen = !profileOpen)}><PanelRight size={16} /></Button>{/if}</div></header>
+      {#if selected?.usageBlock}
+        <div class="quota-notice" role="status" data-testid="bot-quota-notice">
+          <CircleAlert size={19} aria-hidden="true" class="shrink-0" />
+          <div class="min-w-0 flex-1"><strong>{m['bots.quota_paused']()}</strong><p>{m['bots.quota_notice']({ provider: providers.find(item => item.id === selected?.provider)?.displayName ?? selected.provider, used: selected.usageBlock.usedPercent, limit: selected.usageBlock.limit })}</p></div>
+          <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" onclick={() => edit(selected)}>{m['bots.quota_change_account']()}</Button><Button size="sm" variant="ghost" onclick={() => (runtimeOpen = true)}>{m['bots.quota_limits']()}</Button></div>
+        </div>
+      {/if}
       {#if selected && !selected.safety.publicInstructions}<div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--app-border)] px-5 py-3 text-sm text-[var(--app-text-muted)]"><span>{m['bots.safety_setup_required']()}</span><Button size="sm" variant="outline" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button></div>{/if}
       {#if failed}<p class="bot-error" role="alert">{m['bots.error']()}</p>{/if}
       {#if selected}
@@ -165,7 +173,7 @@
     {:else}<div class="bot-empty"><span class="empty-avatar"><Bot size={34} strokeWidth={1.4} /></span><h2>{m['bots.empty']()}</h2><p>{failed ? m['bots.error']() : m['bots.empty_hint']()}</p><Button disabled={!workspaceId} onclick={() => edit(null)}><Plus size={16} />{m['bots.create']()}</Button></div>{/if}
   </main>
   {#if selected && profileOpen && selectedPayload}
-    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><Button variant="outline" size="sm" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
+    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><Button variant="outline" size="sm" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded usageBlock={selected.usageBlock} {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
   {/if}
 </div>
 {#if editorOpen}<BotEditor {workspaceId} {providers} bot={editing} onSaved={saved} onClose={() => (editorOpen = false)} />{/if}
@@ -189,6 +197,8 @@
   .connection-state { display: flex; gap: 7px; align-items: center; color: var(--app-text-muted); font-size: 11px; } .connection-state.online { color: var(--app-success); }
   .bot-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; background: var(--app-surface); }
   .chat-heading { min-height: 76px; padding: 18px 26px; border-bottom: 1px solid var(--app-border); } .chat-heading > div:first-child { min-width: 0; } .chat-heading h2 { overflow-wrap: anywhere; font-size: 16px; font-weight: 600; letter-spacing: -.015em; } .chat-heading p { margin-top: 5px; font-size: 12px; color: var(--app-text-muted); text-wrap: pretty; } .heading-actions { display: flex; gap: 5px; }
+  .quota-notice { display:flex; flex-shrink:0; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 24px; border-bottom:1px solid var(--app-border); background:var(--app-accent-soft); color:var(--app-text); }
+  .quota-notice strong { font-size:13px; font-weight:600; } .quota-notice p { margin-top:4px; font-size:12px; line-height:1.5; color:var(--app-text-soft); overflow-wrap:anywhere; }
   .bot-conversation { flex: 1; min-height: 0; padding: 12px 18px; }
   .bot-empty { display: flex; flex: 1; gap: 16px; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; } .bot-empty h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; } .bot-empty p { max-width: 390px; color: var(--app-text-muted); font-size: 14px; line-height: 1.65; text-wrap: pretty; } .empty-avatar { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 22px; background: var(--app-accent-soft); color: var(--app-accent); }
   .bot-profile { display: flex; flex-direction: column; gap: 24px; width: 318px; flex: 0 0 auto; border-left: 1px solid var(--app-border); padding: 22px; overflow-y: auto; background: var(--app-sidebar); } .profile-heading h2 { font-size: 13px; font-weight: 600; }

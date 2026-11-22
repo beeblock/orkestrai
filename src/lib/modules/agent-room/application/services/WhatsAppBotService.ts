@@ -1,3 +1,4 @@
+import { botOwnerMessageService } from './BotOwnerMessageService.js';
 import { validWhatsAppJid as validJid, whatsAppInboundSender, whatsAppOutputId } from '../../domain/whatsapp-messages.js';
 import { botConnectionRepository, type BotConnection } from '../../infrastructure/repositories/BotConnectionRepository.js';
 import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
@@ -125,7 +126,7 @@ export class WhatsAppBotService {
       if (link.disconnectTimer) clearTimeout(link.disconnectTimer);
       link.disconnectTimer = null;
       void botConnectionRepository.disable(link.connection.workspaceId, link.connection.id)
-        .then(() => this.notice(link.connection, 'relink', link)).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
+        .then(() => { void botOwnerMessageService.revoke(link.connection.workspaceId, link.connection.id).catch(() => { console.warn('BOT_OWNER_AUTH_REVOKE_FAILED'); }); return this.notice(link.connection, 'relink', link); }).catch(() => { console.warn('WHATSAPP_CONNECTION_NOTICE_FAILED'); });
     } else { this.scheduleDisconnectNotice(link); this.reconnect(link); }
   }
   private open(connection: BotConnection, allowInteractiveUnlock = false): Promise<Link> {
@@ -184,7 +185,7 @@ export class WhatsAppBotService {
       const { ZapoWhatsAppTransport } = await import('../../infrastructure/integrations/ZapoWhatsAppTransport.js');
       link.zapo ??= new ZapoWhatsAppTransport(auth, link.connection.id);
       socket = await link.zapo.create(isCurrent, event => this.linkEvent(link, event));
-    } else {
+    } else if ('forSession' in auth) {
       const legacy = makeWASocket({ auth: auth.forSession(isCurrent), logger, markOnlineOnConnect: false, syncFullHistory: false,
         // Import contact names, never past conversations or their attachments.
         shouldSyncHistoryMessage: message => message.syncType === proto.HistorySync.HistorySyncType.PUSH_NAME,
@@ -195,7 +196,7 @@ export class WhatsAppBotService {
         void auth.saveCreds(legacy.authState.creds, isCurrent).catch(() => { if (isCurrent()) this.fail(link, 'WHATSAPP_CREDENTIAL_WRITE_FAILED'); });
       });
       socket = legacy;
-    }
+    } else throw new Error('WHATSAPP_AUTH_UNAVAILABLE');
     link.socket = socket;
     const remember = (id: unknown, name: unknown) => {
       if (!isCurrent() || typeof id !== 'string' || !validJid(id)) return;
@@ -277,12 +278,12 @@ export class WhatsAppBotService {
     if (!sender || !message.message) return;
     const { normalizeMessageContent } = await import('@whiskeysockets/baileys');
     const content = normalizeMessageContent(message.message);
-    if (!content?.conversation && !content?.extendedTextMessage && !content?.imageMessage && !content?.documentMessage) return;
+    if (!content?.conversation && !content?.extendedTextMessage && !content?.imageMessage && !content?.documentMessage && !content?.audioMessage) return;
     const discovered = link.chats.size < 1000 && !link.chats.has(chat);
     if (discovered) link.chats.set(chat, (message.pushName || chat).slice(0, 120));
     const bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat);
     const body = String(content?.conversation ?? content?.extendedTextMessage?.text ?? content?.imageMessage?.caption ?? content?.documentMessage?.caption ?? '');
-    if (!bindings.some(binding => senderAllowed(binding, sender, null) && channelPrefixAllowed(binding, body))) { if (discovered) this.changed(link.connection.workspaceId); return; }
+    if (!bindings.some(binding => senderAllowed(binding, sender, null) && (content?.audioMessage || channelPrefixAllowed(binding, body)))) { if (discovered) this.changed(link.connection.workspaceId); return; }
     await this.mutatePending(link, async () => {
       if (link.pending.some(item => item.key.id === message.key.id && item.key.remoteJid === chat)) return;
       if (link.pending.length >= PENDING_LIMIT) throw new Error('WHATSAPP_PENDING_LIMIT');
@@ -303,8 +304,13 @@ export class WhatsAppBotService {
       try { await this.dispatch(link, message); }
       catch (error) {
         const code = error instanceof Error ? error.message : '';
-        if (!['CHANNEL_ATTACHMENT_TOO_LARGE', 'CHANNEL_ATTACHMENT_DENIED'].includes(code)) throw error;
+        if (!['CHANNEL_ATTACHMENT_TOO_LARGE', 'CHANNEL_ATTACHMENT_DENIED', 'BOT_AUDIO_UNREADABLE', 'BOT_AUDIO_NOT_READY', 'BOT_AUDIO_EMPTY'].includes(code)) throw error;
         link.error = code; this.changed(link.connection.workspaceId);
+        if (code.startsWith('BOT_AUDIO_')) {
+          await attentionService.raiseOnce({ workspaceId: link.connection.workspaceId, nodeId: null, category: 'message', severity: 'warning',
+            title: m['bots.audio_failed_title'](), body: code === 'BOT_AUDIO_NOT_READY' ? m['bots.audio_not_ready']() : m['bots.audio_unreadable'](),
+            sourceType: 'bot_audio', sourceId: link.connection.id, correlationId: `bot_audio:${link.connection.id}`, action: { target: 'bots' } });
+        }
         for (const binding of await channelBindingRepository.list(link.connection.workspaceId)) {
           if (binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === message.key.remoteJid) {
             await channelBindingRepository.update(binding.id, { lastError: code });
@@ -350,9 +356,23 @@ export class WhatsAppBotService {
     const chat = message.key.remoteJid ?? '', sender = whatsAppInboundSender(message.key, link.socket?.user?.id);
     if (!sender) return;
     const content = normalizeMessageContent(message.message);
-    const media = content?.imageMessage ?? content?.documentMessage;
-    const body = String(content?.conversation ?? content?.extendedTextMessage?.text ?? media?.caption ?? '').slice(0, 8000);
-    const bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat && senderAllowed(binding, sender, null) && channelPrefixAllowed(binding, body));
+    const audio = content?.audioMessage;
+    const media = content?.imageMessage ?? content?.documentMessage ?? audio;
+    let body = String(content?.conversation ?? content?.extendedTextMessage?.text ?? ('caption' in (media ?? {}) ? (media as { caption?: string }).caption : '') ?? '').slice(0, 8000);
+    let bindings = (await channelBindingRepository.list(link.connection.workspaceId)).filter(binding => binding.enabled && binding.kind === 'whatsapp' && binding.integrationId === link.connection.id && binding.externalChatId === chat && senderAllowed(binding, sender, null) && (audio || channelPrefixAllowed(binding, body)));
+    if (!bindings.length) return;
+    let audioBytes: Buffer | null = null;
+    if (audio) {
+      if (Number(audio.fileLength ?? 0) > 10 * 1024 * 1024 || Number(audio.seconds ?? 0) > 300) throw new Error('CHANNEL_ATTACHMENT_TOO_LARGE');
+      if (audio.url && !allowedWhatsAppMediaUrl(audio.url)) throw new Error('CHANNEL_ATTACHMENT_DENIED');
+      audioBytes = await downloadWhatsAppMedia(message);
+      const { botAudioService } = await import('./BotAudioService.js');
+      body = await botAudioService.transcribe(audioBytes);
+      const { voicePrefixBody } = await import('../../domain/bot-voice-prefix.js');
+      const matches = bindings.map(binding => ({ binding, body: voicePrefixBody(body, binding.replyPrefixes) })).filter(item => channelPrefixAllowed(item.binding, item.body));
+      if (matches.length !== 1) return; // Never guess between two spoken bot names.
+      bindings = [matches[0].binding]; body = matches[0].body;
+    }
     for (const binding of bindings) {
       await this.require(binding.workspaceId, link.connection.id);
       const externalId = `${chat}:${message.key.id}`;
@@ -363,16 +383,18 @@ export class WhatsAppBotService {
         if (media && !previous) {
           if (Number(media.fileLength ?? 0) > 10 * 1024 * 1024) throw new Error('CHANNEL_ATTACHMENT_TOO_LARGE');
           if (media.url && !allowedWhatsAppMediaUrl(media.url)) throw new Error('CHANNEL_ATTACHMENT_DENIED');
-          const bytes = await downloadWhatsAppMedia(message);
-          const filename = content?.documentMessage?.fileName ?? 'photo.jpg';
+          const bytes = audioBytes ?? await downloadWhatsAppMedia(message);
+          const filename = content?.documentMessage?.fileName ?? (audio ? `voice-message.${audio.mimetype?.includes('mpeg') ? 'mp3' : audio.mimetype?.includes('wav') ? 'wav' : 'ogg'}` : 'photo.jpg');
           const file = new File([new Uint8Array(bytes)], filename.slice(0, 180), { type: media.mimetype ?? 'application/octet-stream' });
           const attachment = await workspaceAttachmentService.create(binding.workspaceId, WorkspaceAttachmentDto.fromFile(file));
           attachments.push(attachment); uploaded.push(attachment);
         }
         const latest = await channelBindingRepository.find(binding.workspaceId, binding.id);
         if (link.stopped || !latest?.enabled || latest.integrationId !== link.connection.id || latest.nodeId !== binding.nodeId || latest.externalChatId !== chat || !senderAllowed(latest, sender, null) || !channelPrefixAllowed(latest, body)) continue;
+        const scope = (await import('./BotSafetyService.js')).botSafetyService.bindingScope(latest);
+        const ownerProof = await botOwnerMessageService.issue(latest, scope, message.key, link.socket?.user?.id);
         await channelService.postExternal(binding.workspaceId, binding.nodeId, { body, via: 'whatsapp', bindingId: binding.id,
-          expectedBindingScope: (await import('./BotSafetyService.js')).botSafetyService.bindingScope(latest),
+          ...(ownerProof ? { ownerProof } : {}), expectedBindingScope: scope,
           sender: (message.pushName || sender).slice(0, 120), senderId: sender, externalId, attachments });
         await channelBindingRepository.update(binding.id, { lastInboundAt: new Date().toISOString(), lastError: null });
       } finally {
@@ -406,6 +428,7 @@ export class WhatsAppBotService {
     // A revoked legacy session cannot resume. Seed the new transport without
     // deleting saved chats, routes, history or another connection's credentials.
     if (!connection.enabled) {
+      await botOwnerMessageService.revoke(workspaceId, id);
       await desktopSecretService.delete(`automation:whatsapp:zapo:${workspaceId}:${id}`);
       const { ZapoSecureStore } = await import('../../infrastructure/integrations/ZapoSecureStore.js');
       const fresh = await ZapoSecureStore.open(workspaceId, id, desktopSecretService, { allowInteractiveUnlock: true });
@@ -428,6 +451,7 @@ export class WhatsAppBotService {
   private async disconnectOnce(workspaceId: string, id: string) {
     const connection = await botConnectionRepository.find(workspaceId, id);
     if (!connection) throw new Error('BOT_CONNECTION_NOT_FOUND');
+    await botOwnerMessageService.revoke(workspaceId, id);
     await this.starts.get(id)?.catch(() => undefined);
     const link = this.links.get(id);
     if (link) {
