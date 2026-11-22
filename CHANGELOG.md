@@ -26,6 +26,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Keep the current mode when opening account limits from the header, native menu or Focus footer. Reuse the live Usage panel in a drawer outside Canvas, preserve the route/workspace, and retain the existing Canvas side panel.
+
 - Simplify bot creation to name, public purpose and account. Configure the explicitly public purpose automatically, keep everyday messages/attachments free of per-response approvals, and hide model/effort/transport and detailed safety controls under Advanced. Load function options only on demand; never copy existing private instructions into public settings. Disable stale public actions individually without blocking basic chat, attachments or other valid actions.
 
 - Allow public integration functions only for fixed, schema-validated reads declared nonmutating by the integration catalog. Use customer-aware HTTP functions for dynamic requests; never infer safety from an action name.

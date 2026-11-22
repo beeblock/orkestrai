@@ -17,9 +17,10 @@
     onClose: () => void;
     onAddToCanvas?: () => void;
     workspaceId?: string | null;
+    embedded?: boolean;
   };
 
-  let { onClose, onAddToCanvas, workspaceId = null }: Props = $props();
+  let { onClose, onAddToCanvas, workspaceId = null, embedded = false }: Props = $props();
 
   const usages = $derived(usageStore.values);
   const loading = $derived(usageStore.loading);
@@ -113,7 +114,7 @@
   });
 </script>
 
-<aside class="usage-panel">
+<aside class="usage-panel" class:embedded>
   <header class="panel-header">
     <h3>{m['usage.title']()}</h3>
     <div class="panel-actions">
@@ -221,6 +222,8 @@
     border-left: 1px solid var(--app-border);
     background: var(--app-sidebar);
   }
+
+  .usage-panel.embedded { width: 100%; height: 100%; min-height: 0; border-left: 0; }
 
   .panel-header {
     display: flex;

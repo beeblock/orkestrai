@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { runCanvasAction } from './canvas-actions.js';
   import { Activity, TriangleAlert } from '@lucide/svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import { usageSeverity } from '$lib/modules/agent-room/domain/usage.js';
@@ -38,10 +38,7 @@
       .join('. ');
   }
 
-  async function openUsage() {
-    sessionStorage.setItem('orkestrai.menu-action', 'usage');
-    await goto(workspaceId ? `/canvas?workspace=${workspaceId}` : '/canvas');
-  }
+  function openUsage() { runCanvasAction('usage', workspaceId); }
 
   onMount(retainUsageFeed);
 </script>

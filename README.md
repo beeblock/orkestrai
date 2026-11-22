@@ -149,6 +149,9 @@ the app are not automatically replayed; already persisted final results recover
 without rerunning the model. See **How to use → Personal bots** and its
 guided tour. Openbot was a reference; none of its noncommercial code was copied.
 
+The header’s usage limits open over the current mode. Checking account limits
+from Conversation, Bots or Focus no longer navigates to Canvas.
+
 Previously opened Canvas tabs restore a bounded metadata snapshot before checking
 fresh data in the background. Six tabs stay warm without retaining every terminal
 view in memory; unchanged nodes survive revalidation. Provider discovery is

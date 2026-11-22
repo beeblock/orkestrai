@@ -10,6 +10,9 @@
   import GlobalDictation from '$lib/components/agent-room/GlobalDictation.svelte';
   import DesktopTitlebar from '$lib/components/agent-room/DesktopTitlebar.svelte';
   import GlobalCommandPalette from '$lib/components/agent-room/GlobalCommandPalette.svelte';
+  import GlobalUsageDrawer from '$lib/components/agent-room/GlobalUsageDrawer.svelte';
+  import { runCanvasAction } from '$lib/components/agent-room/canvas-actions.js';
+  import { workspaceContext } from '$lib/components/agent-room/workspace-context.svelte.js';
   import TourGuidePanel from '$lib/components/agent-room/tours/TourGuidePanel.svelte';
   import * as m from '$lib/paraglide/messages.js';
   import { initLocaleRuntime, localeState } from '$lib/i18n/locale.svelte.js';
@@ -76,7 +79,7 @@
       applyAppTheme(appSettingsStore.values);
       localeReady = true;
     });
-    const canvasActions = new Set(['new-workspace', 'presets', 'organize', 'floors', 'roles', 'usage', 'ports']);
+    const canvasActions = new Set(['new-workspace', 'presets', 'organize', 'floors', 'roles', 'ports']);
     const unsubscribeMenu = desktopMenu?.onMenuAction?.((action) => {
       if (action === 'canvas') void goto('/canvas');
       else if (action === 'terminals') void goto('/terminal');
@@ -85,6 +88,7 @@
       else if (action === 'settings') void goto('/settings');
       else if (action === 'docs') void goto('/docs');
       else if (action === 'changelog') void goto('/docs#changelog');
+      else if (action === 'usage') runCanvasAction('usage', workspaceContext.workspaceId);
       else if (action === 'command-palette') window.dispatchEvent(new CustomEvent('orkestrai:global-search'));
       else if (canvasActions.has(action)) {
         if (location.pathname !== '/canvas') {
@@ -150,6 +154,7 @@
       </div>
       <GlobalDictation />
       <GlobalCommandPalette />
+      <GlobalUsageDrawer />
       <TourGuidePanel />
     {/key}
   {/if}
