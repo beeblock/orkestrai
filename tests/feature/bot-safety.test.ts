@@ -20,6 +20,7 @@ import { channelService } from '$lib/modules/agent-room/application/services/Cha
 import { agentInboxService } from '$lib/modules/agent-room/application/services/AgentInboxService.js';
 import { botExternalDeliveryService, BotExternalDeliveryService } from '$lib/modules/agent-room/application/services/BotExternalDeliveryService.js';
 import { botDeliveryRepository } from '$lib/modules/agent-room/infrastructure/repositories/BotDeliveryRepository.js';
+import { AgentAutomationIntegration } from '$lib/modules/agent-room/domain/models/AgentAutomationIntegration.js';
 import { integrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 
 describe('public bot security boundary', () => {
@@ -140,6 +141,26 @@ describe('public bot security boundary', () => {
     await expect(f.service.validateSettings(f.workspace.id, { publicKnowledge: 'password=topsecret123' })).rejects.toThrow('CONTAINS_SECRET');
     const tool = await functionTool(f.workspace.id, 'workspace_command');
     await expect(f.service.validateSettings(f.workspace.id, { actions: [{ toolId: tool.id, revision: 1, outputFields: ['answer'] }] })).rejects.toThrow('ACTION_UNSAFE');
+  });
+
+  it('uses integration action metadata instead of name guessing and prevents customer-selected private message ids', async () => {
+    const f = await fixture(), integrationId = uuidv7(), now = new Date();
+    await AgentAutomationIntegration.create({ id: integrationId, workspace_id: f.workspace.id, type: 'gmail', name: 'Public FAQ', config_json: '{}',
+      secret_key: null, manifest_version: '1.0.0', secret_refs_json: '[]', permissions_json: '["gmail.read_message","gmail.modify_labels"]',
+      enabled: true, status: 'connected', last_checked_at: now, last_used_at: null, error: null, created_at: now, updated_at: now });
+    const base = await functionTool(f.workspace.id);
+    for (const [action, inputTemplate, allowed] of [
+      ['gmail.read_message', { messageId: 'public-faq' }, true],
+      ['gmail.read_message', { messageId: '{{messageId}}' }, false],
+      ['gmail.modify_labels', { messageId: 'public-faq', addLabelIds: ['TRASH'] }, false],
+    ] as const) {
+      const tool = await agentWorkspaceToolRepository.create({ workspaceId: f.workspace.id, nodeId: null, name: 'Scoped integration', slug: `integration-${uuidv7()}`, description: '',
+        createdBy: { type: 'user' }, manifest: workspaceToolManifestSchema.parse({ ...base.manifest, executor: { kind: 'integration', integrationId, action, inputTemplate }, capabilities: ['tool', 'integration'] }) });
+      await agentWorkspaceToolRepository.setStatus(f.workspace.id, tool.id, 'published');
+      const check = f.service.validateSettings(f.workspace.id, { actions: [{ toolId: tool.id, revision: 1, outputFields: ['answer'] }] });
+      if (allowed) await expect(check).resolves.toMatchObject({ actions: [{ toolId: tool.id }] });
+      else await expect(check).rejects.toThrow('ACTION_UNSAFE');
+    }
   });
 
   it('treats HTTP arguments as JSON values and fixes caller identity outside model control', async () => {

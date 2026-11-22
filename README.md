@@ -114,7 +114,9 @@ owner chats keep their existing account, context and full bridge.
 Public turns use fresh restricted native workers with no host shell, arbitrary
 workspace files, private instructions, full bridge or unrestricted delegation.
 Grant only published fixed-destination functions, pin their revisions and choose
-safe output fields. Approve file fields explicitly; paths and SHA-256 must match
+safe output fields. Integration functions use fixed, schema-validated read-only
+requests; dynamic customer-specific access belongs in a caller-aware HTTP
+function. Approve file fields explicitly; paths and SHA-256 must match
 before a file can leave. HTTP functions receive trusted customer identity in
 `x-orkestrai-external-sender`, `-channel` and `-binding` headers. Your backend must
 validate that identity and authorize its own customer data.

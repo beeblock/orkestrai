@@ -26,6 +26,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Allow public integration functions only for fixed, schema-validated reads declared nonmutating by the integration catalog. Use customer-aware HTTP functions for dynamic requests; never infer safety from an action name.
+
 - Notify the owner in Attention Center and through the native desktop shell when a WhatsApp session is revoked or a connection stays unavailable for one minute. Deduplicate reconnection/restart notices, open Bots from the alert, resolve it after recovery, and suppress intentional-disconnect alerts without waking a model.
 
 - Keep all six open Canvas tabs warm within a 16 MiB metadata budget instead of expiring their snapshots after one minute. Revalidate in the background without rebuilding unchanged nodes, precompute connections, restore the cached viewport immediately, reset foreign Floor filters and deduplicate workspace-scoped provider discovery. Existing live terminals may attach immediately; new sessions and respawns wait for revalidated command/runtime metadata. Stale graph/provider responses cannot overwrite a later selection; explicit refresh, unload and removal retain their semantics.

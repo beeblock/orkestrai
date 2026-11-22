@@ -132,10 +132,19 @@ export class BotSafetyService {
         try { JSON.parse(published.manifest.executor.bodyTemplate); } catch { throw new Error('BOT_PUBLIC_ACTION_UNSAFE'); }
       }
     }
-    // Integrations are explicitly published functions. Targets and actions
-    // remain fixed in the owner manifest, never selected by customer text.
-    if (published.manifest.executor.kind === 'integration'
-      && /(?:send|post|upload|delete|remove|exec|shell|command|write|update|deploy)/i.test(published.manifest.executor.action)) throw new Error('BOT_PUBLIC_ACTION_UNSAFE');
+    // Integration reads have fixed parameters. Dynamic customer-specific
+    // access must use an HTTP function that can verify our caller headers.
+    if (published.manifest.executor.kind === 'integration') {
+      const executor = published.manifest.executor;
+      if (/\{\{/.test(JSON.stringify(executor.inputTemplate))) throw new Error('BOT_PUBLIC_ACTION_UNSAFE');
+      const [{ integrationExecutionService }, { integrationManifest }] = await Promise.all([
+        import('./IntegrationExecutionService.js'), import('../catalogs/IntegrationCatalog.js'),
+      ]);
+      const integration = await integrationExecutionService.get(workspaceId, executor.integrationId);
+      const action = integrationManifest(integration.type).actions.find(action => action.id === executor.action);
+      if (!integration.enabled || integration.status !== 'connected' || !integration.permissions.includes(executor.action)
+        || !action || action.mutation || !action.inputSchema.safeParse(executor.inputTemplate).success) throw new Error('BOT_PUBLIC_ACTION_UNSAFE');
+    }
     return { tool, manifest: published.manifest };
   }
 
