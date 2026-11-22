@@ -44,6 +44,19 @@ Large asset checkouts do not require Code Intelligence: Canvas Git polling reads
 
 The separate **Bots** mode creates personal assistants and collaboration groups;
 Conversation and existing development agents retain their current behavior.
+Start with one of **16 searchable presets** in Create bot: assistant, support,
+sales, calendar, research, reports, programming, operations, writing, social media,
+studying, habits, finance, travel, communities and creative images. Each fills in
+an editable purpose, personality and behavior rules. Changing presets keeps your
+typed name, provider and account; Start from scratch creates a custom setup.
+Presets do not grant tools, connect services or change existing bots. The same
+catalog is available to leaders/specialists with `orkestrai bot preset_list`
+(optional `--input '{"locale":"en"}'`). Create through `bot_command` with
+`settings: {title, provider, presetId, presetLocale}` and an assigned task.
+Explicit private `instructions` never replace the preset's public role; use an
+explicit `publicRole` to customize that public text. See **How to use → Create a
+bot from a preset** and its guided tour.
+
 Choose the installed Claude/Codex account, model, effort and terminal or native
 transport. Native mode uses Codex App Server or the official Claude Agent SDK,
 without terminal paste/Enter delivery or a second bundled Claude executable.

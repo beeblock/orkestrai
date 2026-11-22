@@ -10,10 +10,14 @@
   import { SegmentedControl } from '$lib/components/ui/segmented';
   import { CircleAlert, LoaderCircle } from '@lucide/svelte';
   import ModelCombobox from '../canvas/ModelCombobox.svelte';
-  import { personalBotSettingsSchema, type PersonalBotSummary } from '$lib/modules/agent-room/contracts/schemas/personal-bot.schema.js';
+  import { personalBotEditorSchema, type PersonalBotSummary } from '$lib/modules/agent-room/contracts/schemas/personal-bot.schema.js';
   import type { AgentModelOption, ProviderProfile } from '$lib/modules/agent-room/domain/types.js';
   import { botApi, type BotProviderOption } from './bot-api.js';
   import * as m from '$lib/paraglide/messages.js';
+  import { getLocale } from '$lib/paraglide/runtime.js';
+  import { composeBotInstructions, getBotPreset } from '$lib/modules/agent-room/domain/bot-presets.js';
+  import type { BotPresetId } from '$lib/modules/agent-room/domain/bot-preset-types.js';
+  import BotPresetPicker from './BotPresetPicker.svelte';
 
   let { workspaceId, providers, bot = null, onSaved, onClose }: {
     workspaceId: string; providers: BotProviderOption[]; bot?: PersonalBotSummary | null;
@@ -22,16 +26,20 @@
   let saving = $state(false), error = $state(''), models = $state<AgentModelOption[]>([]), profiles = $state<ProviderProfile[]>([]);
   let metadataLoading = $state(false);
   let advanced = $state(false);
+  let selectedPreset = $state<BotPresetId | 'custom'>('assistant');
+  let titleEdited = $state(false);
   let providerEfforts = $state<string[]>([]);
-  const form = superForm(defaults(zod(personalBotSettingsSchema)), {
-    SPA: true, dataType: 'json', validators: zod(personalBotSettingsSchema),
+  const form = superForm(defaults(zod(personalBotEditorSchema)), {
+    SPA: true, dataType: 'json', validators: zod(personalBotEditorSchema),
     async onUpdate({ form: validated }) {
       if (!validated.valid || saving) return;
       saving = true; error = '';
       try {
+        const { personality, rules, ...settings } = validated.data;
+        const instructions = bot ? settings.instructions : composeBotInstructions({ purpose: settings.instructions, personality, rules }, getLocale());
         const result = await botApi<PersonalBotSummary>(`/api/agent-room/workspaces/${workspaceId}/bots`, {
           command: bot ? 'update' : 'create', ...(bot ? { nodeId: bot.id } : {}),
-          settings: { ...validated.data, ...(!bot ? { publicRole: validated.data.instructions } : {}) },
+          settings: { ...settings, instructions, ...(!bot ? { publicRole: instructions, presetLocale: getLocale(), ...(selectedPreset !== 'custom' ? { presetId: selectedPreset } : {}) } : {}) },
         });
         onSaved(result);
       } catch (failure) {
@@ -46,9 +54,20 @@
   $effect(() => {
     if (initialized) return;
     initialized = true;
-    data.set({ title: bot?.title ?? '', instructions: bot?.instructions ?? '', provider: bot?.provider ?? providers[0]?.id ?? '',
+    const preset = bot ? null : getBotPreset('assistant', getLocale());
+    data.set({ title: bot?.title ?? preset?.name ?? '', instructions: bot?.instructions ?? preset?.purpose ?? '',
+      personality: preset?.personality ?? '', rules: preset?.rules ?? '', provider: bot?.provider ?? providers[0]?.id ?? '',
       model: bot?.model ?? null, effort: bot?.effort ?? null, profileId: bot?.profileId ?? null, transport: bot?.transport ?? 'structured' });
   });
+  function selectPreset(id: BotPresetId | 'custom') {
+    if (id === selectedPreset) return;
+    selectedPreset = id;
+    const preset = id === 'custom' ? null : getBotPreset(id, getLocale());
+    if (!$data.title.trim() || !titleEdited) $data.title = preset?.name ?? '';
+    $data.instructions = preset?.purpose ?? '';
+    $data.personality = preset?.personality ?? '';
+    $data.rules = preset?.rules ?? '';
+  }
   // Superforms publishes the whole form store when any field changes. Depend
   // on the scalar provider value so editing a name cannot reload metadata and
   // disable Save between pointerdown and click.
@@ -76,18 +95,27 @@
 </script>
 
 <Dialog.Root open onOpenChange={value => !value && onClose()}>
-  <Dialog.Content class="max-h-[90dvh] overflow-y-auto sm:max-w-[620px]">
-    <Dialog.Header>
+  <Dialog.Content class={`flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 ${bot ? 'sm:max-w-[620px]' : 'sm:max-w-[900px]'}`}>
+    <Dialog.Header class="shrink-0 p-5 pr-10">
       <Dialog.Title>{bot ? m['bots.edit']() : m['bots.create']()}</Dialog.Title>
-      <Dialog.Description>{bot ? m['bots.instructions_hint']() : m['bots.simple_setup_hint']()}</Dialog.Description>
+      <Dialog.Description>{bot ? m['bots.instructions_hint']() : m['bots.preset_hint']()}</Dialog.Description>
     </Dialog.Header>
-    <form use:enhance class="grid gap-4" data-testid="bot-editor">
-      <label class="grid gap-1.5 text-sm font-medium">{m['bots.name']()}<Input name="title" bind:value={$data.title} maxlength={48} required /></label>
+    <form use:enhance class="flex min-h-0 flex-col overflow-hidden" data-testid="bot-editor">
+      <div class={`grid min-h-0 flex-1 overflow-y-auto ${!bot ? 'md:grid-cols-[250px_minmax(0,1fr)] md:overflow-hidden' : ''}`}>
+      {#if !bot}<BotPresetPicker value={selectedPreset} onValueChange={selectPreset} />{/if}
+      <div class="min-h-0 space-y-4 p-5 pt-1 md:overflow-y-auto">
+      {#if !bot}<p class="text-xs font-medium text-[var(--app-text-muted)]" aria-live="polite">{selectedPreset === 'custom' ? m['bots.preset_custom_hint']() : m['bots.preset_selected']({ name: getBotPreset(selectedPreset, getLocale()).name })}</p>{/if}
+      <label class="grid gap-1.5 text-sm font-medium">{m['bots.name']()}<Input name="title" bind:value={$data.title} oninput={() => (titleEdited = true)} maxlength={48} required /></label>
       {#if $errors.title}<p class="text-sm text-[var(--app-danger)]">{$errors.title}</p>{/if}
       {#if !bot}
-      <label class="grid gap-1.5 text-sm font-medium">{m['bots.purpose']()}<Textarea name="instructions" bind:value={$data.instructions} rows={3} maxlength={6000} placeholder={m['bots.purpose_example']()} required /></label>
+      <label class="grid gap-1.5 text-sm font-medium">{m['bots.purpose']()}<Textarea name="instructions" bind:value={$data.instructions} rows={3} maxlength={3000} placeholder={m['bots.purpose_example']()} required /></label>
       <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.purpose_public_hint']()}</p>
       {#if $errors.instructions}<p class="text-sm text-[var(--app-danger)]">{$errors.instructions}</p>{/if}
+      <label class="grid gap-1.5 text-sm font-medium">{m['bots.personality']()}<Textarea name="personality" bind:value={$data.personality} rows={2} maxlength={1200} /></label>
+      {#if $errors.personality}<p class="text-sm text-[var(--app-danger)]">{$errors.personality}</p>{/if}
+      <label class="grid gap-1.5 text-sm font-medium">{m['bots.rules']()}<Textarea name="rules" bind:value={$data.rules} rows={3} maxlength={1600} /></label>
+      {#if $errors.rules}<p class="text-sm text-[var(--app-danger)]">{$errors.rules}</p>{/if}
+      <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.preset_permissions_hint']()}</p>
       {/if}
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="grid gap-1.5"><span class="text-sm font-medium">{m['bots.provider']()}</span>
@@ -126,7 +154,9 @@
       </div>
       {/if}
       {#if error}<p class="flex gap-2 text-sm text-[var(--app-danger)]" role="alert"><CircleAlert size={16} />{error}</p>{/if}
-      <Dialog.Footer>
+      </div>
+      </div>
+      <Dialog.Footer class="shrink-0 border-t border-[var(--app-border)] p-4">
         <Button variant="outline" type="button" onclick={onClose}>{m['bots.cancel']()}</Button>
         <Button type="submit" disabled={saving || metadataLoading || !$data.provider}>{#if saving}<LoaderCircle class="animate-spin" size={15} />{/if}{m['bots.save']()}</Button>
       </Dialog.Footer>

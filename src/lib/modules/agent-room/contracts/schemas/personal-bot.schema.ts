@@ -2,6 +2,7 @@ import { z } from 'zod/v3';
 import { workspaceAttachmentSchema, MAX_WORKSPACE_ATTACHMENTS } from './workspaceAttachmentSchemas.js';
 import { createChannelBindingSchema, updateChannelBindingSchema } from './channel.schema.js';
 import { botSafetySchema, type BotSafetySettings } from './bot-safety.schema.js';
+import { botPresetIds, botPresetLocales } from '../../domain/bot-preset-types.js';
 
 export const personalBotSettingsSchema = z.object({
   title: z.string().trim().min(1).max(48),
@@ -15,6 +16,21 @@ export const personalBotSettingsSchema = z.object({
   transport: z.enum(['terminal', 'structured']).default('structured'),
 }).strict();
 
+/** Editable composition fields share the same bounds in the creation UI. */
+export const personalBotEditorSchema = personalBotSettingsSchema.extend({
+  personality: z.string().trim().max(1_200).default(''),
+  rules: z.string().trim().max(1_600).default(''),
+});
+
+const personalBotCreationSettingsSchema = personalBotSettingsSchema.extend({
+  instructions: personalBotSettingsSchema.shape.instructions.optional(),
+  presetId: z.enum(botPresetIds).optional(),
+  presetLocale: z.enum(botPresetLocales).default('en'),
+}).superRefine((settings, context) => {
+  if (!settings.instructions && !settings.presetId) context.addIssue({ code: z.ZodIssueCode.custom,
+    message: 'Choose a preset or provide instructions.', path: ['instructions'] });
+});
+
 export const botGroupSettingsSchema = z.object({
   title: z.string().trim().min(1).max(120),
   instructions: z.string().trim().max(12_000).default(''),
@@ -23,7 +39,8 @@ export const botGroupSettingsSchema = z.object({
 }).strict().refine(value => value.memberIds.includes(value.coordinatorId), { message: 'The coordinator must be a group member.', path: ['coordinatorId'] });
 
 export const personalBotCommandSchema = z.discriminatedUnion('command', [
-  z.object({ command: z.literal('create'), settings: personalBotSettingsSchema }).strict(),
+  z.object({ command: z.literal('create'), settings: personalBotCreationSettingsSchema }).strict(),
+  z.object({ command: z.literal('preset_list'), locale: z.enum(botPresetLocales).default('en') }).strict(),
   z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema.omit({ publicRole: true }) }).strict(),
   z.object({ command: z.literal('remove'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_options'), nodeId: z.string().uuid() }).strict(),

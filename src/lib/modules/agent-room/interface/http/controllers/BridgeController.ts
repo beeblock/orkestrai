@@ -134,7 +134,7 @@ export class BridgeController extends Controller {
       if (event.request.method === 'GET') return this.json({ data: await personalBotService.list(workspace.id) });
       const raw = z.object({ taskId: z.string().uuid().optional(), input: z.unknown() }).strict().parse(await event.request.json());
       const dto = PersonalBotCommandDto.from(workspace.id, raw.input, actor);
-      if (!['group_post', 'group_send'].includes(dto.input.command)) {
+      if (!['group_post', 'group_send', 'preset_list'].includes(dto.input.command)) {
         const task = raw.taskId ? (await taskBoardService.list(workspace.id)).find(item => item.id === raw.taskId) : null;
         if (!task || task.assigneeNodeId !== actor || task.status !== 'doing') return this.json({ error: 'BOT_ASSIGNED_TASK_REQUIRED' }, 403);
       }

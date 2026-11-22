@@ -37,6 +37,16 @@ describe('personal bot CLI/MCP parity', () => {
     await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: null }, 'bot_command', body);
     expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', body);
   });
+  it('reads the localized preset catalog through CLI and MCP without a configuration task', async () => {
+    expect(await run(['bot', 'preset_list'], options())).toBe(0);
+    expect(requests.at(-1).body).toEqual({ input: { command: 'preset_list' } });
+    expect(await run(['bot', 'preset_list', '--input', JSON.stringify({ locale: 'pt-BR' })], options())).toBe(0);
+    const body = requests.at(-1).body;
+    expect(body).toEqual({ input: { command: 'preset_list', locale: 'pt-BR' } });
+    const bridge = vi.fn().mockResolvedValue([]);
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: null }, 'bot_command', body);
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', body);
+  });
   it('posts an authenticated group reply without inventing an owner task', async () => {
     const input = { groupId: 'group-id', body: 'Answer' };
     expect(await run(['bot', 'group_post', '--input', JSON.stringify(input)], options())).toBe(0);

@@ -61,6 +61,44 @@ describe('personal bot boundaries and persistence', () => {
     expect(shownOnFloor(f.developer, null)).toBe(true);
   });
 
+  it('creates a localized preset bot without granting actions, changing accounts or touching an existing bot', async () => {
+    const f = await fixture();
+    const before = (await workspaceRepository.getNode(f.bot.id))!;
+    const created = await f.command({ command: 'create', settings: { title: 'Jarvis', provider: 'claude',
+      presetId: 'support', presetLocale: 'pt-BR' } }) as PersonalBotSummary;
+    expect(created).toMatchObject({ title: 'Jarvis', provider: 'claude', profileId: null, runtimeMode: 'on_demand' });
+    expect(created.instructions).toContain('Ajude clientes');
+    expect(created.instructions).toContain('Paciente');
+    expect(created.safety.publicInstructions).toBe(created.instructions);
+    expect(created.safety.actions).toEqual([]);
+    expect((await workspaceRepository.getNode(f.bot.id))!.payload).toEqual(before.payload);
+    const privateOverride = await f.command({ command: 'create', settings: { title: 'Private helper', provider: 'codex',
+      presetId: 'support', presetLocale: 'en', instructions: 'PRIVATE_OWNER_FACT: internal roadmap' } }) as PersonalBotSummary;
+    expect(privateOverride.instructions).toContain('PRIVATE_OWNER_FACT');
+    expect(privateOverride.safety.publicInstructions).not.toContain('PRIVATE_OWNER_FACT');
+    expect(privateOverride.safety.publicInstructions).toContain('Help customers');
+  });
+
+  it('lets authenticated leaders and specialists read presets without a task but still requires identity', async () => {
+    const f = await fixture();
+    vi.spyOn(bridgeService, 'resolveWorkspaceByToken').mockResolvedValue(f.workspace);
+    const identity = vi.spyOn(ptySessionManager, 'resolveBridgeAgent').mockReturnValue(null);
+    const controller = new BridgeController();
+    const event = () => ({ url: new URL('http://localhost/api/agent-room/bridge/bots'), request: new Request('http://localhost/api/agent-room/bridge/bots', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer fixture', 'x-orkestrai-agent-token': 'live-token' },
+      body: JSON.stringify({ input: { command: 'preset_list', locale: 'pt-BR' } }),
+    }) });
+    expect((await controller.bots(event())).status).toBe(403);
+    for (const nodeId of [f.bot.id, f.developer.id]) {
+      identity.mockReturnValue(nodeId);
+      const response = await controller.bots(event());
+      expect(response.status).toBe(200);
+      const presets = (await response.json()).data;
+      expect(presets).toHaveLength(16);
+      expect(presets.find((item: any) => item.id === 'support').name).toBe('Suporte ao cliente');
+    }
+  });
+
   it.each(['structured', 'terminal'] as const)('renames a live %s bot without changing its execution or runtime settings', async transport => {
     const f = await fixture();
     const payload = { ...f.bot.payload, agentTransport: transport, agentRuntimeMode: 'persistent',

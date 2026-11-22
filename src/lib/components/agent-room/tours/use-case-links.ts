@@ -1,5 +1,6 @@
 /** Maps every documented use case to the guided tour that exercises it. */
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
+  'bot-presets': 'bot-presets',
   'personal-bots-phone-support': 'personal-bots',
   'public-bot-protection': 'public-bot-protection',
   'whatsapp-group-routing': 'whatsapp-group-routing',

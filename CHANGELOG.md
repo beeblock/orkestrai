@@ -7,7 +7,9 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.5 local preview
+### Added — 0.55.0-beta.6 local preview
+
+- Add 16 searchable bot presets with localized purpose, personality and behavior rules. Keep all text editable, preserve the typed name/provider/account on selection, offer a blank custom option, and keep creation actions visible in short windows. Expose the same public-safe catalog and preset-based creation to authenticated leaders and specialists through CLI/MCP, without changing existing bots or granting tools/connections. Add a guided use case and tour in all three languages.
 
 - Isolate public bot turns from private workspace context and host tools; add public role/knowledge, pinned action/output grants, customer-scoped attachment reads, immutable HTTP caller identity, quotas, exact artifact approvals and a tool-free reply review. Keep owner sessions unchanged; quarantine unreviewed drafts and surface blocked requests in Attention Center.
 
