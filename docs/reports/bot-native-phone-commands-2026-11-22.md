@@ -101,3 +101,13 @@ https://github.com/electron/electron/blob/v42.0.0/spec/api-safe-storage-spec.ts
 The native vault/startup tests include delayed unlock with a responsive health
 check, concurrent account writes, cancelled encryption after delete, and revoked
 WhatsApp reads. They use fake OS crypto, not the owner's Keychain.
+
+### Specialist completion follows the authenticated phone request
+
+Delivery reconstructs the exact external origin from the persisted source when
+resuming a specialist's reply, including existing queued envelopes. A return
+address alone does not prove owner identity; the bot driver revalidates the
+original sender and current grants. Replies belonging to another bot are never
+adopted. Store/check each result's own body/artifact approval, so an initial
+answer and a later completion can both wait in the outbox without invalidating
+each other. The original connection/revocation checks still apply.

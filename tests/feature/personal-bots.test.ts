@@ -3,6 +3,7 @@ import { useSvelarTest } from '@beeblock/svelar/testing';
 import { mkdtemp, rm, writeFile, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { agentTerminalDeliveryService } from '$lib/modules/agent-room/application/services/AgentTerminalDeliveryService.js';
 import { botSafetyService, BotSafetyService } from '$lib/modules/agent-room/application/services/BotSafetyService.js';
 import { botSafetySchema } from '$lib/modules/agent-room/contracts/schemas/bot-safety.schema.js';
 import { tmpdir } from 'node:os';
@@ -225,6 +226,26 @@ describe('personal bot boundaries and persistence', () => {
     const ask = vi.spyOn(bridgeService as any, 'askAgent').mockResolvedValue({});
     await bridgeService.ask(f.workspace.id, { to: f[target].id, from: f.bot.id, message: 'Check this' });
     expect(ask.mock.calls[0][1]).toMatchObject({ metadata: { returnConversationKey: 'binding:private-chat', returnChannelMessageId: source } });
+  });
+
+  it('restores the exact external origin when a specialist reply resumes a phone conversation', async () => {
+    const f = await fixture(), bindingId = uuidv7();
+    vi.spyOn(agentInboxService, 'kick').mockImplementation(() => {});
+    const source = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'external',
+      body: 'Create my image', meta: { bindingId } });
+    const { envelope } = await agentInboxService.enqueueDeferred({ workspaceId: f.workspace.id, toNodeId: f.bot.id, fromNodeId: f.developer.id,
+      kind: 'reply', content: 'Generated image is ready', metadata: { returnConversationKey: `binding:${bindingId}`, returnChannelMessageId: source.id } });
+    const dispatcher = new AgentInboxService(), deliver = vi.spyOn(agentTerminalDeliveryService, 'deliver').mockResolvedValue(undefined);
+    vi.spyOn(dispatcher as any, 'markDelivered').mockResolvedValue(undefined);
+    try {
+      await (dispatcher as any).deliverBatch({ workspaceId: f.workspace.id, nodeId: f.bot.id, sessionId: 'fixture', batchId: envelope.id,
+        prompt: 'Generated image is ready', envelopes: [envelope], context: { provider: null }, duringTurn: false }, () => {});
+      expect(deliver.mock.calls[0][0]).toMatchObject({ conversationKey: `binding:${bindingId}`, publicOrigin: { type: 'external', bindingId, channelMessageId: source.id } });
+      const foreign = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.peer.id}`, authorKind: 'external', body: 'Other chat', meta: { bindingId: uuidv7() } });
+      await (dispatcher as any).deliverBatch({ workspaceId: f.workspace.id, nodeId: f.bot.id, sessionId: 'fixture', batchId: envelope.id,
+        prompt: 'Do not adopt another bot origin', envelopes: [{...envelope,metadata:{...envelope.metadata,returnChannelMessageId:foreign.id}}], context: { provider: null }, duringTurn: false }, () => {});
+      expect(deliver.mock.calls[1][0].publicOrigin).toBeUndefined();
+    } finally { dispatcher.reset(); }
   });
 
   it('does not publish an unreviewed Canvas reply as public bot authority', async () => {

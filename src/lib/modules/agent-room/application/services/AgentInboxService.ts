@@ -933,13 +933,25 @@ export class AgentInboxService {
   private async deliverBatch(batch: BatchTracking & { envelopes: AgentMessageEnvelope[]; batchId: string; context: TranscriptContext }, onSubmitted: () => void): Promise<void> {
     let submitted = false;
     let submissionWrites: Promise<unknown> = Promise.resolve();
+    const lead = batch.envelopes[0];
+    let originBindingId = typeof lead.metadata.bindingId === 'string' ? lead.metadata.bindingId : null;
+    let originMessageId = typeof lead.metadata.channelMessageId === 'string' ? lead.metadata.channelMessageId : null;
+    // A specialist's asynchronous reply must resume the authenticated original
+    // chat, including envelopes persisted before this repair. Never accept the
+    // return address alone as proof of owner authority.
     try {
+      if (lead.kind === 'reply' && typeof lead.metadata.returnChannelMessageId === 'string') {
+        const source = await channelRepository.find(batch.workspaceId, lead.metadata.returnChannelMessageId);
+        if (source?.authorKind === 'external' && source.channel === `dm:${batch.nodeId}` && typeof source.meta.bindingId === 'string') {
+          originBindingId = source.meta.bindingId; originMessageId = source.id;
+        }
+      }
       await agentTerminalDeliveryService.deliver({
         conversationKey: structuredConversation(batch.envelopes[0]),
-        ...((typeof batch.envelopes[0].metadata.bindingId === 'string' || ['telegram', 'slack', 'whatsapp'].includes(String(batch.envelopes[0].metadata.via))) ? {
+        ...((originBindingId || ['telegram', 'slack', 'whatsapp'].includes(String(lead.metadata.via))) ? {
           publicOrigin: { type: 'external' as const,
-            bindingId: typeof batch.envelopes[0].metadata.bindingId === 'string' ? batch.envelopes[0].metadata.bindingId : null,
-            channelMessageId: typeof batch.envelopes[0].metadata.channelMessageId === 'string' ? batch.envelopes[0].metadata.channelMessageId : null },
+            bindingId: originBindingId,
+            channelMessageId: originMessageId },
         } : {}),
         messageId: batch.batchId,
         onAccepted: async () => {
@@ -950,9 +962,10 @@ export class AgentInboxService {
         onFailed: async (error) => {
           const { channelService } = await import('./ChannelService.js');
           for (const envelope of batch.envelopes) {
-            if (typeof envelope.metadata.channelMessageId === 'string') await channelService.modelFailure(batch.workspaceId, envelope.metadata.channelMessageId, 'turn', error instanceof Error ? error.message : undefined);
+            const sourceId = typeof envelope.metadata.channelMessageId === 'string' ? envelope.metadata.channelMessageId : envelope.kind === 'reply' && typeof envelope.metadata.returnChannelMessageId === 'string' ? envelope.metadata.returnChannelMessageId : null;
+            if (sourceId) await channelService.modelFailure(batch.workspaceId, sourceId, 'turn', error instanceof Error ? error.message : undefined);
           }
-          const publicBinding = batch.envelopes[0].metadata.bindingId;
+          const publicBinding = originBindingId;
           if (typeof publicBinding === 'string') {
             const { botSafetyService } = await import('./BotSafetyService.js');
             await botSafetyService.notice(batch.workspaceId, batch.nodeId, publicBinding, error);

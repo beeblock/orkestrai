@@ -305,7 +305,10 @@ export class BotSafetyService {
 
   async approved(workspaceId: string, nodeId: string, sourceId: string, body: string, turnId: string) {
     const source = await channelRepository.find(workspaceId, sourceId);
-    const ownerApproval = object(source?.meta.ownerBotApproval);
+    const saved = await channelRepository.find(workspaceId, turnId);
+    const exactResult = saved?.authorKind === 'agent' && saved.authorNodeId === nodeId && saved.replyToId === sourceId
+      && saved.meta.structuredReply === `structured:${turnId}:${sourceId}`;
+    const ownerApproval = object(exactResult ? saved.meta.publicBotApproval : source?.meta.ownerBotApproval);
     if (ownerApproval.owner === true && typeof ownerApproval.bindingId === 'string'
       && ownerApproval.sourceId === sourceId && ownerApproval.nodeId === nodeId && ownerApproval.turnId === turnId
       && ownerApproval.bodyDigest === digest(body) && await this.ownerSource(workspaceId, nodeId, ownerApproval.bindingId, sourceId)) return ownerApproval;

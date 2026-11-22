@@ -33,6 +33,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed in the local preview
 
+- Preserve the exact original phone conversation when a Canvas specialist replies to a bot, including pending replies restored after restart. Keep separate approvals for the initial answer and final result while both wait for delivery.
+
 - Keep macOS/Windows credential reads and encryption off the Electron main thread so a native storage-unlock prompt cannot turn a healthy Core startup into a timeout. Preserve existing ciphertext, Linux backend checks, concurrent account writes and revocation during delayed operations; never change Keychain rules or use plaintext fallback.
 
 - Use Zapo for new WhatsApp QR links while preserving already registered preview sessions. Keep the official Signal/SQLite providers in bounded RAM and persist their compressed state through desktop encryption, without plaintext session files or another native dependency. Disable historical chat downloads. Add scoped, serialized in-place reconnect and QR refresh without deleting routes; surface unsupported extra verification and log only safe connection codes. Test the real protocol against the official local fake server, including QR pairing, exact text/image/PDF acknowledgements and encrypted restoration. Physical-phone pairing remains an owner validation step.

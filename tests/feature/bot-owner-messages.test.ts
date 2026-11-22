@@ -125,4 +125,14 @@ describe('linked WhatsApp owner commands retain native tools without promoting p
     expect(await service.verify({ ...f.source, meta: { ...f.source.meta, ownerProof: one } }, f.binding, f.scope)).toBe(true);
   });
 
+  it('keeps the initial answer and a later specialist result approved while both wait in the outbox', async () => {
+    const f = await fixture(), initial = uuidv7(), completed = uuidv7();
+    await channelService.postStructuredResult(f.workspace.id, f.bot.id, f.source.id, 'The specialist is working.', initial);
+    await channelService.postStructuredResult(f.workspace.id, f.bot.id, f.source.id, 'Here is the completed result.', completed);
+    await expect(botSafetyService.approved(f.workspace.id, f.bot.id, f.source.id, 'The specialist is working.', initial)).resolves.toMatchObject({ owner: true });
+    await expect(botSafetyService.approved(f.workspace.id, f.bot.id, f.source.id, 'Here is the completed result.', completed)).resolves.toMatchObject({ owner: true });
+    await botOwnerMessageService.revoke(f.workspace.id, f.connection.id);
+    await expect(botSafetyService.approved(f.workspace.id, f.bot.id, f.source.id, 'The specialist is working.', initial)).rejects.toThrow('BOT_PUBLIC_REPLY_UNAPPROVED');
+  });
+
 });
