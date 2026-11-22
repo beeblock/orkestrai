@@ -18,6 +18,9 @@ test('header usage opens over Conversation, Bots and Focus without visiting Canv
     for (const mode of ['chat', 'bots', 'terminal']) {
       await page.goto(`/${mode}?workspace=${workspace.id}`);
       await expect(page).toHaveURL(new RegExp(`/${mode}\\?`));
+      // Focus selects its initial entry asynchronously and records it in the URL.
+      // Capture that settled selection so the assertion isolates the Usage click.
+      if (mode === 'terminal') await expect(page).toHaveURL(/[?&]node=/);
       const original = page.url();
       await page.getByTestId('topbar-usage').click();
       const drawer = page.getByTestId('global-usage-drawer');
