@@ -498,10 +498,16 @@ export class WhatsAppBotService {
       input: { bindingId, messageId }, network: { url: 'https://web.whatsapp.com/', method: 'POST' }, certainty: 'semantic' }, async () => {
       const latest = await channelBindingRepository.find(workspaceId, bindingId);
       if (!latest?.enabled || latest.externalChatId !== binding.externalChatId || link.stopped) throw new Error('BOT_CONNECTION_UNAVAILABLE');
-      const id = whatsAppOutputId(binding.id, messageId, 'text');
-      const sent = await link.socket!.sendMessage(binding.externalChatId, { text: body.slice(0, 60_000) }, { messageId: id });
-      if (!sent?.key.id) throw new Error('WHATSAPP_DELIVERY_UNCONFIRMED');
-      const ids = [sent.key.id];
+      const { botArtifactText } = await import('../../domain/bot-artifacts.js');
+      const text = botArtifactText(body, artifacts);
+      const ids: string[] = [];
+      if (text) {
+        const id = whatsAppOutputId(binding.id, messageId, 'text');
+        const sent = await link.socket!.sendMessage(binding.externalChatId, { text: text.slice(0, 60_000) }, { messageId: id });
+        if (!sent?.key.id) throw new Error('WHATSAPP_DELIVERY_UNCONFIRMED');
+        ids.push(sent.key.id);
+      }
+      if (!text && !files.length) throw new Error('BOT_ARTIFACT_INVALID');
       for (const [index, file] of files.entries()) {
         const fileId = whatsAppOutputId(binding.id, messageId, `file:${index}`);
         const payload = file.image && file.mimeType !== 'image/gif'

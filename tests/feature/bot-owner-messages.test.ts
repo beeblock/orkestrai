@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSvelarTest } from '@beeblock/svelar/testing';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
@@ -18,6 +18,9 @@ import { botExternalDeliveryService } from '$lib/modules/agent-room/application/
 import { desktopSecretService } from '$lib/modules/agent-room/infrastructure/secrets/DesktopSecretService.js';
 import { workspaceAttachmentService } from '$lib/modules/agent-room/application/services/WorkspaceAttachmentService.js';
 import { uuidv7 } from '@beeblock/svelar/support';
+import { whatsappBotService } from '$lib/modules/agent-room/application/services/WhatsAppBotService.js';
+import { personalBotService } from '$lib/modules/agent-room/application/services/PersonalBotService.js';
+import { PersonalBotCommandDto } from '$lib/modules/agent-room/application/dto/PersonalBotCommandDto.js';
 
 const roots: string[] = [], secrets = new Map<string, string>();
 const own = '5511999999999@s.whatsapp.net', chat = '55119999999-12345@g.us';
@@ -77,6 +80,51 @@ describe('linked WhatsApp owner commands retain native tools without promoting p
     await botOwnerMessageService.revoke(f.workspace.id, f.connection.id);
     await expect(botSafetyService.approved(f.workspace.id, f.bot.id, f.source.id, body, turn)).rejects.toThrow('BOT_PUBLIC_REPLY_UNAPPROVED');
     expect((await channelRepository.find(f.workspace.id, f.source.id))?.body).toContain('#jarvis');
+  });
+
+  it('delivers absolute model links as real WhatsApp image/PDF/ZIP payloads without local Markdown or empty text', async () => {
+    const f = await fixture();
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aU1kAAAAASUVORK5CYII=', 'base64');
+    const pdf = Buffer.from('%PDF-1.4\n%%EOF'), zip = Buffer.from('PK\x03\x04');
+    for (const [name, bytes] of [['portrait.png', png], ['report.pdf', pdf], ['export.zip', zip]] as const) await writeFile(join(f.root, name), bytes);
+    const body = `![Portrait](<${f.root}/portrait.png>)\n[PDF](<${f.root}/report.pdf>)\n[ZIP](<${f.root}/export.zip>)`;
+    const saved = await channelService.postStructuredResult(f.workspace.id, f.bot.id, f.source.id, body, uuidv7());
+    expect(saved?.meta.artifacts).toHaveLength(3);
+    expect(saved?.body).not.toContain(f.root);
+    const send = vi.fn(async (_jid, _payload, options) => ({ key: { id: options.messageId } }));
+    vi.spyOn(whatsappBotService as any, 'open').mockResolvedValue({ state: 'connected', stopped: false, socket: { sendMessage: send } });
+    vi.mocked(botExternalDeliveryService.flush).mockRestore();
+    await botExternalDeliveryService.flush();
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send.mock.calls[0]).toMatchObject([chat, { image: png, mimetype: 'image/png', caption: 'portrait.png' }, { messageId: expect.any(String) }]);
+    expect(send.mock.calls[1]).toMatchObject([chat, { document: pdf, mimetype: 'application/pdf', fileName: 'report.pdf' }, { messageId: expect.any(String) }]);
+    expect(send.mock.calls[2]).toMatchObject([chat, { document: zip, mimetype: 'application/zip', fileName: 'export.zip' }, { messageId: expect.any(String) }]);
+    expect(new Set(send.mock.calls.map(call => call[2].messageId)).size).toBe(3);
+    await botExternalDeliveryService.flush(); expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects an apparently local file whose symlink escapes the workspace before enqueueing a reply', async () => {
+    const f = await fixture(), outside = await mkdtemp(join(tmpdir(), 'owner-private-')); roots.push(outside);
+    await writeFile(join(outside, 'private.pdf'), '%PDF-private');
+    await symlink(outside, join(f.root, 'reports'));
+    await expect(channelService.postStructuredResult(f.workspace.id, f.bot.id, f.source.id, `[PDF](<${f.root}/reports/private.pdf>)`, uuidv7())).rejects.toThrow('escapes');
+    expect((await channelRepository.list(f.workspace.id, `dm:${f.bot.id}`)).filter(item => item.authorKind === 'agent')).toEqual([]);
+  });
+
+  it('repairs one legacy text-only result once without invoking the model or choosing another chat', async () => {
+    const f = await fixture(); await writeFile(join(f.root, 'portrait.png'), 'existing-image');
+    const previous = await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'agent', authorNodeId: f.bot.id,
+      body: `![Portrait](<${f.root}/portrait.png>)`, replyToId: f.source.id,
+      meta: { bindingId: f.binding.id } }, uuidv7());
+    await channelRepository.mergeMeta(f.workspace.id, previous.id, { structuredReply: `structured:${previous.id}:${f.source.id}` });
+    const repair = () => personalBotService.execute(PersonalBotCommandDto.from(f.workspace.id, { command: 'repair_artifact_delivery', nodeId: f.bot.id, messageId: previous.id }));
+    const [a, b] = await Promise.all([repair(), repair()]) as any[];
+    expect(a.id).toBe(b.id); expect(a.replyToId).toBe(f.source.id);
+    expect(a.meta.artifacts).toMatchObject([{ path: 'portrait.png', sha256: expect.any(String) }]);
+    expect(a.meta.bindingId).toBe(f.binding.id);
+    await expect(personalBotService.execute(PersonalBotCommandDto.from(f.workspace.id, { command: 'repair_artifact_delivery', nodeId: f.bot.id, messageId: a.id }))).rejects.toThrow('ALREADY_QUEUED');
+    await botOwnerMessageService.revoke(f.workspace.id, f.connection.id);
+    await expect(repair()).rejects.toThrow('BOT_PUBLIC_GRANT_REVOKED');
   });
   it('keeps another phone public until the owner explicitly trusts its verified sender ID, and revokes immediately', async () => {
     const f = await fixture(), other = '5521999999999@s.whatsapp.net';

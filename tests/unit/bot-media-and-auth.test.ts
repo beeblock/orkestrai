@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { WhatsAppSecureAuth } from '$lib/modules/agent-room/infrastructure/integrations/WhatsAppSecureAuth.js';
 import { TrustedIntegrationHttpClient } from '$lib/modules/agent-room/infrastructure/integrations/TrustedIntegrationHttpClient.js';
-import { botArtifactLinks, channelTextChunks } from '$lib/modules/agent-room/domain/bot-artifacts.js';
+import { botArtifactLinks, botArtifactText, normalizeBotArtifactLinks, channelTextChunks } from '$lib/modules/agent-room/domain/bot-artifacts.js';
 import { IntegrationExecutionService } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 import { whatsAppInboundSender, whatsAppOutputId } from '$lib/modules/agent-room/domain/whatsapp-messages.js';
 import { allowedWhatsAppMediaUrl, downloadWhatsAppMedia } from '$lib/modules/agent-room/infrastructure/integrations/WhatsAppMedia.js';
@@ -111,6 +111,30 @@ describe('bot channel files and secure WhatsApp sessions', () => {
     const text = 'a'.repeat(3999) + '😀' + 'b'.repeat(5000);
     expect(channelTextChunks(text).join('')).toBe(text);
     expect(channelTextChunks(text).every(part => part.length <= 4000 && !/[\uD800-\uDBFF]$/.test(part))).toBe(true);
+  });
+
+  it('maps absolute image, PDF and document links only beneath the exact workspace root', () => {
+    const body = 'Ready. ![Portrait](</Users/owner/game/generated/portrait.png>) [PDF](</Users/owner/game/reports/monthly%20report.pdf>) [Archive](/Users/owner/game/output.zip)';
+    const normalized = normalizeBotArtifactLinks(body, ['/Users/owner/game']);
+    const files = botArtifactLinks(normalized);
+    expect(files.map(file => [file.path, file.mimeType, file.image])).toEqual([
+      ['generated/portrait.png', 'image/png', true], ['reports/monthly report.pdf', 'application/pdf', false], ['output.zip', 'application/zip', false],
+    ]);
+    expect(botArtifactText(normalized, files)).toBe('Ready.');
+    expect(botArtifactText('[Website](https://example.com/a.pdf)', files)).toContain('https://example.com');
+    expect(botArtifactLinks(body)).toEqual([]); // no host roots for public workers
+  });
+
+  it('handles native Windows and explicit WSL roots without admitting siblings or private paths', () => {
+    const roots = ['C:\\Users\\Owner\\Game', '/mnt/c/Users/Owner/Game', '\\\\wsl.localhost\\Ubuntu\\home\\owner\\game'];
+    for (const path of ['c:\\users\\owner\\game\\reports\\report.pdf', '/mnt/c/Users/Owner/Game/reports/report.pdf', '\\\\wsl.localhost\\Ubuntu\\home\\owner\\game\\reports\\report.pdf']) {
+      expect(botArtifactLinks(normalizeBotArtifactLinks(`[PDF](<${path}>)`, roots))).toMatchObject([{ path: 'reports/report.pdf' }]);
+    }
+    for (const path of ['/mnt/c/Users/Owner/Game-other/report.pdf', '/mnt/c/Users/Owner/game/report.pdf', '/mnt/c/Users/Owner/Game/../private.pdf', '/mnt/c/Users/Owner/Game/%2e%2e/private.pdf', '/mnt/c/Users/Owner/Game/secrets/report.pdf', 'file:///mnt/c/Users/Owner/Game/report.pdf', 'https://example.com/a.pdf', '/mnt/c/Users/Owner/Game/a%00.pdf']) {
+      expect(botArtifactLinks(normalizeBotArtifactLinks(`[PDF](<${path}>)`, roots))).toEqual([]);
+    }
+    const percent = normalizeBotArtifactLinks('[PDF](</game/100%2520done.pdf>)', ['/game']);
+    expect(botArtifactLinks(percent)[0].path).toBe('100%20done.pdf');
   });
 
   it('accepts Telegram PDF/photo-only messages and Slack file shares without dropping the message', async () => {

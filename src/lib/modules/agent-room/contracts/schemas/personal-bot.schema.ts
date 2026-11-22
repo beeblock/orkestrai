@@ -44,6 +44,7 @@ export const personalBotCommandSchema = z.discriminatedUnion('command', [
   z.object({ command: z.literal('preset_list'), locale: z.enum(botPresetLocales).default('en') }).strict(),
   z.object({ command: z.literal('update'), nodeId: z.string().uuid(), settings: personalBotSettingsSchema.omit({ publicRole: true }) }).strict(),
   z.object({ command: z.literal('remove'), nodeId: z.string().uuid() }).strict(),
+  z.object({ command: z.literal('repair_artifact_delivery'), nodeId: z.string().uuid(), messageId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('owner_senders'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_options'), nodeId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('safety_update'), nodeId: z.string().uuid(), revision: z.number().int().min(0), settings: botSafetySchema }).strict(),

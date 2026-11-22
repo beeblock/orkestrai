@@ -1,5 +1,6 @@
 import { Connection } from '@beeblock/svelar/database';
 import { createHash } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
 import { uuidv7 } from '@beeblock/svelar/support';
 import {
   directChannel,
@@ -20,7 +21,8 @@ import { agentInboxService } from './AgentInboxService.js';
 import { attentionService } from './AttentionService.js';
 import { workspaceAttachmentService } from './WorkspaceAttachmentService.js';
 import { modelFromArgs } from '../../domain/agent-model.js';
-import { botArtifactLinks, type BotArtifact } from '../../domain/bot-artifacts.js';
+import { botArtifactLinks, normalizeBotArtifactLinks, type BotArtifact } from '../../domain/bot-artifacts.js';
+import { workspaceFileForTerminal } from '../../infrastructure/WslRuntime.js';
 import { botDeliveryRepository } from '../../infrastructure/repositories/BotDeliveryRepository.js';
 import { WorkspaceAttachmentDto, WorkspaceAttachmentDeleteDto } from '../dto/WorkspaceAttachmentDto.js';
 
@@ -121,6 +123,46 @@ function envelopeMessage(envelope: AgentMessageEnvelope): ChannelMessage {
  * boundary); agents post and ask the owner through the bridge.
  */
 export class ChannelService {
+  private async artifactBody(workspaceId: string, payload: TerminalNodePayload, body: string): Promise<string> {
+    const workspace = await workspaceRepository.getWorkspace(workspaceId);
+    if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
+    return normalizeBotArtifactLinks(body, [workspace.workingDir, await realpath(workspace.workingDir).catch(() => workspace.workingDir), workspaceFileForTerminal(workspace, payload, '')]);
+  }
+
+  /** Explicit owner repair of an older text-only result, without invoking a model
+   * or replaying an uncertain media send. The original source fixes the recipient.
+   */
+  async repairArtifactDelivery(workspaceId: string, nodeId: string, messageId: string): Promise<ChannelMessage | null> {
+    const original = await channelRepository.find(workspaceId, messageId);
+    const node = await workspaceRepository.getNode(nodeId);
+    if (!original || !node || node.workspaceId !== workspaceId || node.type !== 'terminal' || !(node.payload as TerminalNodePayload).personalBot
+      || original.authorKind !== 'agent' || original.authorNodeId !== nodeId || !original.replyToId
+      || original.meta.structuredReply !== `structured:${original.id}:${original.replyToId}` || !original.meta.bindingId) throw new Error('BOT_ARTIFACT_RESULT_NOT_FOUND');
+    const { botSafetyService } = await import('./BotSafetyService.js');
+    // This command cannot convert a public customer's private-file request into
+    // owner authority, or reuse a revoked/changed original phone grant.
+    if (!await botSafetyService.ownerSource(workspaceId, nodeId, String(original.meta.bindingId), original.replyToId)) throw new Error('BOT_PUBLIC_GRANT_REVOKED');
+    if (Array.isArray(original.meta.artifacts) && original.meta.artifacts.length) throw new Error('BOT_ARTIFACT_ALREADY_QUEUED');
+    const normalized = await this.artifactBody(workspaceId, node.payload as TerminalNodePayload, original.body);
+    const files = botArtifactLinks(normalized);
+    if (!files.length) throw new Error('BOT_ARTIFACT_NOT_FOUND');
+    const turnId = await Connection.transaction(async () => {
+      const current = await channelRepository.find(workspaceId, original.id);
+      if (!current) throw new Error('BOT_ARTIFACT_RESULT_NOT_FOUND');
+      if (typeof current.meta.artifactRepairId === 'string') return current.meta.artifactRepairId;
+      const id = uuidv7();
+      await channelRepository.mergeMeta(workspaceId, current.id, { artifactRepairId: id });
+      return id;
+    });
+    const body = files.map(file => `${file.image ? '!' : ''}[${file.name.replace(/[\[\]\r\n]/g, '')}](<${file.path.split('/').map(encodeURIComponent).join('/')}>)`).join('\n');
+    const repaired = await this.postStructuredResult(workspaceId, nodeId, original.replyToId, body, turnId);
+    if (repaired) {
+      const updated = await channelRepository.mergeMeta(workspaceId, original.id, { artifactRepairQueued: true });
+      if (updated) broadcast(updated);
+    }
+    return repaired;
+  }
+
   async modelFailure(workspaceId: string, messageId: string, phase: 'start' | 'turn', errorCode?: string): Promise<void> {
     const updated = await Connection.transaction(async () => {
       const current = await channelRepository.find(workspaceId, messageId);
@@ -149,6 +191,9 @@ export class ChannelService {
     const safety = (await import('./BotSafetyService.js')).botSafetyService;
     const ownerSource = original.authorKind === 'external' && typeof original.meta.bindingId === 'string'
       ? await safety.ownerSource(workspaceId, nodeId, original.meta.bindingId, sourceId) : null;
+    // Only native owner contexts may map absolute host/guest paths. Public
+    // worker output keeps its separately reviewed relative artifact contract.
+    if (original.authorKind !== 'external' || ownerSource) body = await this.artifactBody(workspaceId, node.payload as TerminalNodePayload, body);
     let publicApproval = original.authorKind === 'external' && !ownerSource
       ? await (await import('./BotSafetyService.js')).botSafetyService.approved(workspaceId, nodeId, sourceId, body, turnId) : null;
     const attachments: WorkspaceAttachment[] = [];

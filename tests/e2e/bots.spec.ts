@@ -5,6 +5,31 @@ import { tmpdir } from 'node:os';
 
 const labels = JSON.parse(await readFile(new URL('../../messages/pt-BR.json', import.meta.url), 'utf8')) as Record<string, string>;
 
+test('repair a legacy file reply without starting a model', async ({ page, request }) => {
+  const root = await mkdtemp(join(tmpdir(), 'bot-files-ui-'));
+  const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'File repair', workingDir: root } })).json()).data;
+  const base = `/api/agent-room/workspaces/${workspace.id}`;
+  try {
+    const bot = (await (await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'File helper', provider: 'codex', instructions: 'Return reports.' } } })).json()).data;
+    const sourceId = '01955555-1111-7111-8111-111111111111', oldId = '01955555-2222-7222-8222-222222222222';
+    const old = { id: oldId, workspaceId: workspace.id, channel: `dm:${bot.id}`, authorKind: 'agent', authorNodeId: bot.id,
+      kind: 'text', body: `[Report](<${root}/report.pdf>)`, replyToId: sourceId, answeredAt: null, createdAt: new Date().toISOString(), meta: { bindingId: '01955555-3333-7333-8333-333333333333' } };
+    await page.route(`**/channels/dm*${bot.id}*/messages*`, route => route.fulfill({ json: { data: [old] } }));
+    let repairs = 0, prompts = 0;
+    await page.route(`**/workspaces/${workspace.id}/bots`, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      expect(route.request().postDataJSON()).toEqual({ command: 'repair_artifact_delivery', nodeId: bot.id, messageId: old.id }); repairs++;
+      return route.fulfill({ json: { data: { ...old, id: '01955555-4444-7444-8444-444444444444', body: '[Report](report.pdf)', meta: { artifacts: [] } } } });
+    });
+    page.on('request', req => { if (req.method() === 'POST' && req.url().includes('/messages')) prompts++; });
+    await page.goto(`/bots?workspace=${workspace.id}`);
+    await page.locator('.bot-row').filter({ hasText: 'File helper' }).click();
+    const action = page.getByRole('button', { name: labels['bots.repair_files'], exact: true });
+    await expect(action).toBeVisible(); await action.click();
+    await expect(action).toHaveCount(0); expect(repairs).toBe(1); expect(prompts).toBe(0);
+  } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
+});
+
 test('create a native bot, collaborate in a group and keep the development conversation separate', async ({ page, request }) => {
   const root = await mkdtemp(join(tmpdir(), 'orkestrai-bots-browser-'));
   const created = await request.post('/api/agent-room/workspaces', { data: { name: 'Personal bots browser QA', workingDir: root } });

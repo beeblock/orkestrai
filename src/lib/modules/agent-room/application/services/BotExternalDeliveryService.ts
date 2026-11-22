@@ -1,7 +1,7 @@
 import { botDeliveryRepository, type BotDelivery } from '../../infrastructure/repositories/BotDeliveryRepository.js';
 import { channelBindingRepository } from '../../infrastructure/repositories/ChannelBindingRepository.js';
 import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
-import { channelTextChunks, botArtifactSchema, type BotArtifact } from '../../domain/bot-artifacts.js';
+import { channelTextChunks, botArtifactText, botArtifactSchema, type BotArtifact } from '../../domain/bot-artifacts.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
 
 /** Durable, exact-address external output. A retry reuses every provider idempotency key. */
@@ -74,7 +74,7 @@ export class BotExternalDeliveryService {
         await whatsappBotService.send(delivery.workspaceId, delivery.nodeId, binding.id, message.body, delivery.id, artifacts);
       } else {
         let index = 0;
-        for (const part of channelTextChunks(message.body)) {
+        for (const part of channelTextChunks(botArtifactText(message.body, artifacts))) {
           await integrationExecutionService.execute(delivery.workspaceId, {
             integrationId: binding.integrationId, action: `${binding.kind}.send_message`,
             input: binding.kind === 'telegram' ? { chatId: binding.externalChatId, text: part } : { channel: binding.externalChatId, text: part },

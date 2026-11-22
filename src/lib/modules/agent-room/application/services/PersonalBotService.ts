@@ -72,6 +72,12 @@ export class PersonalBotService {
     switch (input.command) {
       case 'preset_list':
         return listBotPresets(input.locale);
+      case 'repair_artifact_delivery': {
+        await this.requireBot(workspaceId, input.nodeId);
+        if (dto.actorNodeId && dto.actorNodeId !== input.nodeId) throw new Error('BOT_ACTOR_MISMATCH');
+        const { channelService } = await import('./ChannelService.js');
+        return channelService.repairArtifactDelivery(workspaceId, input.nodeId, input.messageId);
+      }
       case 'create': {
         const preset = input.settings.presetId ? getBotPreset(input.settings.presetId, input.settings.presetLocale) : null;
         const presetInstructions = preset ? composeBotInstructions(preset, input.settings.presetLocale) : undefined;

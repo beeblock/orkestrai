@@ -15,6 +15,8 @@
   import { directChannel, type ChannelMessage } from '$lib/modules/agent-room/domain/channels.js';
   import * as m from '$lib/paraglide/messages.js';
   import { botMessageContent } from '../bots/bot-message-content.js';
+  import { botApi } from '../bots/bot-api.js';
+  import { Button } from '$lib/components/ui/button/index.js';
 
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
@@ -30,6 +32,8 @@
   let scroller = $state<HTMLElement | null>(null);
   let field = $state<HTMLInputElement | null>(null);
   let listening = $state(false);
+  let repairing = $state<string | null>(null);
+  let repairFailed = $state(false);
   const staged = new ComposerAttachments(() => workspaceId);
   // The draft is this agent's: another agent, another workspace or closing the face discards its files.
   $effect(() => {
@@ -41,6 +45,24 @@
   const url = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}/channels/${encodeURIComponent(channel)}/messages`);
   const timeline = $derived(buildTimeline(messages));
   const answers = $derived(answersByQuestion(messages));
+
+  function missingNativeFiles(message: ChannelMessage): boolean {
+    return personalBot && message.authorKind === 'agent' && message.authorNodeId === nodeId && Boolean(message.replyToId && message.meta.bindingId)
+      && message.meta.artifactRepairQueued !== true && !(Array.isArray(message.meta.artifacts) && message.meta.artifacts.length)
+      && /!?\[[^\]\n]*\]\(\s*<?(?:\/|[a-z]:[\\/])/i.test(message.body);
+  }
+  async function repairFiles(message: ChannelMessage) {
+    if (repairing) return;
+    const ownerWorkspace = workspaceId, ownerNode = nodeId;
+    repairing = message.id; repairFailed = false;
+    try {
+      const saved = await botApi<ChannelMessage>(`/api/agent-room/workspaces/${ownerWorkspace}/bots`, { command: 'repair_artifact_delivery', nodeId: ownerNode, messageId: message.id });
+      if (workspaceId !== ownerWorkspace || nodeId !== ownerNode) return;
+      if (saved) messages = upsertMessage(messages, saved);
+      messages = messages.map(item => item.id === message.id ? { ...item, meta: { ...item.meta, artifactRepairQueued: true } } : item);
+    } catch { if (workspaceId === ownerWorkspace && nodeId === ownerNode) repairFailed = true; }
+    finally { repairing = null; }
+  }
 
   async function scrollEnd() {
     await tick();
@@ -129,6 +151,9 @@
               <div class="bubble">
                 {#if message.meta.attachmentsOnly !== true}<MarkdownView content={personalBot ? botMessageContent(message.body, message.meta, workspaceId) : message.body} compact {workspaceId} />{/if}
                 {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
+                {#if missingNativeFiles(message)}
+                  <Button variant="secondary" size="sm" class="mt-2" disabled={repairing !== null} onclick={() => repairFiles(message)}>{repairing === message.id ? m['bots.repair_files_wait']() : m['bots.repair_files']()}</Button>
+                {/if}
                 {#if personalBot && message.meta.publicBotBlocked}
                   <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{m['bots.safety_notice_body']()}</p>
                 {:else if personalBot && message.meta.modelFailure}
@@ -143,6 +168,7 @@
       <p class="empty">{m['chat.empty_direct_hint']()}</p>
     {/each}
   </div>
+  {#if repairFailed}<p class="error" role="alert">{m['bots.repair_files_failed']()}</p>{/if}
   {#if failed || staged.error}<p class="error" role="alert">{staged.error || m['composer.failed']({ name: title })}</p>{/if}
   {#if staged.items.length}<div class="staged"><AttachmentList {workspaceId} attachments={staged.items} compact onRemove={staged.sending ? undefined : staged.remove} /></div>{/if}
   <form class="composer" class:dropping={staged.dragging} aria-label={m['composer.drop_files']()} onsubmit={(event) => { event.preventDefault(); void send(); }} ondragover={staged.dragover} ondragleave={staged.dragleave} ondrop={staged.drop}>

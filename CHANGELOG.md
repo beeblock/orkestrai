@@ -7,7 +7,11 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
-### Added — 0.55.0-beta.9 local preview
+### Fixed
+
+- Forward generated PNG/JPEG images, PDFs, spreadsheets, documents and archives as native attachments, including explicit absolute paths confined to the owner workspace or its terminal runtime. Keep realpath/policy/hash checks and public artifact approvals; remove only the verified local links from outgoing text. Older text-only owner replies offer Send files to the original chat, with one durable repair identity and no model run or image regeneration.
+
+### Added — 0.55.0-beta.10 local preview
 
 - Authenticate workspace commands from the linked WhatsApp account outside the model. These owner requests retain native Canvas tools, Codex image-workflow delegation, routines and integrations without promoting the bot to leader. Other contacts keep the restricted public worker; explicitly trusted verified contacts can be selected in the bot protection dialog. Recheck grants before forwarding each exact, hash-verified file to its originating chat.
 - Enable native public web search for current information without granting host files, shell commands or private workspace context. Keep the output reviewer tool-free.
