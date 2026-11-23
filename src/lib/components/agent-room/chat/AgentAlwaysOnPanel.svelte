@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { Activity, CirclePower, Link2, Pencil, Plus, Trash2 } from '@lucide/svelte';
@@ -18,7 +18,8 @@
   import ModelCombobox from '../canvas/ModelCombobox.svelte';
   import { SegmentedControl } from '$lib/components/ui/segmented';
 
-  let { workspaceId, nodeId, payload, botEvents = false, botTitle = 'Bot', onSetupChannel }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload; botEvents?: boolean; botTitle?: string; onSetupChannel?: (provider: 'telegram' | 'slack') => void } = $props();
+  type PanelSections = { runtime: Snippet<[boolean]>; channels: Snippet<[boolean]>; activity: Snippet<[boolean]> };
+  let { workspaceId, nodeId, payload, botEvents = false, botTitle = 'Bot', onSetupChannel, children }: { workspaceId: string; nodeId: string; payload: TerminalNodePayload; botEvents?: boolean; botTitle?: string; onSetupChannel?: (provider: 'telegram' | 'slack') => void; children?: Snippet<[PanelSections]> } = $props();
 
   let bindings = $state<ChannelBinding[]>([]);
   let integrations = $state<AutomationIntegration[]>([]);
@@ -184,17 +185,20 @@
   }
 </script>
 
+{#snippet runtimeSection(showHeading: boolean)}
 <section class="block">
-  <h3><CirclePower size={13} />{m['always_on.title']()}</h3>
+  {#if showHeading}<h3><CirclePower size={13} />{m['always_on.title']()}</h3>{/if}
   <div class="mode">
     <span class="chip" class:on={runtimeMode !== 'interactive'}>{modeLabel(runtimeMode)}</span>
     <Button size="sm" variant="outline" class="h-7 text-ui-sm" onclick={() => (runtimeOpen = true)}>{m['always_on.configure']()}</Button>
   </div>
   <p class="hint">{runtimeMode === 'interactive' ? m['always_on.hint_interactive']() : m['always_on.hint_on']()}</p>
 </section>
+{/snippet}
 
+{#snippet channelSection(showHeading: boolean)}
 <section class="block">
-  <h3><Link2 size={13} />{m['always_on.channels']()}</h3>
+  {#if showHeading}<h3><Link2 size={13} />{m['always_on.channels']()}</h3>{/if}
   {#if botEvents && onSetupChannel}<div class="grid gap-2"><Button size="sm" variant="outline" onclick={() => chooseChannel('telegram')}>{m['bots.setup_title']({ provider: 'Telegram' })}</Button><Button size="sm" variant="outline" onclick={() => chooseChannel('slack')}>{m['bots.setup_title']({ provider: 'Slack' })}</Button></div>{/if}
   {#each bindings as binding (binding.id)}
     <div class="binding" class:error={Boolean(binding.lastError)}>
@@ -249,9 +253,11 @@
     <Button size="sm" variant="ghost" class="h-7 justify-start gap-1.5 text-ui-sm" onclick={() => (adding = true)}><Plus size={13} />{m['always_on.add_channel']()}</Button>
   {/if}
 </section>
+{/snippet}
 
+{#snippet activitySection(showHeading: boolean)}
 <section class="block">
-  <h3><Activity size={13} />{m['always_on.recent']()}</h3>
+  {#if showHeading}<h3><Activity size={13} />{m['always_on.recent']()}</h3>{/if}
   {#if activity.length}
     <ul>
       {#each activity as event (event.id)}
@@ -262,6 +268,15 @@
     <p class="hint">{m['always_on.recent_empty']()}</p>
   {/if}
 </section>
+{/snippet}
+
+{#if children}
+  {@render children({ runtime: runtimeSection, channels: channelSection, activity: activitySection })}
+{:else}
+  {@render runtimeSection(true)}
+  {@render channelSection(true)}
+  {@render activitySection(true)}
+{/if}
 
 <AgentRuntimeDialog
   open={runtimeOpen}
@@ -273,6 +288,8 @@
 
 <style>
   .block {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -291,6 +308,7 @@
   }
 
   .mode {
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -298,6 +316,7 @@
   }
 
   .chip {
+    max-inline-size: 100%;
     padding: 3px 9px;
     border-radius: 999px;
     background: var(--app-hover);
@@ -319,6 +338,8 @@
   }
 
   .binding {
+    flex-wrap: wrap;
+    min-inline-size: 0;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -334,7 +355,7 @@
 
   .binding-main {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 110px;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -342,6 +363,7 @@
   }
 
   .mono {
+    overflow-wrap: anywhere;
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 12px;
     color: var(--app-text-soft);
@@ -364,12 +386,14 @@
   }
 
   .add {
+    min-inline-size: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
 
   .row {
+    flex-wrap: wrap;
     display: flex;
     justify-content: flex-end;
     gap: 6px;

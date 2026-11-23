@@ -1,4 +1,7 @@
 {
+  "bots.profile_channels": "Channels",
+  "bots.profile_runtime": "Execution and limits",
+  "bots.profile_security": "Permissions and safety",
   "tokens.coverage_partial": "Partial local session counts. Older sessions and other profiles may be absent; this is not an invoice.",
   "startup.recovery_title": "Orkestrai could not start",
   "startup.recovery_message": "The internal server could not start. Your data has not been reset.",

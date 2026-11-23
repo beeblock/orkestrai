@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import { defaults, superForm } from 'sveltekit-superforms';
   import { zod } from 'sveltekit-superforms/adapters';
   import * as Dialog from '$lib/components/ui/dialog';
@@ -22,13 +22,15 @@
   let workflowAgents = $state<Array<{ id: string; title: string }>>([]);
   $effect(() => { const controller = new AbortController(); void botApi<{ workflowAgents?: Array<{ id: string; title: string }> }>(`/api/agent-room/workspaces/${workspaceId}/bots`, undefined, controller.signal).then(result => { if (!controller.signal.aborted) workflowAgents = result.workflowAgents ?? []; }).catch(() => {}); return () => controller.abort(); });
 
-  let { workspaceId, providers, bot = null, onSaved, onClose }: {
-    workspaceId: string; providers: BotProviderOption[]; bot?: PersonalBotSummary | null;
+  let { workspaceId, providers, bot = null, focusWorkflow = false, onSaved, onClose }: {
+    workspaceId: string; providers: BotProviderOption[]; bot?: PersonalBotSummary | null; focusWorkflow?: boolean;
     onSaved: (bot: PersonalBotSummary) => void; onClose: () => void;
   } = $props();
   let saving = $state(false), error = $state(''), models = $state<AgentModelOption[]>([]), profiles = $state<ProviderProfile[]>([]);
   let metadataLoading = $state(false);
   let advanced = $state(false);
+  let formElement = $state<HTMLFormElement | null>(null);
+  $effect(() => { if (!focusWorkflow || !formElement) return; void tick().then(() => formElement?.querySelector<HTMLElement>('[data-testid="bot-workflow-editor"]')?.scrollIntoView({ block: 'start' })); });
   let selectedPreset = $state<BotPresetId | 'custom'>('assistant');
   let titleEdited = $state(false);
   let providerEfforts = $state<string[]>([]);
@@ -57,6 +59,7 @@
   $effect(() => {
     if (initialized) return;
     initialized = true;
+    advanced = focusWorkflow;
     const preset = bot ? null : getBotPreset('assistant', getLocale());
     data.set({ title: bot?.title ?? preset?.name ?? '', instructions: bot?.instructions ?? preset?.purpose ?? '',
       personality: preset?.personality ?? '', rules: preset?.rules ?? '', provider: bot?.provider ?? providers[0]?.id ?? '',
@@ -103,7 +106,7 @@
       <Dialog.Title>{bot ? m['bots.edit']() : m['bots.create']()}</Dialog.Title>
       <Dialog.Description>{bot ? m['bots.instructions_hint']() : m['bots.preset_hint']()}</Dialog.Description>
     </Dialog.Header>
-    <form use:enhance class="flex min-h-0 flex-col overflow-hidden" data-testid="bot-editor">
+    <form bind:this={formElement} use:enhance class="flex min-h-0 flex-col overflow-hidden" data-testid="bot-editor">
       <div class={`grid min-h-0 flex-1 overflow-y-auto ${!bot ? 'md:grid-cols-[250px_minmax(0,1fr)] md:overflow-hidden' : ''}`}>
       {#if !bot}<BotPresetPicker value={selectedPreset} onValueChange={selectPreset} />{/if}
       <div class="min-h-0 space-y-4 p-5 pt-1 md:overflow-y-auto">

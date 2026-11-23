@@ -255,6 +255,7 @@ test('bot channel setup stays inside the viewport and opens Telegram setup direc
     await page.getByRole('option', { name: 'Test owner', exact: true }).click();
     await expect(profile.getByRole('textbox', { name: labels['always_on.chat'], exact: true })).toHaveValue('100001');
     await expect(profile.getByRole('textbox', { name: labels['bots.prefixes'], exact: true })).toHaveValue('@Setuphelper');
+    await profile.getByTestId('bot-profile-shortcuts').getByRole('button', { name: labels['chat.profile_routines'], exact: true }).click();
     for (const [width, height] of [[1280, 800], [960, 600], [560, 480]]) {
       await page.setViewportSize({ width, height });
       await profile.getByRole('button', { name: labels['bots.automations'], exact: true }).click();

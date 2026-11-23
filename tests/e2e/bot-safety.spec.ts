@@ -23,6 +23,7 @@ test('configures the public boundary without overwriting private rules and keeps
     await page.setViewportSize({ width: 1040, height: 640 });
     await page.goto(`/bots?workspace=${workspace.id}&node=${bot.id}`);
     await expect(page.getByTestId('bots-mode')).toBeVisible();
+    await page.locator('.bot-profile').getByRole('button', { name: copy['bots.profile_security'], exact: true }).click();
     await page.getByRole('button', { name: copy['bots.safety_title'], exact: true }).first().click();
     const dialog = page.getByTestId('bot-safety-editor');
     await expect(dialog).toBeVisible();

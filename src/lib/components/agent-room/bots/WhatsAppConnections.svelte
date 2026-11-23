@@ -93,25 +93,25 @@
   }
 </script>
 
-<section class="grid gap-3" aria-label="WhatsApp" data-testid="bot-whatsapp">
+<section class="grid min-w-0 max-w-full gap-3" aria-label="WhatsApp" data-testid="bot-whatsapp">
   <div class="flex items-center justify-between gap-2"><h3 class="flex items-center gap-2 text-sm font-semibold"><MessageCircle size={16} />WhatsApp</h3>{#if connections.length}<Button size="icon-sm" variant="ghost" aria-label={m['bots.whatsapp_add']()} disabled={busy} onclick={() => void start()}>{#if busy}<LoaderCircle size={15} class="animate-spin" />{:else}<Plus size={15} />{/if}</Button>{/if}</div>
   <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_hint']()}</p>
   <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_routes_hint']()}</p>
   {#if connections.length}
-    <Select.Root type="single" bind:value={selectedId}><Select.Trigger aria-label={m['bots.whatsapp_account']()}>{selected?.name ?? 'WhatsApp'}</Select.Trigger><Select.Content>{#each connections as connection}<Select.Item value={connection.id}>{connection.name} · {connection.state === 'connected' ? m['bots.connected']() : m['bots.whatsapp_waiting']()}</Select.Item>{/each}</Select.Content></Select.Root>
+    <Select.Root type="single" bind:value={selectedId}><Select.Trigger class="w-full min-w-0" aria-label={m['bots.whatsapp_account']()}><span class="min-w-0 truncate" title={selected?.name ?? 'WhatsApp'}>{selected?.name ?? 'WhatsApp'}</span></Select.Trigger><Select.Content>{#each connections as connection}<Select.Item class="max-w-full whitespace-normal break-all" value={connection.id}>{connection.name} · {connection.state === 'connected' ? m['bots.connected']() : m['bots.whatsapp_waiting']()}</Select.Item>{/each}</Select.Content></Select.Root>
     {#if qr}<div class="grid justify-items-center gap-2 rounded-xl border border-[var(--app-border)] p-3"><img src={qr} width="224" height="224" alt={m['bots.whatsapp_scan']()} class="max-w-full rounded-lg bg-white" /><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_scan']()}</p></div>
     {:else if connectionState === 'connecting'}<p class="flex items-center gap-2 text-xs" role="status"><LoaderCircle size={14} class="animate-spin" />{m['bots.whatsapp_waiting']()}</p>
     {:else if connectionState === 'connected'}<p class="text-xs text-[var(--app-success)]" role="status">{m['bots.connected']()}</p>{/if}
     {#if connectionState === 'connected'}
-      <form class="grid gap-2 rounded-xl border border-[var(--app-border)] p-3" onsubmit={(event: SubmitEvent) => { event.preventDefault(); void bind(); }}>
+      <form class="grid min-w-0 gap-2 rounded-xl border border-[var(--app-border)] p-3" onsubmit={(event: SubmitEvent) => { event.preventDefault(); void bind(); }}>
         {#if selected?.chats.length}
           <ModelCombobox value={chatId} options={selected.chats.map(chat => ({ value: chat.id, label: `${chat.name} · ${chat.id.endsWith('@g.us') ? m['bots.whatsapp_group']() : m['bots.whatsapp_contact']()}` }))} defaultLabel={m['bots.whatsapp_chat']()} searchPlaceholder={m['bots.whatsapp_search']()} emptyLabel={m['bots.whatsapp_no_contacts']()} ariaLabel={m['bots.whatsapp_chat']()} onValueChange={value => (chatId = value)} />
         {:else}<p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.whatsapp_no_contacts']()}</p>{/if}
-        <label class="grid gap-1 text-xs">{m['bots.whatsapp_chat_id']()}<Input bind:value={chatId} maxlength={120} required placeholder="5511999999999" /></label>
-        <label class="grid gap-1 text-xs">{m['bots.allowed_senders']()}<Input bind:value={senders} maxlength={6000} /></label>
+        <label class="grid min-w-0 gap-1 text-xs">{m['bots.whatsapp_chat_id']()}<Input class="w-full min-w-0" bind:value={chatId} maxlength={120} required placeholder="5511999999999" /></label>
+        <label class="grid min-w-0 gap-1 text-xs">{m['bots.allowed_senders']()}<Input class="w-full min-w-0" bind:value={senders} maxlength={6000} /></label>
         <p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.allowed_senders_hint']()}</p>
         <SegmentedControl fill label={m['bots.reply_when']()} value={replyMode} onValueChange={value => (replyMode = value)} options={[{ value: 'prefix', label: m['bots.reply_prefix']() }, { value: 'all', label: m['bots.reply_all']() }]} />
-        {#if replyMode === 'prefix'}<label class="grid gap-1 text-xs">{m['bots.prefixes']()}<Input bind:value={prefixes} maxlength={809} required /></label><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.prefixes_hint']()}</p>{/if}
+        {#if replyMode === 'prefix'}<label class="grid min-w-0 gap-1 text-xs">{m['bots.prefixes']()}<Input class="w-full min-w-0" bind:value={prefixes} maxlength={809} required /></label><p class="text-xs leading-relaxed text-[var(--app-text-muted)]">{m['bots.prefixes_hint']()}</p>{/if}
         <Button size="sm" type="submit" disabled={busy || !chatId.trim() || replyMode === 'prefix' && !prefixRules.length || Boolean(senders.trim()) && !senderRules.length}><Link2 size={14} />{m['bots.connect']()}</Button>
       </form>
     {/if}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { replaceState } from '$app/navigation';
-  import { CircleAlert, Bot, UsersRound, Plus, Settings2, RadioTower, Wrench, PanelRight, LoaderCircle, X } from '@lucide/svelte';
+  import { CircleAlert, Bot, UsersRound, Plus, Settings2, RadioTower, Wrench, PanelRight, LoaderCircle, X, Workflow, CalendarClock } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Select from '$lib/components/ui/select';
   import BotEditor from '$lib/components/agent-room/bots/BotEditor.svelte';
@@ -30,6 +30,8 @@
   let selectedId = $state(''), groupId = $state(''), loading = $state(true), failed = $state(false), connected = $state(false);
   let editorOpen = $state(false), editing = $state<PersonalBotSummary | null>(null), groupEditor = $state(false), runtimeOpen = $state(false);
   let profileOpen = $state(true);
+  let profilePanel = $state<{ openRoutines: () => Promise<void> } | undefined>();
+  let editingWorkflow = $state(false);
   let safetyOpen = $state(false);
   let generation = 0;
   let automationOpen = $state(false), groupEditing = $state<PersonalBotGroup | null>(null), confirmRemove = $state(false);
@@ -126,7 +128,7 @@
     } catch { failed = true; }
   }
   function saved(bot: PersonalBotSummary) { selectedId = bot.id; groupId = ''; editorOpen = false; void refresh(); }
-  function edit(bot: PersonalBotSummary | null) { editing = bot; editorOpen = true; }
+  function edit(bot: PersonalBotSummary | null, workflow = false) { editing = bot; editingWorkflow = workflow; editorOpen = true; }
   function botStatus(bot: PersonalBotSummary) {
     if (bot.usageBlock) return m['bots.quota_paused']();
     const status = agentStatus.agents[bot.id];
@@ -175,10 +177,27 @@
     {:else}<div class="bot-empty"><span class="empty-avatar"><Bot size={34} strokeWidth={1.4} /></span><h2>{m['bots.empty']()}</h2><p>{failed ? m['bots.error']() : m['bots.empty_hint']()}</p><Button disabled={!workspaceId} onclick={() => edit(null)}><Plus size={16} />{m['bots.create']()}</Button></div>{/if}
   </main>
   {#if selected && profileOpen && selectedPayload}
-    <aside class="bot-profile"><div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex items-center gap-1"><Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} onclick={() => (runtimeOpen = true)}><Settings2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button></div></div><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><Button variant="outline" size="sm" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button><p class="bot-instructions">{selected.instructions}</p><AgentProfilePanel embedded usageBlock={selected.usageBlock} {workspaceId} onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}><WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent("orkestrai:bots-changed"))} /></AgentProfilePanel><Button variant="outline" size="sm" onclick={() => (automationOpen = true)}>{m['bots.automations']()}</Button><Button variant="ghost" size="sm" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button></aside>
+    <aside class="bot-profile" aria-label={m['bots.profile_tab']()}>
+      <div class="profile-heading"><h2>{m['bots.profile_tab']()}</h2><div class="flex shrink-0 items-center gap-1">
+        <Button variant="ghost" size="icon-sm" aria-label={m['bots.settings']()} title={m['bots.settings']()} onclick={() => edit(selected)}><Settings2 size={15} /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button>
+      </div></div>
+      <div class="profile-shortcuts" data-testid="bot-profile-shortcuts">
+        <Button variant="outline" size="sm" class="h-auto min-h-10 min-w-0 whitespace-normal" onclick={() => edit(selected, true)}><Workflow size={15} class="shrink-0" /><span>{m['bots.workflow_title']()}</span></Button>
+        <Button variant="outline" size="sm" class="h-auto min-h-10 min-w-0 whitespace-normal" onclick={() => void profilePanel?.openRoutines()}><CalendarClock size={15} class="shrink-0" /><span>{m['chat.profile_routines']()}</span></Button>
+      </div>
+      <AgentProfilePanel bind:this={profilePanel} embedded usageBlock={selected.usageBlock} {workspaceId}
+        onSetupChannel={provider => (channelSetup = { provider, workspaceId, nodeId: selected!.id })}
+        onAutomations={() => (automationOpen = true)} nodeId={selected.id} title={selected.title} payload={selectedPayload} onClose={() => (profileOpen = false)} onDirect={() => {}}>
+        <WhatsAppConnections {workspaceId} title={selected.title} nodeId={selected.id} onChanged={() => window.dispatchEvent(new CustomEvent('orkestrai:bots-changed'))} />
+        {#snippet instructions()}<p class="bot-instructions">{selected?.instructions}</p>{/snippet}
+        {#snippet security()}<div class="grid min-w-0 gap-3"><div class="tools-card"><Wrench size={17} /><div><strong>{m['bots.all_tools']()}</strong><p>{m['bots.all_tools_hint']()}</p></div></div><Button variant="outline" size="sm" class="h-auto min-h-8 w-full min-w-0 whitespace-normal" onclick={() => (safetyOpen = true)}>{m['bots.safety_title']()}</Button></div>{/snippet}
+      </AgentProfilePanel>
+      <Button variant="ghost" size="sm" class="h-auto min-h-8 w-full min-w-0 whitespace-normal text-[var(--app-danger)]" onclick={() => (confirmRemove = true)}>{m['bots.remove']()}</Button>
+    </aside>
   {/if}
 </div>
-{#if editorOpen}<BotEditor {workspaceId} {providers} bot={editing} onSaved={saved} onClose={() => (editorOpen = false)} />{/if}
+{#if editorOpen}<BotEditor {workspaceId} {providers} bot={editing} focusWorkflow={editingWorkflow} onSaved={saved} onClose={() => (editorOpen = false)} />{/if}
 {#if safetyOpen && selected}<BotSafetyEditor {workspaceId} bot={selected} onSaved={() => { safetyOpen = false; void refresh(); }} onClose={() => (safetyOpen = false)} />{/if}
 {#if groupEditor}<BotGroupEditor {workspaceId} {bots} group={groupEditing} onSaved={item => { groupId = item.id; selectedId = ''; groupEditor = false; void refresh(); }} onClose={() => (groupEditor = false)} />{/if}
 {#if selected}<AgentRuntimeDialog open={runtimeOpen} {workspaceId} nodeId={selected.id} onChanged={() => void refresh()} onClose={() => (runtimeOpen = false)} />{/if}
@@ -203,16 +222,19 @@
   .quota-notice strong { font-size:13px; font-weight:600; } .quota-notice p { margin-top:4px; font-size:12px; line-height:1.5; color:var(--app-text-soft); overflow-wrap:anywhere; }
   .bot-conversation { flex: 1; min-height: 0; padding: 12px 18px; }
   .bot-empty { display: flex; flex: 1; gap: 16px; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; } .bot-empty h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; } .bot-empty p { max-width: 390px; color: var(--app-text-muted); font-size: 14px; line-height: 1.65; text-wrap: pretty; } .empty-avatar { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 22px; background: var(--app-accent-soft); color: var(--app-accent); }
-  .bot-profile { display: flex; flex-direction: column; gap: 24px; width: 318px; flex: 0 0 auto; border-left: 1px solid var(--app-border); padding: 22px; overflow-y: auto; background: var(--app-sidebar); } .profile-heading h2 { font-size: 13px; font-weight: 600; }
-  .tools-card { display: flex; align-items: flex-start; gap: 10px; padding: 13px; border: 1px solid var(--app-border); border-radius: 12px; } .tools-card svg { flex: 0 0 auto; color: var(--app-accent); } .tools-card strong { display: block; font-size: 12px; font-weight: 600; } .tools-card p { margin-top: 5px; font-size: 11px; line-height: 1.65; color: var(--app-text-muted); text-wrap: pretty; }
+  .bot-profile { display: flex; flex-direction: column; gap: 16px; width: 336px; min-width: 0; flex: 0 0 auto; border-left: 1px solid var(--app-border); padding: 22px; overflow-y: auto; background: var(--app-sidebar); } .profile-heading h2 { min-width: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+  .bot-profile > :global(*) { min-width: 0; }
+  .profile-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .profile-shortcuts span { min-width: 0; }
+  .tools-card { display: flex; min-width: 0; overflow-wrap: anywhere; align-items: flex-start; gap: 10px; padding: 13px; border: 1px solid var(--app-border); border-radius: 12px; } .tools-card > div { min-width: 0; } .tools-card :global(svg) { flex: 0 0 auto; color: var(--app-accent); } .tools-card strong { display: block; font-size: 12px; font-weight: 600; } .tools-card p { margin-top: 5px; font-size: 11px; line-height: 1.65; color: var(--app-text-muted); text-wrap: pretty; }
   .bot-instructions { max-height: 160px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; color: var(--app-text-soft); }
   .bot-instructions, .profile-heading, .tools-card { flex-shrink: 0; }
   .bot-error { padding: 12px 24px; color: var(--app-danger); font-size: 13px; }
   .bot-automations-body > :global([data-testid="automation-workspace"]) { width: 100%; border-left: 0; }
   .group-conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; } .group-conversation article { max-width: 780px; margin: 0 auto 22px; } .group-conversation small { display: block; margin-bottom: 7px; color: var(--app-text-muted); font-size: 11px; } .group-conversation article.owner { padding: 13px 16px; background: var(--app-accent-soft); border-radius: 14px; }
   .group-composer { display: flex; align-items: flex-end; gap: 10px; margin: 12px 24px 22px; } .group-composer :global(textarea) { flex: 1; resize: vertical; }
-  @media (max-width: 1150px) { .bot-profile { width: 274px; padding: 16px; } .bot-sidebar { width: 224px; } }
-  @media (max-width: 960px) { .bot-profile { position: absolute; right: 0; top: 0; bottom: 0; z-index: 20; width: min(340px,80vw); box-shadow: var(--app-shadow-lg); } .bots-mode { position: relative; } }
+  @media (max-width: 1150px) { .bot-profile { width: 310px; padding: 16px; } .bot-sidebar { width: 224px; } }
+  @media (max-width: 960px) { .bot-profile { position: absolute; right: 0; top: 0; bottom: 0; z-index: 20; width: min(360px,calc(100% - 16px)); box-shadow: var(--app-shadow-lg); } .bots-mode { position: relative; } }
   @media (max-width: 640px) { .bot-sidebar { width: 168px; min-width: 150px; padding: 16px 8px; } .sidebar-heading p { display: none; } .bot-row { padding: 8px 5px; gap: 7px; } .bot-avatar { width: 30px; height: 30px; border-radius: 9px; } .chat-heading { padding: 14px; } .bot-conversation { padding: 8px; } }
 </style>
 

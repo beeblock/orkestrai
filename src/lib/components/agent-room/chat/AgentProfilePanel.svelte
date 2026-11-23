@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tick, untrack, type Snippet } from 'svelte';
+  import * as Accordion from '$lib/components/ui/accordion';
   import type { AgentUsageBlock } from '$lib/modules/agent-room/contracts/schemas/agent-runtime.schema.js';
   import { Brain, CalendarClock, Focus, MessageSquare, Network, X } from '@lucide/svelte';
   import AgentAvatar from '../AgentAvatar.svelte';
@@ -27,7 +29,10 @@
     onDirect,
     embedded = false,
     usageBlock = null,
-    children,
+    children: externalChannels,
+    instructions,
+    security,
+    onAutomations,
     onSetupChannel,
   }: {
     workspaceId: string;
@@ -38,9 +43,23 @@
     onDirect: (nodeId: string) => void;
     embedded?: boolean;
     usageBlock?: AgentUsageBlock | null;
-    children?: import('svelte').Snippet;
+    children?: Snippet;
+    instructions?: Snippet;
+    security?: Snippet;
+    onAutomations?: () => void;
     onSetupChannel?: (provider: 'telegram' | 'slack') => void;
   } = $props();
+
+  let detailsOpen = $state<string[]>([]);
+  let routinesTrigger = $state<HTMLButtonElement | null>(null);
+  const profileScope = $derived(`${workspaceId}:${nodeId}`);
+  $effect(() => { void profileScope; untrack(() => { detailsOpen = []; }); });
+  export async function openRoutines() {
+    detailsOpen = [...new Set([...detailsOpen, 'routines'])];
+    await tick();
+    routinesTrigger?.scrollIntoView({ block: 'nearest' });
+    routinesTrigger?.focus({ preventScroll: true });
+  }
 
   let routineDraft = $state('');
   let routineSending = $state(false);
@@ -133,21 +152,7 @@
   });
 </script>
 
-<aside class="profile" class:embedded aria-label={m['chat.profile_label']({ name: title })}>
-  {#if !embedded}<header>
-    <button type="button" class="close" onclick={onClose} aria-label={m['chat.profile_close']()}><X size={14} /></button>
-  </header>{/if}
-  <div class="identity">
-    <AgentAvatar {nodeId} {title} size={56} />
-    <h2 class="headline">{title}</h2>
-    {#if payload.role}<p class="role">{payload.role}</p>{/if}
-    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
-  </div>
-  {#if !embedded}<div class="actions">
-    <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>
-    <a href={`/canvas?${query}`}><Network size={13} />{m['workspace_view.canvas']()}</a>
-    <a href={`/terminal?${query}`}><Focus size={13} />{m['node_quickbar.focus']()}</a>
-  </div>{/if}
+{#snippet factsContent()}
   <dl class="facts">
     {#if payload.provider}
       <dt>{m['chat.profile_provider']()}</dt>
@@ -169,8 +174,10 @@
       <dd>{status.floorName}</dd>
     {/if}
   </dl>
+{/snippet}
+{#snippet routinesContent(showHeading: boolean)}
   <section>
-    <h3><CalendarClock size={13} />{m['chat.profile_routines']()}</h3>
+    {#if showHeading}<h3><CalendarClock size={13} />{m['chat.profile_routines']()}</h3>{/if}
     {#if routines.length}
       <ul>
         {#each routines as routine (routine.id)}
@@ -188,10 +195,10 @@
       <Button size="sm" type="submit" disabled={!routineDraft.trim() || routineSending}>{m['chat.routine_create']()}</Button>
     </form>
   </section>
-  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} botTitle={title} {onSetupChannel} />
-  {@render children?.()}
+{/snippet}
+{#snippet memoryContent(showHeading: boolean)}
   <section>
-    <h3><Brain size={13} />{m['chat.profile_memory']()}</h3>
+    {#if showHeading}<h3><Brain size={13} />{m['chat.profile_memory']()}</h3>{/if}
     {#if memoryLoading}
       <p class="empty" role="status">{m['chat.profile_memory_loading']()}</p>
     {:else if memoryError}
@@ -205,11 +212,80 @@
       <p class="empty">{m['chat.profile_memory_empty']()}</p>
     {/if}
   </section>
+{/snippet}
+
+<aside class="profile" class:embedded aria-label={m['chat.profile_label']({ name: title })}>
+  {#if !embedded}
+    <header><button type="button" class="close" onclick={onClose} aria-label={m['chat.profile_close']()}><X size={14} /></button></header>
+  <div class="identity">
+    <AgentAvatar {nodeId} {title} size={56} />
+    <h2 class="headline">{title}</h2>
+    {#if payload.role}<p class="role">{payload.role}</p>{/if}
+    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
+  </div>
+  {#if !embedded}<div class="actions">
+    <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>
+    <a href={`/canvas?${query}`}><Network size={13} />{m['workspace_view.canvas']()}</a>
+    <a href={`/terminal?${query}`}><Focus size={13} />{m['node_quickbar.focus']()}</a>
+  </div>{/if}
+
+    {@render factsContent()}
+    {@render routinesContent(true)}
+  {:else}
+    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
+  {/if}
+  <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} botTitle={title} {onSetupChannel}>
+    {#snippet children({ runtime, channels, activity })}
+      {#if embedded}
+        <section class="bot-channels" aria-label={m['bots.profile_channels']()}>
+          <h3>{m['bots.profile_channels']()}</h3>
+          {@render externalChannels?.()}
+          {@render channels(false)}
+        </section>
+        <Accordion.Root type="multiple" bind:value={detailsOpen} class="min-w-0 gap-1">
+          <Accordion.Item value="routines" class="min-w-0 border-0">
+            <Accordion.Trigger bind:ref={routinesTrigger} class="min-w-0 gap-2">{m['chat.profile_routines']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0">
+              {@render routinesContent(false)}
+              {#if onAutomations}<Button variant="outline" size="sm" class="mt-3 h-auto min-h-8 w-full min-w-0 whitespace-normal" onclick={onAutomations}>{m['bots.automations']()}</Button>{/if}
+            </Accordion.Content>
+          </Accordion.Item>
+          {#if instructions}<Accordion.Item value="instructions" class="min-w-0 border-0">
+            <Accordion.Trigger class="min-w-0 gap-2">{m['bots.instructions']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0">{@render instructions()}</Accordion.Content>
+          </Accordion.Item>{/if}
+          <Accordion.Item value="runtime" class="min-w-0 border-0">
+            <Accordion.Trigger class="min-w-0 gap-2">{m['bots.profile_runtime']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0"><div class="grid min-w-0 gap-3">{@render factsContent()}{@render runtime(false)}</div></Accordion.Content>
+          </Accordion.Item>
+          {#if security}<Accordion.Item value="security" class="min-w-0 border-0">
+            <Accordion.Trigger class="min-w-0 gap-2">{m['bots.profile_security']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0">{@render security()}</Accordion.Content>
+          </Accordion.Item>{/if}
+          <Accordion.Item value="activity" class="min-w-0 border-0">
+            <Accordion.Trigger class="min-w-0 gap-2">{m['always_on.recent']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0">{@render activity(false)}</Accordion.Content>
+          </Accordion.Item>
+          <Accordion.Item value="memory" class="min-w-0 border-0">
+            <Accordion.Trigger class="min-w-0 gap-2">{m['chat.profile_memory']()}</Accordion.Trigger>
+            <Accordion.Content class="min-w-0">{@render memoryContent(false)}</Accordion.Content>
+          </Accordion.Item>
+        </Accordion.Root>
+      {:else}
+        {@render runtime(true)}
+        {@render channels(true)}
+        {@render activity(true)}
+      {/if}
+    {/snippet}
+  </AgentAlwaysOnPanel>
+  {#if !embedded}{@render externalChannels?.()}{@render memoryContent(true)}{/if}
 </aside>
 
 <style>
-  .profile.embedded { width: 100%; border-left: 0; padding: 0; overflow: visible; }
+  .profile.embedded { width: 100%; min-inline-size: 0; max-inline-size: 100%; border-left: 0; padding: 0; overflow: visible; }
   .profile {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
     width: 320px;
     flex: none;
     display: flex;
@@ -309,7 +385,7 @@
 
   .facts {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 6px 12px;
     margin: 0;
     font-size: 12.5px;
@@ -386,6 +462,11 @@
   .routine.off b {
     color: var(--app-text-muted);
   }
+
+  .profile > :global(*), .bot-channels > :global(*) { min-inline-size: 0; }
+  .bot-channels { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; }
+  .routine-form :global(input) { flex: 1; min-inline-size: 0; inline-size: 0; }
+  .routine-form :global(button) { flex: none; }
 
   .routine-form {
     display: flex;

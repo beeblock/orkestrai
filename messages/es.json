@@ -1,4 +1,7 @@
 {
+  "bots.profile_channels": "Canales",
+  "bots.profile_runtime": "Ejecución y límites",
+  "bots.profile_security": "Permisos y seguridad",
   "tokens.coverage_partial": "Recuento parcial de sesiones locales. Pueden faltar sesiones antiguas y otros perfiles; esto no es una factura.",
   "startup.recovery_title": "No se pudo iniciar Orkestrai",
   "startup.recovery_message": "El servidor interno no pudo iniciar. Tus datos no se han restablecido.",
