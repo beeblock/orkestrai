@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Save edited bot sequence commands, acknowledgments, selected agents and stage criteria through the shared form state instead of reverting nested edits during validation.
+
 - Preserve ordinary Conversation sends and exact-source legacy Canvas Telegram/Slack replies independently of personal-bot workflow storage and public-worker approval. Reject changed recipient scopes. Load inference-only model helpers lazily to avoid a provider registry/profile initialization cycle.
 
 - Receive WhatsApp quoted text, images, PDFs and voice notes as bounded, untrusted input from the exact request. Report expired or unreadable quotes explicitly, and reply with native text/file quotes to the original triggering message, including long provider IDs. Convert emphasis and web links to WhatsApp formatting without changing code.

@@ -50,3 +50,7 @@ Verification logs are retained outside the repository in the isolated QA directo
 - Isolated Redis worker exited successfully with no jobs; the scheduler completed its due-automation ticks against a migrated disposable database. The disposable Redis container was removed.
 
 Production-browser and packaged-install evidence follows in the local handoff report after completion; the source checks above do not claim Windows/Linux hardware testing or paid model/image quality validation.
+
+### Production-browser findings before installation
+
+The initial production run passed 13 existing scenarios and exposed a new editor defect: nested sequence field edits did not update Superforms before validation. The editor now publishes immutable updates for command, acknowledgment, agent selection and stage criteria. The short-window test closes the overlapping profile panel first and verifies the persisted fields. The new native worker fixture now launches the CLI executable and pins its isolated server URL; invoking the library entrypoint performed no command, and the fallback URL could not authenticate its test token. No model or owner credentials were used. The final browser run is recorded separately after rebuilding this correction.

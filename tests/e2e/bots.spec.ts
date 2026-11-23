@@ -284,22 +284,27 @@ test('configure a fixed Canvas sequence and retain a visible footer in a short b
   const base = `/api/agent-room/workspaces/${workspace.id}`;
   try {
     const target = (await (await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Canvas reviewer', payload: { provider: 'codex', command: '/bin/cat' } } })).json()).data;
+    await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Other available agent', payload: { provider: 'codex', command: '/bin/cat' } } });
     const bot = (await (await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'Sequence helper', provider: 'codex', instructions: 'Owner rules' } } })).json()).data;
     await page.route(`**${base}/bots?providerId=*`, route => route.fulfill({ json: { data: { installed: true, models: [], efforts: [] } } }));
     await page.setViewportSize({ width: 560, height: 480 });
     await page.goto(`/bots?workspace=${workspace.id}`);
     await page.locator('.bot-row').filter({ hasText: 'Sequence helper' }).click();
+    await page.getByRole('button', { name: labels['chat.profile_close'], exact: true }).click();
     await page.getByRole('button', { name: labels['bots.edit'], exact: true }).click();
     const editor = page.getByTestId('bot-editor');
     await editor.getByRole('button', { name: labels['bots.advanced'], exact: true }).click();
     const plan = editor.getByTestId('bot-workflow-editor');
     await plan.getByRole('button', { name: labels['bots.workflow_enable'], exact: true }).click();
     await plan.getByLabel(labels['bots.workflow_trigger'], { exact: true }).fill('/review');
+    await plan.getByLabel(labels['bots.workflow_ack'], { exact: true }).fill('Review request received.');
+    await plan.getByRole('combobox', { name: labels['bots.workflow_agent'].replace('{step}', '1'), exact: true }).click();
+    await page.getByRole('option', { name: 'Canvas reviewer', exact: true }).click();
     await plan.getByLabel(labels['bots.workflow_step_instructions'].replace('{step}', '1'), { exact: true }).fill('Review and validate the requested behavior.');
     const save = editor.getByRole('button', { name: labels['bots.save'], exact: true });
     await expect(save).toBeInViewport(); await save.click(); await expect(editor).toHaveCount(0);
     const result = (await (await request.get(`${base}/bots`)).json()).data.bots.find((item: any) => item.id === bot.id);
-    expect(result.workflow).toMatchObject({ trigger: '/review', steps: [{ nodeId: target.id, instructions: 'Review and validate the requested behavior.' }] });
+    expect(result.workflow).toMatchObject({ trigger: '/review', acknowledgment: 'Review request received.', steps: [{ nodeId: target.id, instructions: 'Review and validate the requested behavior.' }] });
   } finally { await request.delete(base); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -310,9 +315,9 @@ test('show durable workflow progress live in two tabs and return one final resul
   try {
     const bin = join(root, 'bin'); await mkdir(bin);
     const executable = join(bin, 'codex');
-    const cli = join(process.cwd(), 'packages/orkestrai-cli/src/cli.js');
+    const cli = join(process.cwd(), 'packages/orkestrai-cli/bin/orkestrai.js');
     await writeFile(executable, `#!/usr/bin/env node
-      const {createInterface}=require('node:readline'),{randomUUID}=require('node:crypto'),{spawnSync}=require('node:child_process');
+      const {createInterface}=require('node:readline'),{randomUUID}=require('node:crypto'),{spawnSync}=require('node:child_process'),{writeFileSync}=require('node:fs');
       const send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
       (async()=>{for await(const line of createInterface({input:process.stdin})){
         const m=JSON.parse(line);if(!m.id)continue;
@@ -322,13 +327,14 @@ test('show durable workflow progress live in two tabs and return one final resul
           const turnId=randomUUID(),threadId=m.params.threadId;send({id:m.id,result:{turn:{id:turnId}}});
           const prompt=JSON.stringify(m.params.input),task=prompt.match(/Mark card ([a-f0-9-]{36}) done/);
           const finish=task?spawnSync(process.execPath,[${JSON.stringify(cli)},'task','done',task[1]],{env:process.env,encoding:'utf8',timeout:15000}):null;
+          writeFileSync(${JSON.stringify(join(root, 'fixture-debug.json'))},JSON.stringify({task:task?.[1],status:finish?.status,stdout:finish?.stdout,stderr:finish?.stderr}));
           const text=finish?.status===0?'WORKFLOW_UI_ACCEPTED_AND_COMPLETE':'WORKFLOW_UI_CARD_NOT_ACCEPTED';
           send({method:'item/completed',params:{threadId,turnId,item:{type:'agentMessage',phase:'final_answer',text}}});
           send({method:'turn/completed',params:{threadId,turn:{id:turnId,status:'completed'}}});
         }else send({id:m.id,result:{}});
       }})().catch(()=>process.exit(1));`);
     await chmod(executable, 0o755);
-    const workerResponse = await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Native sequence fixture', payload: { provider: 'codex', command: 'codex', agentTransport: 'structured', agentRuntimeMode: 'on_demand', env: { PATH: `${bin}:${process.env.PATH}` } } } });
+    const workerResponse = await request.post(`${base}/nodes`, { data: { type: 'terminal', title: 'Native sequence fixture', payload: { provider: 'codex', command: 'codex', agentTransport: 'structured', agentRuntimeMode: 'on_demand', env: { PATH: `${bin}:${process.env.PATH}`, ORKESTRAI_API_URL: 'http://127.0.0.1:5199', ORKESTRAI_RUNTIME_FILE: '' } } } });
     expect(workerResponse.ok(), await workerResponse.text()).toBe(true);
     const worker = (await workerResponse.json()).data;
     const response = await request.post(`${base}/bots`, { data: { command: 'create', settings: { title: 'Live workflow bot', provider: 'codex', instructions: 'No model is used by this fixture.', workflow: { trigger: '/review', acknowledgment: 'WORKFLOW_UI_RECEIVED', steps: [{ nodeId: worker.id, instructions: 'Validate the fixture and complete the card.' }] } } } });
@@ -341,11 +347,11 @@ test('show durable workflow progress live in two tabs and return one final resul
     const chat = page.getByTestId('agent-chat-face');
     await chat.getByRole('textbox').fill('/review validate the complete sequence');
     await chat.getByRole('button', { name: labels['composer.send'], exact: true }).click();
-    for (const tab of [page, peer]) {
+    try { for (const tab of [page, peer]) {
       await expect(tab.getByTestId('agent-chat-face').getByText('WORKFLOW_UI_RECEIVED', { exact: true })).toBeVisible({ timeout: 15000 });
       await expect(tab.getByTestId('bot-workflow-progress')).toContainText(labels['bots.workflow_complete'], { timeout: 20000 });
       await expect(tab.getByTestId('agent-chat-face').getByText('WORKFLOW_UI_ACCEPTED_AND_COMPLETE', { exact: true })).toHaveCount(1);
-    }
+    } } catch (error) { console.log('Workflow fixture diagnostics:', await readFile(join(root, 'fixture-debug.json'), 'utf8').catch(() => 'No fixture turn observed')); throw error; }
     const cards = (await (await request.get(`${base}/tasks`)).json()).data;
     expect(cards.filter((card: any) => card.assigneeNodeId === worker.id)).toMatchObject([{ status: 'done' }]);
   } finally { await peer.close(); await request.delete(base); await rm(root, { recursive: true, force: true }); }
