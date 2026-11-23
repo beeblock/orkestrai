@@ -7,96 +7,36 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.55.0 - 2026-11-23
+
+### Added
+
+- A separate Bots mode creates personal assistants and collaboration groups while preserving Conversation and existing Canvas agents. Choose your installed Claude or Codex account, model and effort; native Codex App Server and Claude Agent SDK transports avoid terminal paste/Enter submission.
+- Start with 16 editable profiles, each with a distinct voice, practical request examples and specific execution rules: assistant, support, sales, calendar, research, reports, programming, operations, writing, social, study, habits, finance, travel, community and creative work. Preset selection preserves your name/provider/account and leaves existing bots unchanged; leaders and specialists use the same CLI/MCP catalog.
+- Connect WhatsApp through a linked-device QR with Zapo and encrypted desktop storage, or set up Telegram and Slack directly from the bot profile. Reuse one WhatsApp connection for several bots and configure exact chats, verified senders and literal prefixes such as #jarvis. Detect overlapping group routes, retain drafts during live updates and notify Attention Center when a connection needs recovery.
+- Receive quoted messages, images, PDFs and voice notes from the exact authorized request. Transcribe bounded WhatsApp audio through the existing speech service; send generated images, PDFs, spreadsheets and other supported files as native channel attachments, with replies linked to the original message where supported.
+- Owner and explicitly trusted chats can create native reminders and recurring reports with delivery to the originating chat, without Computer or a permanently open setup card. Inspect, edit, pause or cancel them in Routines and Automations. Interval schedules count from the previous completion; calendar schedules use their configured time zone. The host must remain awake, open and connected.
+- Configure slash-command workflows with up to eight selected Canvas agents, a short acknowledgment and per-stage acceptance criteria. Reuse native Kanban cards, inbox receipts, review gates and verified file delivery; recover stages after restart without redelivery and stop remaining work without undoing accepted results.
+- Public customer turns use isolated workers, explicit public role and factual references, bounded attachment reads and approved functions. Keep owner tools separate, recheck sender grants and artifact approvals before external delivery, and review public output without tools. Current public web research does not grant private files or shell access.
+- Authenticated personal bots can coordinate Canvas agents, connect nodes, update specialist roles and switch teammate account profiles with live identity checks. Carry exact incoming image references into Codex image workflows and freeze their hashes; preserve workspace pauses, actual leader/deputy protections and public-worker isolation.
+- Delete individual bot/group messages or clear local conversation history with confirmation and live updates. Preserve files, provider context, external identities and delivery receipts; withdraw undelivered requests without pretending accepted work was cancelled.
+
 ### Fixed
 
-- Restore the verified originating chat when a personal bot resumes its own assigned setup card. Persist the source at task creation; recover older cards only from one unambiguous completed native receipt window and revalidate sender grants. Never select the latest unrelated chat. Refresh Automations and the bot routine list on native changes without clearing drafts or reloading all Canvas nodes. Tick the visible profile timer every second and shorten the workflow shortcut. Give bots their exact native identity and reject self-message coordination loops.
+- Apply configured role, personality and factual information to owner chats too, refreshing instructions without replacing the provider conversation. Restore the verified source when a bot resumes its own setup card; reject ambiguous history and self-message coordination loops.
+- Preserve exact originating phone chats across delegated specialist replies. Save native results before forwarding and use a durable exact-chat outbox with uncertainty-aware recovery, bounded files and hash checks. Show specific quota, account, attachment and protection errors rather than misleading generic connectivity failures.
+- Organize the bot sidebar into channels and expandable details, with short Workflow and Routines shortcuts. Keep long names/forms inside the panel, advance the visible timer every second, refresh native routine changes live without clearing drafts, and keep modal footers visible in short windows.
+- Keep macOS/Windows secure-store unlock and encryption off the Electron UI thread while preserving ciphertext, concurrent writes and revocation checks. Do not change Keychain controls or fall back to plaintext. Show account usage/caps and preserve runtime settings when editing only a bot’s name.
+- Keep six Canvas tabs warm within a bounded metadata cache, restore saved viewports immediately and revalidate without rebuilding unchanged nodes or launching duplicate sessions. Avoid full communication history during status polling and retain complete audit data on demand.
+- Repair the production-minified xterm mode-query handler, remove orphan Portal surfaces through their existing leases, and add private bounded renderer diagnostics. Opening account limits from Conversation, Bots or Focus preserves the current mode.
 
-- Role, personality and approved factual reference information now apply to owner conversations too, preserving the provider conversation. Load current instructions before each owner turn and treat voice transcripts as ordinary requests. Verified owner/trusted requests can create persistent native current_chat routines without Computer or a permanently open setup task. Check authorization, workspace state, revision and cancellation before execution and delivery; recover saved results without duplicate generation or sends.
+### Documentation
 
-- Reorganize the bot sidebar with direct workflow/routine shortcuts, grouped channels and collapsible instructions, execution, safety, activity and memory. Constrain account selectors, form rows, long group IDs and text to the panel width instead of producing horizontal scrolling. Preserve the separate Conversation layout and live channel drafts.
+- Add a dedicated Bots section to the website, expanded guides, practical preset recipes and onboarding examples in Portuguese, English and Spanish.
 
-- Preserve WhatsApp route drafts and newly connected Telegram/Slack setup when live Canvas updates replace the selected bot summary. Reset forms only when changing the actual bot or workspace.
+### Security review
 
-- Save edited bot sequence commands, acknowledgments, selected agents and stage criteria through the shared form state instead of reverting nested edits during validation.
-
-- Preserve ordinary Conversation sends and exact-source legacy Canvas Telegram/Slack replies independently of personal-bot workflow storage and public-worker approval. Reject changed recipient scopes. Load inference-only model helpers lazily to avoid a provider registry/profile initialization cycle.
-
-- Receive WhatsApp quoted text, images, PDFs and voice notes as bounded, untrusted input from the exact request. Report expired or unreadable quotes explicitly, and reply with native text/file quotes to the original triggering message, including long provider IDs. Convert emphasis and web links to WhatsApp formatting without changing code.
-- Carry received image references through native bot delegation with per-terminal paths and exact source IDs. Connect and SHA-256 freeze them in ImageGen workflows; reject missing, changed or disconnected references before generation. Public customers do not inherit native file access.
-- Send one fixed, localized failure notice to the originating external chat for quota, authentication, attachment, connection or policy failures. Never expose raw provider diagnostics, duplicate notices on recovery, or mark an unsuccessful request as delivered work.
-
-- Add confirmed message deletion and conversation clearing for personal bots and groups, with live multi-tab updates and scoped CLI/MCP commands. Hide local history without deleting files, external identities, receipts or provider context. Withdraw undelivered requests before waking the agent and preserve pending questions; already accepted work can finish.
-
-- Let authenticated personal bots connect agents, update specialist roles, dismiss finished specialists and change teammate account profiles without becoming the workspace leader. Bind these calls to the live terminal identity, preserve workspace pauses and protect the actual leader/deputy from dismissal. Public customer workers remain isolated.
-
-- Forward generated PNG/JPEG images, PDFs, spreadsheets, documents and archives as native attachments, including explicit absolute paths confined to the owner workspace or its terminal runtime. Keep realpath/policy/hash checks and public artifact approvals; remove only the verified local links from outgoing text. Older text-only owner replies offer Send files to the original chat, with one durable repair identity and no model run or image regeneration.
-
-### Added — 0.55.0-beta.13 local preview
-
-- Configure owner/trusted-sender slash-command bot sequences through up to eight selected Canvas agents. Persist one Kanban card and inbox identity per stage; require the normal card acceptance and exact final reply before advancing. Recover without redelivery, show progress with the request, acknowledge once and return the final artifacts to the originating chat. Stop remaining stages without undoing accepted work. Expose configuration and stop commands through the existing authenticated CLI/MCP; public customers retain restricted approved actions.
-
-- Authenticate workspace commands from the linked WhatsApp account outside the model. These owner requests retain native Canvas tools, Codex image-workflow delegation, routines and integrations without promoting the bot to leader. Other contacts keep the restricted public worker; explicitly trusted verified contacts can be selected in the bot protection dialog. Recheck grants before forwarding each exact, hash-verified file to its originating chat.
-- Enable native public web search for current information without granting host files, shell commands or private workspace context. Keep the output reviewer tool-free.
-- Transcribe WhatsApp voice notes (OGG/Opus, MP3 and WAV, up to 5 minutes / 10 MB) with the existing speech service, after sender authorization. Decode off the Core with a bounded subprocess and match a leading spoken bot name. Missing speech models and unsupported audio raise a specific notice.
-- Show the selected account usage and automatic bot cap when quota pauses delivery; keep messages queued and expose account/runtime controls. Show a protection-specific message when output is blocked instead of blaming account connectivity.
-
-- Add 16 searchable bot presets with localized purpose, personality and behavior rules. Keep all text editable, preserve the typed name/provider/account on selection, offer a blank custom option, and keep creation actions visible in short windows. Expose the same public-safe catalog and preset-based creation to authenticated leaders and specialists through CLI/MCP, without changing existing bots or granting tools/connections. Add a guided use case and tour in all three languages.
-
-- Isolate public bot turns from private workspace context and host tools; add public role/knowledge, pinned action/output grants, customer-scoped attachment reads, immutable HTTP caller identity, quotas, exact artifact approvals and a tool-free reply review. Keep owner sessions unchanged; quarantine unreviewed drafts and surface blocked requests in Attention Center.
-
-- Reuse one linked WhatsApp account across several bots in the same external group. Configure per-bot literal prefixes and verified senders; atomically reject overlapping enabled routes and edit existing rules through UI, CLI and MCP. Rule-only edits keep paused bindings paused. Document the shared-group setup and add a guided tour.
-
-- Add a separate Bots workspace mode for personal assistants, owner instructions, account/model/effort selection and collaboration groups. Existing Conversation agents and terminal transports remain the default.
-- Add opt-in Codex App Server and Claude Agent SDK transports using unchanged installed CLIs and selected profiles. Native prompts bypass TUI paste/Enter timing; provider receipts, per-conversation contexts, bounded output and verified process shutdown retain the existing bridge identity and Canvas tools.
-- Persist native final results before routing, deduplicate resumed forwarding and use a durable, exact-chat external outbox. Preserve complete long answers as owned text attachments and verify artifact paths/hashes before publication.
-- Preserve delegated chat return addresses, repair group membership when a bot is removed and keep failed external replies from starving later chats. Native viewers reattach to the same programmatic process rather than launching a second TUI.
-- Receive Telegram/Slack PDFs and images and send native documents/images with existing integration grants. Add WhatsApp linked-device QR with encrypted desktop credentials, signal keys and pending messages, explicit chat/sender binding, bounded media and uncertainty-aware delivery. No additional Chromium, Docker or bundled Claude CLI is required.
-- Accept human requests from the linked WhatsApp phone, including self-chat, while suppressing bot output loops. Check every media redirect and bound download size/time; a permanently rejected attachment does not block later messages. Independent linked chats progress concurrently while retaining their own message order.
-- Expose personal bot/group operations through the authenticated CLI/MCP, document a phone support/report use case in three languages and add a guided tour. Existing grants, workspace pauses and configured gates remain authoritative.
-
-- Explain the personal-bot Instructions and rules field with a copyable support template, recurring-rule versus task guidance and a dedicated onboarding step in all three languages.
-
-
-### Fixed in the local preview
-
-- Preserve the exact original phone conversation when a Canvas specialist replies to a bot, including pending replies restored after restart. Keep separate approvals for the initial answer and final result while both wait for delivery.
-
-- Keep macOS/Windows credential reads and encryption off the Electron main thread so a native storage-unlock prompt cannot turn a healthy Core startup into a timeout. Preserve existing ciphertext, Linux backend checks, concurrent account writes and revocation during delayed operations; never change Keychain rules or use plaintext fallback.
-
-- Use Zapo for new WhatsApp QR links while preserving already registered preview sessions. Keep the official Signal/SQLite providers in bounded RAM and persist their compressed state through desktop encryption, without plaintext session files or another native dependency. Disable historical chat downloads. Add scoped, serialized in-place reconnect and QR refresh without deleting routes; surface unsupported extra verification and log only safe connection codes. Test the real protocol against the official local fake server, including QR pairing, exact text/image/PDF acknowledgements and encrypted restoration. Physical-phone pairing remains an owner validation step.
-
-- Size bot preset cards to wrapped content and keep the entire creation footer inside its scrolling dialog, including short windows.
-
-- Preserve Claude’s native default/named account scope for protected bot workers without copying credentials or re-enabling private instructions and tools.
-
-- Keep the current mode when opening account limits from the header, native menu or Focus footer. Reuse the live Usage panel in a drawer outside Canvas, preserve the route/workspace, and retain the existing Canvas side panel.
-
-- Simplify bot creation to name, public purpose and account. Configure the explicitly public purpose automatically, keep everyday messages/attachments free of per-response approvals, and hide model/effort/transport and detailed safety controls under Advanced. Load function options only on demand; never copy existing private instructions into public settings. Disable stale public actions individually without blocking basic chat, attachments or other valid actions.
-
-- Allow public integration functions only for fixed, schema-validated reads declared nonmutating by the integration catalog. Use customer-aware HTTP functions for dynamic requests; never infer safety from an action name.
-
-- Notify the owner in Attention Center and through the native desktop shell when a WhatsApp session is revoked or a connection stays unavailable for one minute. Deduplicate reconnection/restart notices, open Bots from the alert, resolve it after recovery, and suppress intentional-disconnect alerts without waking a model.
-
-- Keep all six open Canvas tabs warm within a 16 MiB metadata budget instead of expiring their snapshots after one minute. Revalidate in the background without rebuilding unchanged nodes, precompute connections, restore the cached viewport immediately, reset foreign Floor filters and deduplicate workspace-scoped provider discovery. Existing live terminals may attach immediately; new sessions and respawns wait for revalidated command/runtime metadata. Stale graph/provider responses cannot overwrite a later selection; explicit refresh, unload and removal retain their semantics.
-
-- Detach removed Portal surfaces using the trusted app window and existing surface lease even when their database node is gone or the Core is unavailable. Prevent orphan native views from remaining above app controls; keep attachment and page commands database-authorized.
-
-- Keep xterm mode-query replies working after production minification. Apply a version/hash-guarded dependency patch that preserves its local enum variable; verify the minified code and a real terminal response instead of disabling bundle minification globally.
-
-- Add private Core-token-authenticated renderer metrics and a bounded five-second main-renderer CPU profile to diagnose Canvas stalls. Never open a debugger port, evaluate arbitrary scripts, expose Portal contents or replace an attached debugger session.
-
-- Avoid full communication history during agent status polling. Compact Control Center audit event payloads without dropping their identities/states/timestamps; render a bounded history with explicit expand/collapse and retain the full audit projection on request.
-
-- Keep Telegram and Slack setup footer actions inside the dialog in short windows. Remove inherited negative footer margins, keep header/footer fixed and scroll only the form body.
-
-- Keep Save responsive while editing a bot: refresh model/account metadata only when its provider changes, instead of on every form-field update.
-
-- Allow personal-bot display-name edits while a session is open, preserving its conversation and runtime configuration. Keep the sleep requirement for execution changes and preserve the chosen mode and limits when saving them. Clarify on-demand WhatsApp activation and routine concurrency in the guides.
-
-- Support installed Claude Code 2.1.325 through secret-free MCP configuration and inherited authenticated environment; show model-start and turn failures on the saved bot message.
-- Keep the Bots automation modal inside the viewport with full-width, independently scrolling content. Add direct, guided Telegram/Slack connection, conversation discovery and a downloadable Slack app manifest.
-- Wait for an explicit WhatsApp secure-store unlock without extending background secret timeouts. List available WhatsApp contacts/groups without importing message history, and filter literal owner-defined reply prefixes before downloading files or invoking models.
-
+- Revalidate the existing narrowly scoped SvelteKit remote-function audit guards for 0.55.0, with the feature disabled, exact source/package checks and the unchanged November 25, 2026 expiry. These are application mitigations, not upstream package fixes; every other moderate-or-higher advisory still blocks release.
 
 ## 0.54.0 - 2026-11-18
 

@@ -8,12 +8,14 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const picoArchive = 'https://codeload.github.com/micromatch/picomatch/tar.gz/3222059ac27492d9c0147fee5c65f751bbd851ab';
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const remoteAdvisories = ['GHSA-3r8g-jcqq-3p5j', 'GHSA-6cf5-gc4q-fm3x'];
+// Individually re-reviewed releases only; see docs/reports/release-0550-readiness-2026-11-23.md.
+const reviewedReleases = new Set(['0.54.0', '0.55.0']);
 
 /** This opt-in is a release-specific exception, not an audit bypass by severity. */
 export async function verifyReviewedGuards(directory = root, now = new Date()) {
   const manifest = readJson(join(directory, 'package.json'));
   const lock = readJson(join(directory, 'package-lock.json'));
-  if (manifest.version !== '0.54.0' || now > new Date('2026-11-25T23:59:59Z')) throw new Error('Reviewed audit guards expired; remediate or obtain a new review.');
+  if (!reviewedReleases.has(manifest.version) || now > new Date('2026-11-25T23:59:59Z')) throw new Error('Reviewed audit guards expired; remediate or obtain a new review.');
   const config = (await import(pathToFileURL(join(directory, 'svelte.config.js')).href)).default;
   if (config.kit?.experimental?.remoteFunctions !== false
     || lock.packages['node_modules/@sveltejs/kit']?.version !== '2.70.4') throw new Error('Remote-function exception requires disabled functions and SvelteKit 2.70.4.');

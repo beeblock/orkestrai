@@ -53,7 +53,11 @@ Conversation and existing development agents retain their current behavior.
 Start with one of **16 searchable presets** in Create bot: assistant, support,
 sales, calendar, research, reports, programming, operations, writing, social media,
 studying, habits, finance, travel, communities and creative images. Each fills in
-an editable purpose, personality and behavior rules. Changing presets keeps your
+an editable purpose, practical example requests, a distinct personality and role-specific execution rules.
+For example, support investigates a bug PDF, reports returns a verified native PDF,
+calendar saves a real reminder and creative work returns the image file to the chat.
+See **How to use → Bot profiles: practical recipes** for all 16 starting points.
+Changing presets keeps your
 typed name, provider and account; Start from scratch creates a custom setup.
 Presets do not grant tools, connect services or change existing bots. The same
 catalog is available to leaders/specialists with `orkestrai bot preset_list`

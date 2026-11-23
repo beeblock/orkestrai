@@ -48,7 +48,14 @@ describe('release-specific reviewed audit guards', () => {
     else if (reason === 'source') writeFileSync(join(root, 'node_modules/picomatch/lib/parse.js'), 'unverified');
     await expect(verifyReviewedGuards(root, reason === 'expired' ? new Date('2026-11-26') : now)).rejects.toThrow();
   });
-  it.each(['0.55.0-beta.1', '0.55.0-beta.2', '0.55.0'])('does not carry the old release authorization into %s', async version => {
+  it('accepts the separately reviewed 0.55.0 with the same exact guards and unchanged expiry', async () => {
+    const root = fixture();
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version: '0.55.0' }));
+    expect(await verifyReviewedGuards(root, new Date('2026-11-23T12:00:00Z'))).toEqual(new Set([id, 'GHSA-6cf5-gc4q-fm3x', 'GHSA-fc5q-39xc-vjpf']));
+    await expect(verifyReviewedGuards(root, new Date('2026-11-26'))).rejects.toThrow();
+  });
+  it.each(['0.55.0-beta.1', '0.55.0-beta.2', '0.54.1', '0.55.1', '0.56.0'])('does not carry release authorization into unreviewed %s', async version => {
     const root = fixture();
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version }));
