@@ -31,6 +31,7 @@ import { BridgeController } from '$lib/modules/agent-room/interface/http/control
 import { bridgeService } from '$lib/modules/agent-room/application/services/BridgeService.js';
 import { WhatsAppBotService } from '$lib/modules/agent-room/application/services/WhatsAppBotService.js';
 import { channelBindingService } from '$lib/modules/agent-room/application/services/ChannelBindingService.js';
+import ptBRMessages from '../../messages/pt-BR.json';
 
 describe('personal bot boundaries and persistence', () => {
   useSvelarTest({ refreshDatabase: true });
@@ -68,8 +69,8 @@ describe('personal bot boundaries and persistence', () => {
     const created = await f.command({ command: 'create', settings: { title: 'Jarvis', provider: 'claude',
       presetId: 'support', presetLocale: 'pt-BR' } }) as PersonalBotSummary;
     expect(created).toMatchObject({ title: 'Jarvis', provider: 'claude', profileId: null, runtimeMode: 'on_demand' });
-    expect(created.instructions).toContain('Ajude clientes');
-    expect(created.instructions).toContain('Paciente');
+    expect(created.instructions).toContain(ptBRMessages['bots.preset.support.purpose']);
+    expect(created.instructions).toContain(ptBRMessages['bots.preset.support.personality']);
     expect(created.safety.publicInstructions).toBe(created.instructions);
     expect(created.safety.actions).toEqual([]);
     expect((await workspaceRepository.getNode(f.bot.id))!.payload).toEqual(before.payload);
