@@ -234,6 +234,11 @@ export class TaskBoardService {
     return { data, meta: { limit: input.limit, hasMore, nextCursor: hasMore ? data.at(-1)?.id ?? null : null, detailTool: 'task_read' } };
   }
 
+  async readOptional(workspaceId: string, taskId: string): Promise<BoardTask | null> {
+    const task = await AgentBoardTask.find(taskId);
+    return task?.getAttribute('workspace_id') === workspaceId ? this.mapWithTitles(task) : null;
+  }
+
   async read(workspaceId: string, taskId: string): Promise<BoardTask> {
     return this.mapWithTitles(await this.requireTask(workspaceId, taskId));
   }

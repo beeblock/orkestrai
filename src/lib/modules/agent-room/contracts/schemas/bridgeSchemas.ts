@@ -45,6 +45,7 @@ export const bridgeAskSchema = z.object({
   message: z.string().min(1, 'Informe a mensagem.'),
   from: z.string().trim().nullish(),
   external: externalReplyCredentialsSchema.optional(),
+  sourceMessageId: z.string().uuid().optional(),
   /** Vincula a mensagem a uma tarefa para cancelar handoffs obsoletos antes do envio. */
   taskId: z.string().uuid().nullish(),
   /** Espera máxima pela resposta; agentes ocupados liberam o chamador antes e a resposta chega à caixa de entrada. */

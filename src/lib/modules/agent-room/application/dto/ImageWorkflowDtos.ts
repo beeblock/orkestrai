@@ -10,7 +10,7 @@ import type {
 } from '../../contracts/schemas/imageWorkflowSchemas.js';
 
 export class CreateImageWorkflowDto {
-  constructor(public readonly workspaceId: string, public readonly input: CreateImageWorkflowInput, public readonly actorNodeId: string) {}
+  constructor(public readonly workspaceId: string, public readonly input: CreateImageWorkflowInput, public readonly actorNodeId: string, public readonly verifiedActorNodeId: string | null = null) {}
 }
 
 export class UpdateImageWorkflowDto {

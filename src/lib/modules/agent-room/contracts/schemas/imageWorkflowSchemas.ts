@@ -72,6 +72,8 @@ export const bridgeRunImageWorkflowSchema = z.object({
 });
 
 export const createImageWorkflowSchema = z.object({
+  /** Exact source received by this executor; terminal delegates must name it. */
+  sourceMessageId: z.string().uuid().optional(),
   title: z.string().trim().min(1).max(120).default('Image workflow'),
   prompt: z.string().trim().max(32_000).default(''),
   count: workflowConfigFields.count.default(1),

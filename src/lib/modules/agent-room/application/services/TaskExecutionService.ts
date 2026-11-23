@@ -23,7 +23,7 @@ export class TaskExecutionService {
     for (const id of ids) await visit(id);
   }
   async admit(envelope: AgentMessageEnvelope, sessionId: string | null): Promise<boolean> {
-    if (!['task', 'task_recovery'].includes(envelope.kind)) return true;
+    if (!['task', 'task_recovery'].includes(envelope.kind) && !(envelope.kind === 'ask' && typeof envelope.metadata.botWorkflowRunId === 'string')) return true;
     const taskId = typeof envelope.metadata.taskId === 'string' ? envelope.metadata.taskId : null;
     if (!taskId) return false;
     // Legacy idle reminders retain their bounded policy until an actual task dispatch adopts custody.

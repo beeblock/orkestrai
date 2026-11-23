@@ -206,7 +206,20 @@ export class ChannelBridgeService {
   async mirrorReply(workspaceId: string, nodeId: string, messageId: string, body: string, bindingId: string): Promise<void> {
     const message = await channelRepository.find(workspaceId, messageId);
     if (!message?.replyToId || message.authorNodeId !== nodeId || message.meta.bindingId !== bindingId || message.body !== body) return;
+    const { workspaceRepository } = await import('../../infrastructure/repositories/WorkspaceRepository.js');
+    const node = await workspaceRepository.getNode(nodeId);
     const { botSafetyService } = await import('./BotSafetyService.js');
+    if (node?.workspaceId === workspaceId && !(node.payload as { personalBot?: boolean }).personalBot) {
+      const source = await channelRepository.find(workspaceId, message.replyToId);
+      const binding = (await channelBindingRepository.list(workspaceId)).find(value => value.id === bindingId);
+      if (!binding?.enabled || binding.nodeId !== nodeId || !['telegram', 'slack'].includes(binding.kind)
+        || source?.authorKind !== 'external' || source.channel !== directChannel(nodeId) || source.meta.bindingId !== bindingId
+        || source.meta.bindingScope !== botSafetyService.bindingScope(binding)) return;
+      await integrationExecutionService.execute(workspaceId, { integrationId: binding.integrationId, action: `${binding.kind}.send_message`,
+        input: binding.kind === 'telegram' ? { chatId: binding.externalChatId, text: body } : { channel: binding.externalChatId, text: body },
+        idempotencyKey: `agent-reply:${messageId}:${binding.id}` }, { actorType: 'agent', actorId: nodeId });
+      return;
+    }
     await botSafetyService.approved(workspaceId, nodeId, message.replyToId, body, messageId);
     const { botDeliveryRepository } = await import('../../infrastructure/repositories/BotDeliveryRepository.js');
     await botDeliveryRepository.create(workspaceId, nodeId, bindingId, messageId);

@@ -9,6 +9,12 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Preserve ordinary Conversation sends and exact-source legacy Canvas Telegram/Slack replies independently of personal-bot workflow storage and public-worker approval. Reject changed recipient scopes. Load inference-only model helpers lazily to avoid a provider registry/profile initialization cycle.
+
+- Receive WhatsApp quoted text, images, PDFs and voice notes as bounded, untrusted input from the exact request. Report expired or unreadable quotes explicitly, and reply with native text/file quotes to the original triggering message, including long provider IDs. Convert emphasis and web links to WhatsApp formatting without changing code.
+- Carry received image references through native bot delegation with per-terminal paths and exact source IDs. Connect and SHA-256 freeze them in ImageGen workflows; reject missing, changed or disconnected references before generation. Public customers do not inherit native file access.
+- Send one fixed, localized failure notice to the originating external chat for quota, authentication, attachment, connection or policy failures. Never expose raw provider diagnostics, duplicate notices on recovery, or mark an unsuccessful request as delivered work.
+
 - Add confirmed message deletion and conversation clearing for personal bots and groups, with live multi-tab updates and scoped CLI/MCP commands. Hide local history without deleting files, external identities, receipts or provider context. Withdraw undelivered requests before waking the agent and preserve pending questions; already accepted work can finish.
 
 - Let authenticated personal bots connect agents, update specialist roles, dismiss finished specialists and change teammate account profiles without becoming the workspace leader. Bind these calls to the live terminal identity, preserve workspace pauses and protect the actual leader/deputy from dismissal. Public customer workers remain isolated.
@@ -16,6 +22,8 @@ pt-BR, English, and Spanish translations.
 - Forward generated PNG/JPEG images, PDFs, spreadsheets, documents and archives as native attachments, including explicit absolute paths confined to the owner workspace or its terminal runtime. Keep realpath/policy/hash checks and public artifact approvals; remove only the verified local links from outgoing text. Older text-only owner replies offer Send files to the original chat, with one durable repair identity and no model run or image regeneration.
 
 ### Added — 0.55.0-beta.11 local preview
+
+- Configure owner/trusted-sender slash-command bot sequences through up to eight selected Canvas agents. Persist one Kanban card and inbox identity per stage; require the normal card acceptance and exact final reply before advancing. Recover without redelivery, show progress with the request, acknowledge once and return the final artifacts to the originating chat. Stop remaining stages without undoing accepted work. Expose configuration and stop commands through the existing authenticated CLI/MCP; public customers retain restricted approved actions.
 
 - Authenticate workspace commands from the linked WhatsApp account outside the model. These owner requests retain native Canvas tools, Codex image-workflow delegation, routines and integrations without promoting the bot to leader. Other contacts keep the restricted public worker; explicitly trusted verified contacts can be selected in the bot protection dialog. Recheck grants before forwarding each exact, hash-verified file to its originating chat.
 - Enable native public web search for current information without granting host files, shell commands or private workspace context. Keep the output reviewer tool-free.

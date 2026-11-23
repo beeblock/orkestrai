@@ -682,6 +682,7 @@ export type TerminalNodePayload = {
   /** Personal bots are presented in their own mode, independently of Chat. */
   personalBot?: boolean;
   botInstructions?: string;
+  botWorkflow?: import('../contracts/schemas/bot-workflow.schema.js').BotWorkflow | null;
   botSafetyRevision?: number;
   botSafety?: import('../contracts/schemas/bot-safety.schema.js').BotSafetySettings;
   agentTransport?: 'terminal' | 'structured';
@@ -772,6 +773,8 @@ export type ImageWorkflowActiveRun = {
 export type ImageWorkflowOutputPreset = 'auto' | 'instagram-square' | 'instagram-portrait' | 'instagram-story' | 'tiktok' | 'custom';
 
 export type ImageWorkflowNodePayload = {
+  /** Immutable input provenance for references received by a bot or its delegate. */
+  botOrigin?: { sourceMessageId: string; references: Array<{ path: string; title: string; sha256: string }> };
   creativeOrigin?: import('$lib/modules/creative-media/domain/asset-lineage.js').CreativeAssetLineage;
   schemaVersion?: 1;
   prompt?: string;

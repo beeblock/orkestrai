@@ -18,6 +18,9 @@
   import { composeBotInstructions, getBotPreset } from '$lib/modules/agent-room/domain/bot-presets.js';
   import type { BotPresetId } from '$lib/modules/agent-room/domain/bot-preset-types.js';
   import BotPresetPicker from './BotPresetPicker.svelte';
+  import BotWorkflowEditor from './BotWorkflowEditor.svelte';
+  let workflowAgents = $state<Array<{ id: string; title: string }>>([]);
+  $effect(() => { const controller = new AbortController(); void botApi<{ workflowAgents?: Array<{ id: string; title: string }> }>(`/api/agent-room/workspaces/${workspaceId}/bots`, undefined, controller.signal).then(result => { if (!controller.signal.aborted) workflowAgents = result.workflowAgents ?? []; }).catch(() => {}); return () => controller.abort(); });
 
   let { workspaceId, providers, bot = null, onSaved, onClose }: {
     workspaceId: string; providers: BotProviderOption[]; bot?: PersonalBotSummary | null;
@@ -44,7 +47,7 @@
         onSaved(result);
       } catch (failure) {
         const code = failure instanceof Error ? failure.message : '';
-        error = code === 'AGENT_TRANSPORT_REQUIRES_SLEEP' ? m['bots.sleep_before_edit']()
+        error = code === 'BOT_WORKFLOW_ACTIVE' ? m['bots.workflow_edit_active']() : code === 'BOT_WORKFLOW_TARGET_INVALID' ? m['bots.workflow_target_invalid']() : code === 'AGENT_TRANSPORT_REQUIRES_SLEEP' ? m['bots.sleep_before_edit']()
           : code === 'BOT_ACCOUNT_CHANGE_USE_PROFILE_SWITCH' ? m['bots.account_change']() : m['bots.error']();
       } finally { saving = false; }
     },
@@ -57,7 +60,7 @@
     const preset = bot ? null : getBotPreset('assistant', getLocale());
     data.set({ title: bot?.title ?? preset?.name ?? '', instructions: bot?.instructions ?? preset?.purpose ?? '',
       personality: preset?.personality ?? '', rules: preset?.rules ?? '', provider: bot?.provider ?? providers[0]?.id ?? '',
-      model: bot?.model ?? null, effort: bot?.effort ?? null, profileId: bot?.profileId ?? null, transport: bot?.transport ?? 'structured' });
+      model: bot?.model ?? null, effort: bot?.effort ?? null, profileId: bot?.profileId ?? null, transport: bot?.transport ?? 'structured', workflow: bot?.workflow ? { ...bot.workflow, steps: bot.workflow.steps.map(step => ({ ...step })) } : null });
   });
   function selectPreset(id: BotPresetId | 'custom') {
     if (id === selectedPreset) return;
@@ -136,6 +139,8 @@
       </div>
       <Button type="button" variant="ghost" size="sm" class="justify-start" aria-expanded={advanced} onclick={() => (advanced = !advanced)}>{m['bots.advanced']()}</Button>
       {#if advanced}
+      <BotWorkflowEditor bind:value={$data.workflow} agents={workflowAgents} excludedId={bot?.id} />
+      {#if $errors.workflow}<p class="text-sm text-[var(--app-danger)]" role="alert">{m['bots.workflow_invalid']()}</p>{/if}
       {#if bot}<label class="grid gap-1.5 text-sm font-medium">{m['bots.instructions']()}<Textarea name="instructions" bind:value={$data.instructions} rows={4} maxlength={24000} required /></label>{/if}
       <div class="grid gap-4 sm:grid-cols-2">
         <div class="grid gap-1.5"><span class="text-sm font-medium">{m['bots.model']()}</span>

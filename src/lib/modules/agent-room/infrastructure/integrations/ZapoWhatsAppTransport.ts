@@ -42,7 +42,13 @@ export class ZapoWhatsAppTransport {
         else if ('image' in content && Buffer.isBuffer(content.image)) body = { type: 'image', media: content.image, mimetype: content.mimetype, caption: content.caption };
         else if ('document' in content && Buffer.isBuffer(content.document)) body = { type: 'document', media: content.document, mimetype: content.mimetype, fileName: content.fileName };
         else throw new Error('WHATSAPP_MEDIA_UNSUPPORTED');
-        const result = await client.message.send(jid, body, { id: options?.messageId, ackTimeoutMs: 15_000, maxAttempts: 1 });
+        const quoted = options?.quoted;
+        // Zapo calls this option `quote`; Baileys calls it `quoted`.
+        // Only a bounded text preview and the exact triggering key cross it.
+        const quote = quoted?.key?.id && quoted.key.remoteJid === jid ? {
+          id: quoted.key.id, remoteJid: jid, fromMe: quoted.key.fromMe === true, ...(quoted.key.participant ? { participant: quoted.key.participant } : {}),
+          message: { conversation: String(quoted.message?.conversation ?? '').slice(0, 512) } } : undefined;
+        const result = await client.message.send(jid, body, { id: options?.messageId, ...(quote ? { quote } : {}), ackTimeoutMs: 15_000, maxAttempts: 1 });
         if (result.id !== options?.messageId) throw new Error('WHATSAPP_DELIVERY_UNCONFIRMED');
         return { key: { id: result.id, remoteJid: jid, fromMe: true } };
       },

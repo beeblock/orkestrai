@@ -1,3 +1,4 @@
+import { botWorkflowSchema } from './bot-workflow.schema.js';
 import type { AgentUsageBlock } from './agent-runtime.schema.js';
 import { z } from 'zod/v3';
 import { workspaceAttachmentSchema, MAX_WORKSPACE_ATTACHMENTS } from './workspaceAttachmentSchemas.js';
@@ -10,6 +11,7 @@ export const personalBotSettingsSchema = z.object({
   instructions: z.string().trim().min(1).max(24_000),
   /** Explicitly public purpose; never inferred from existing private instructions. */
   publicRole: z.string().trim().min(1).max(6_000).optional(),
+  workflow: botWorkflowSchema.nullable().optional(),
   provider: z.string().trim().min(1).max(60),
   model: z.string().trim().max(160).nullable().default(null),
   effort: z.string().trim().max(24).nullable().default(null),
@@ -40,6 +42,7 @@ export const botGroupSettingsSchema = z.object({
 }).strict().refine(value => value.memberIds.includes(value.coordinatorId), { message: 'The coordinator must be a group member.', path: ['coordinatorId'] });
 
 export const personalBotCommandSchema = z.discriminatedUnion('command', [
+  z.object({ command: z.literal('workflow_cancel'), nodeId: z.string().uuid(), sourceId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('history_delete'), channel: z.string().regex(/^(?:dm|botgroup):[a-f0-9-]{36}$/i), messageId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('history_clear'), channel: z.string().regex(/^(?:dm|botgroup):[a-f0-9-]{36}$/i), throughMessageId: z.string().uuid() }).strict(),
   z.object({ command: z.literal('create'), settings: personalBotCreationSettingsSchema }).strict(),
@@ -73,6 +76,6 @@ export type PersonalBotSummary = {
   profileId: string | null; instructions: string; transport: 'terminal' | 'structured'; sessionId: string | null;
   runtimeMode: 'interactive' | 'on_demand' | 'persistent';
   usageBlock?: AgentUsageBlock | null;
-  safety: BotSafetySettings; safetyRevision: number;
+  safety: BotSafetySettings; safetyRevision: number; workflow?: import('./bot-workflow.schema.js').BotWorkflow | null;
 };
 export type PersonalBotGroup = BotGroupSettings & { id: string; workspaceId: string; revision: number; archived: boolean };

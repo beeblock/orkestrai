@@ -79,4 +79,20 @@ describe('personal bot CLI/MCP parity', () => {
     expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', body);
   });
 
+  it('forwards an owner-approved sequence and stop identity unchanged through CLI and MCP', async () => {
+    const settings = { title: 'Helper', instructions: 'Owner rules', provider: 'codex', workflow: { trigger: '/bug', acknowledgment: 'Received', steps: [{ nodeId: 'agent-id', instructions: 'Validate' }] } };
+    expect(await run(['bot', 'update', '--task', 'task-id', '--input', JSON.stringify({ nodeId: 'bot-id', settings })], options())).toBe(0);
+    expect(requests.at(-1).body.input.settings.workflow).toEqual(settings.workflow);
+    const body = { taskId: 'task-id', input: { command: 'workflow_cancel', nodeId: 'bot-id', sourceId: 'source-id' } };
+    expect(await run(['bot', 'workflow_cancel', '--task', 'task-id', '--input', JSON.stringify({ nodeId: 'bot-id', sourceId: 'source-id' })], options())).toBe(0);
+    expect(requests.at(-1).body).toEqual(body);
+    const bridge = vi.fn().mockResolvedValue({});
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: 'bot-id' }, 'bot_command', body);
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/bots', body);
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: 'executor' }, 'image_workflow_create', { prompt: 'Reference edit', sourceMessageId: 'source-id' });
+    expect(bridge).toHaveBeenLastCalledWith('POST', '/api/agent-room/bridge/image-workflows', expect.objectContaining({ sourceMessageId: 'source-id', from: 'executor' }));
+    await executeMcpTool({ bridge, findFreePort: async () => 0, selfAgent: 'executor' }, 'ask', { agent: 'Next', message: 'Continue', sourceMessageId: 'source-id' });
+    expect(bridge).toHaveBeenLastCalledWith('POST', '/api/agent-room/bridge/ask', expect.objectContaining({ sourceMessageId: 'source-id', from: 'executor' }));
+  });
+
 });

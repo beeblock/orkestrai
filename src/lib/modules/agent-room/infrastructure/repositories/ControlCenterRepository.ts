@@ -402,7 +402,7 @@ export class ControlCenterRepository {
 
   async hasPendingTaskEnvelope(workspaceId: string, nodeId: string, taskId: string): Promise<boolean> {
     return Boolean(await AgentMessageEnvelope.query().where('workspace_id',workspaceId).where('to_node_id',nodeId)
-      .where('correlation_id',`task:${taskId}`).whereIn('state',['queued','sent']).whereIn('kind',['task','task_recovery']).count());
+      .where('correlation_id',`task:${taskId}`).whereIn('state',['queued','sent']).whereIn('kind',['task','task_recovery','ask']).count());
   }
 
   /** Questions this agent asked that are still unanswered, since a given time. */
@@ -418,6 +418,16 @@ export class ControlCenterRepository {
       // An unscoped legacy question cannot be safely attributed to another card.
       return !askedTask || askedTask === taskId;
     }).length : rows.length;
+  }
+
+  /** Exact request handoff received by this terminal, independent of older inbox traffic. */
+  async botSourceEnvelopes(workspaceId: string, nodeId: string, sourceId: string, batchId?: string): Promise<AgentMessageEnvelopeData[]> {
+    const query = AgentMessageEnvelope.query().where('workspace_id', workspaceId).where('to_node_id', nodeId)
+      .whereIn('state', batchId ? ['sent', 'delivered'] : ['delivered'])
+      .where('metadata_json', 'like', `%"${sourceId}"%`);
+    if (batchId) query.where('metadata_json', 'like', `%${JSON.stringify({ batchId }).slice(1, -1)}%`);
+    return (await query.orderBy('id', 'desc').limit(50).get()).map(mapEnvelope).filter(envelope =>
+      (envelope.metadata.channelMessageId ?? envelope.metadata.returnChannelMessageId ?? envelope.metadata.botWorkflowSourceId) === sourceId);
   }
 
   /** The first item of a delivery batch, which carries the typed prompt, in any state. */

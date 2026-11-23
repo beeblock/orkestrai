@@ -2,6 +2,7 @@
 export const USE_CASE_TOUR_IDS: Record<string, string> = {
   'bot-presets': 'bot-presets',
   'personal-bots-phone-support': 'personal-bots',
+  'bot-request-workflows': 'bot-request-workflows',
   'bot-chat-history': 'bot-chat-history',
   'public-bot-protection': 'public-bot-protection',
   'whatsapp-group-routing': 'whatsapp-group-routing',

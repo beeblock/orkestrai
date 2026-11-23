@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addImageWorkflowReferenceSchema,
+  createImageWorkflowSchema,
   completeImageWorkflowSchema,
   imageWorkflowConfigSchema,
 } from '$lib/modules/agent-room/contracts/schemas/imageWorkflowSchemas.js';
@@ -146,6 +148,25 @@ describe('image delivery normalization', () => {
 });
 
 describe('ImageWorkflowService', () => {
+  it('freezes the received bot reference into the native ImageGen contract and rejects replacement or disconnection', async () => {
+    const state = setupWorkflow();
+    state.getWorkflow().payload.botOrigin = { sourceMessageId: 'request', references: [{ path: 'references/atomic-ant.png', title: 'Reference', sha256: createHash('sha256').update(PNG).digest('hex') }] };
+    const service = new ImageWorkflowService();
+    const run = await service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'));
+    expect(run.tool.referenced_image_paths).toEqual(['/workspace/references/atomic-ant.png']);
+    state.getWorkflow().payload.activeRun = null; state.getWorkflow().payload.status = 'idle';
+    vi.mocked(filesystemService.readBinary).mockResolvedValue({ data: OPAQUE_PNG } as never);
+    await expect(service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'))).rejects.toThrow('reference_unavailable');
+    state.edges.splice(state.edges.findIndex((edge: any) => edge.id === 'edge-reference'), 1);
+    await expect(service.begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'))).rejects.toThrow('reference_missing');
+  });
+  it.each(['native', 'wsl'] as const)('uses the executor runtime %s for received image references', async kind => {
+    const state = setupWorkflow();
+    state.workspace.runtimeKind = 'wsl'; state.workspace.wslDistribution = 'Ubuntu'; state.workspace.wslWorkingDir = '/home/workspace';
+    state.executor.payload.executionRuntime = kind === 'native' ? { kind } : { kind, distribution: 'Debian', linuxWorkingDir: '/home/image-executor' };
+    const run = await new ImageWorkflowService().begin(new RunImageWorkflowDto('workspace-1', 'workflow-1', config(), 'agent-1'));
+    expect(run.tool.referenced_image_paths).toEqual([kind === 'native' ? '/workspace/references/atomic-ant.png' : '/home/image-executor/references/atomic-ant.png']);
+  });
   it('uses live Canvas outputs and exposes preserved historical paths only on explicit request', async () => {
     const state = setupWorkflow();
     const oldPath = 'generated/images/removed.png';
@@ -394,10 +415,10 @@ describe('ImageWorkflowService', () => {
 
     const created = await new ImageWorkflowService().create(new CreateImageWorkflowDto(
       'workspace-1',
-      {
+      createImageWorkflowSchema.parse({
         from: 'agent-1', title: 'Instagram carousel', prompt: '', count: 10,
         transparentBackground: false, outputDirectory: 'generated/images', filePrefix: 'carousel',
-      },
+      }),
       'agent-1',
     ));
 

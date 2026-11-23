@@ -770,8 +770,9 @@ export class BridgeController extends Controller {
     try {
       const input = await CreateImageWorkflowRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.requireToken(event));
-      const actor = await this.resolveImageWorkflowActor(workspace.id, input.from);
-      return this.json({ data: await new CreateImageWorkflowAction().execute(new CreateImageWorkflowDto(workspace.id, input, actor)) }, 201);
+      const authenticated = this.terminalAgent(event, workspace.id);
+      const actor = await this.resolveImageWorkflowActor(workspace.id, authenticated ?? input.from);
+      return this.json({ data: await new CreateImageWorkflowAction().execute(new CreateImageWorkflowDto(workspace.id, { ...input, from: actor }, actor, authenticated)) }, 201);
     } catch (error) {
       return this.imageWorkflowError(error, 'Failed to create image workflow.');
     }
@@ -1479,13 +1480,17 @@ export class BridgeController extends Controller {
     try {
       const input = await BridgeAskRequest.validate(event);
       const workspace = await bridgeService.resolveWorkspaceByToken(this.tokenFrom(event, input.token));
+      const authenticated = this.terminalAgent(event, workspace.id);
+      if (input.sourceMessageId && !authenticated) throw new Error('BOT_AGENT_IDENTITY_REQUIRED');
       const result = input.raw
         ? await bridgeService.askRaw(workspace.id, { to: input.to, message: input.message, from: input.from })
         : await bridgeService.ask(workspace.id, {
             to: input.to,
             message: input.message,
-            from: input.from,
+            from: authenticated ?? input.from,
             taskId: input.taskId,
+            sourceMessageId: input.sourceMessageId,
+            verifiedActorNodeId: authenticated,
             timeoutMs: input.timeoutMs,
             external: input.external,
             signal: event.request.signal,

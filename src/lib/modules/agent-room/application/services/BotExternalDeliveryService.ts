@@ -71,7 +71,8 @@ export class BotExternalDeliveryService {
       if (binding.kind === 'whatsapp') {
         const { whatsappBotService } = await import('./WhatsAppBotService.js');
         dispatchStarted = true;
-        await whatsappBotService.send(delivery.workspaceId, delivery.nodeId, binding.id, message.body, delivery.id, artifacts);
+        const source = await channelRepository.find(delivery.workspaceId, message.replyToId!);
+        await whatsappBotService.send(delivery.workspaceId, delivery.nodeId, binding.id, message.body, delivery.id, artifacts, source ?? undefined);
       } else {
         let index = 0;
         for (const part of channelTextChunks(botArtifactText(message.body, artifacts))) {

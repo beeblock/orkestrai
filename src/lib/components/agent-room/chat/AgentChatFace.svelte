@@ -18,6 +18,9 @@
   import { botApi } from '../bots/bot-api.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import BotHistoryAction from '../bots/BotHistoryAction.svelte';
+  import { botFailureKindSchema, botFailureText } from '$lib/modules/agent-room/domain/bot-failure.js';
+  import BotWorkflowProgress from '../bots/BotWorkflowProgress.svelte';
+  import BotQuotedMessage from '../bots/BotQuotedMessage.svelte';
 
   /**
    * The agent's direct conversation shown inside its Canvas node: the same
@@ -163,6 +166,7 @@
             {:else}
               <div class="bubble" class:history-actions={personalBot}>
                 {#if personalBot}<div class="absolute right-1 top-1"><BotHistoryAction {workspaceId} {channel} messageId={message.id} onChanged={load} /></div>{/if}
+                {#if personalBot}<BotQuotedMessage meta={message.meta} /><BotWorkflowProgress {workspaceId} {nodeId} meta={message.meta} />{/if}
                 {#if message.meta.attachmentsOnly !== true}<MarkdownView content={personalBot ? botMessageContent(message.body, message.meta, workspaceId) : message.body} compact {workspaceId} />{/if}
                 {#if messageAttachments(message.meta).length}<MessageAttachments {workspaceId} attachments={messageAttachments(message.meta)} />{/if}
                 {#if missingNativeFiles(message)}
@@ -171,7 +175,7 @@
                 {#if personalBot && message.meta.publicBotBlocked}
                   <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{m['bots.safety_notice_body']()}</p>
                 {:else if personalBot && message.meta.modelFailure}
-                  <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{typeof message.meta.modelFailureCode === 'string' && ['BOT_PUBLIC_OUTPUT_BLOCKED', 'BOT_PUBLIC_REPLY_UNAPPROVED', 'BOT_PUBLIC_GRANT_REVOKED', 'BOT_PUBLIC_ARTIFACT_DENIED', 'BOT_PUBLIC_NOT_CONFIGURED', 'BOT_PUBLIC_ACTION_LIMIT', 'BOT_PUBLIC_RATE_LIMIT'].includes(message.meta.modelFailureCode) ? m['bots.model_safety_failed']() : message.meta.modelFailure === 'start' ? m['bots.model_start_failed']() : m['bots.model_turn_failed']()}</p>
+                  <p class="mt-2 text-xs text-[var(--app-danger)]" role="alert">{botFailureKindSchema.safeParse(message.meta.modelFailureKind).success ? botFailureText(botFailureKindSchema.parse(message.meta.modelFailureKind)) : typeof message.meta.modelFailureCode === 'string' && ['BOT_PUBLIC_OUTPUT_BLOCKED', 'BOT_PUBLIC_REPLY_UNAPPROVED', 'BOT_PUBLIC_GRANT_REVOKED', 'BOT_PUBLIC_ARTIFACT_DENIED', 'BOT_PUBLIC_NOT_CONFIGURED', 'BOT_PUBLIC_ACTION_LIMIT', 'BOT_PUBLIC_RATE_LIMIT'].includes(message.meta.modelFailureCode) ? m['bots.model_safety_failed']() : message.meta.modelFailure === 'start' ? m['bots.model_start_failed']() : m['bots.model_turn_failed']()}</p>
                 {/if}
               </div>
             {/if}

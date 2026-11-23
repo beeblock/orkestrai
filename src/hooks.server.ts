@@ -1,3 +1,4 @@
+import { botWorkflowService } from '$lib/modules/agent-room/application/services/BotWorkflowService.js';
 import { modelAccessService } from '$lib/modules/model-access/application/services/ModelAccessService.js';
 import { getAgentAdapter } from '$lib/modules/agent-room/application/adapters/registry.js';
 import { mobileAccessService } from '$lib/modules/agent-room/application/services/MobileAccessService.js';
@@ -90,6 +91,7 @@ if (!building) {
       globalRef.__orkestraiAgentRuntimeSupervisor = true;
     }
     channelBridgeService.start();
+    botWorkflowService.start();
     void mobileAccessService.resume();
     void agentSessionRotationService.rotateOversized()
       .then((rotated) => { for (const item of rotated) console.log(`[agent-runtime] Fresh conversation for ${item.title}: previous transcript ${Math.round(item.sizeBytes / 1024 / 1024)} MB.`); })

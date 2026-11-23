@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { floatingAnchorForSnapshot } from '../../src/lib/components/agent-room/canvas/floating-anchor.ts';
-import { readWorkspaceViewCache, writeWorkspaceViewCache } from '../../src/lib/components/agent-room/workspace-view-cache.ts';
+import { clearWorkspaceViewCache, readWorkspaceViewCache, writeWorkspaceViewCache } from '../../src/lib/components/agent-room/workspace-view-cache.ts';
 
 assert.equal(typeof globalThis.gc, 'function', 'Run this fixture with --expose-gc');
 function mountAndReleaseCanvas() {
@@ -14,20 +14,22 @@ function mountAndReleaseCanvas() {
   return { nodes: new WeakRef(nodes), edges: new WeakRef(edges) };
 }
 const released = mountAndReleaseCanvas();
-function cacheAndExpireWorkspace() {
+function cacheAndUnloadWorkspace() {
   const snapshot = { workspace: { id: 'expired' }, nodes: [{ payload: { content: 'old workspace' } }], edges: [], floors: [] };
   writeWorkspaceViewCache(snapshot);
   const now = Date.now;
   try {
     Date.now = () => now() + 61_000;
+    assert.equal(readWorkspaceViewCache('expired'), snapshot, 'Warm tabs must not become cold after one minute');
+    clearWorkspaceViewCache('expired');
     assert.equal(readWorkspaceViewCache('expired'), null);
   } finally { Date.now = now; }
   return new WeakRef(snapshot);
 }
-const expired = cacheAndExpireWorkspace();
+const expired = cacheAndUnloadWorkspace();
 for (let cycle = 0; cycle < 12; cycle++) { await setImmediate(); globalThis.gc(); }
 await setImmediate();
 assert.equal(released.nodes.deref(), undefined, 'Anchor cache retains a closed Canvas and its callback closures');
 assert.equal(released.edges.deref(), undefined, 'Anchor cache retains a closed Canvas edge graph');
-assert.equal(expired.deref(), undefined, 'Workspace cache retains an expired snapshot');
-console.log(JSON.stringify({ closedCanvasCollection: 'passed', callbacksAndGraphReleased: true, expiredWorkspaceReleased: true }));
+assert.equal(expired.deref(), undefined, 'Workspace cache retains an explicitly unloaded snapshot');
+console.log(JSON.stringify({ closedCanvasCollection: 'passed', callbacksAndGraphReleased: true, unloadedWorkspaceReleased: true }));

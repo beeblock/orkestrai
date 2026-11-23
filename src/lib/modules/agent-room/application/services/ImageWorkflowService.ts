@@ -1,3 +1,4 @@
+import { workspaceFileForTerminal } from '../../infrastructure/WslRuntime.js';
 import { getAgentAdapter, hasAgentAdapter } from '../adapters/registry.js';
 import { createHash } from 'node:crypto';
 import { basename, posix, relative, resolve, sep } from 'node:path';
@@ -343,13 +344,6 @@ function relativeWorkspacePath(workspace: Workspace, absolutePath: string): stri
   return path;
 }
 
-function agentPath(workspace: Workspace, workspaceRelativePath: string): string {
-  const normalized = workspaceRelativePath.replaceAll('\\', '/').replace(/^\/+/, '');
-  if (workspace.runtimeKind === 'wsl' && workspace.wslWorkingDir) {
-    return `${workspace.wslWorkingDir.replace(/\/$/, '')}/${normalized}`;
-  }
-  return resolve(workspace.workingDir, workspaceRelativePath);
-}
 
 function runRecord(active: ImageWorkflowActiveRun, status: ImageWorkflowRun['status'], completedAt: Date, outputPaths: string[], outputNodeIds: string[], errorCode: string | null): ImageWorkflowRun {
   return {
@@ -403,12 +397,22 @@ export class ImageWorkflowService {
 
   async create(dto: CreateImageWorkflowDto) {
     const actor = await this.requireCodexActor(dto.workspaceId, dto.actorNodeId);
+    const { botRequestContextService } = await import('./BotRequestContextService.js');
+    if (dto.input.sourceMessageId && dto.verifiedActorNodeId !== actor.id) throw new ImageWorkflowError('image_workflow_executor_unauthorized', 403);
+    const inherited = dto.verifiedActorNodeId === actor.id ? await botRequestContextService.imageReferences(dto.workspaceId, actor.id, dto.input.sourceMessageId) : null;
     const workflow = await this.createDraft(dto.workspaceId, dto.input, actor.id, actor.id, []);
+    if (inherited?.references.length) {
+      for (const reference of inherited.references) await this.addReference(new AddImageWorkflowReferenceDto(
+        dto.workspaceId, workflow.id, { path: reference.path, title: reference.title, from: dto.input.from }, actor.id));
+      const fresh = await workspaceRepository.getNode(workflow.id);
+      await workspaceRepository.updateNode(workflow.id, { payload: { ...fresh!.payload,
+        botOrigin: inherited } as ImageWorkflowNodePayload });
+    }
     return this.read(dto.workspaceId, workflow.id);
   }
 
   async createDraft(workspaceId: string, input: unknown, nearNodeId: string, executorNodeId: string | null, referenceNodeIds: string[]) {
-    const { from: _from, title, ...config } = createImageWorkflowSchema.parse(input);
+    const { from: _from, sourceMessageId: _sourceMessageId, title, ...config } = createImageWorkflowSchema.parse(input);
     const nodes = await workspaceRepository.listNodes(workspaceId);
     const near = nodes.find(node => node.id === nearNodeId);
     if (!near) throw new ImageWorkflowError('image_workflow_not_found', 404);
@@ -641,7 +645,7 @@ export class ImageWorkflowService {
     if (!workspace || !workflow || workflow.workspaceId !== dto.workspaceId || workflow.type !== 'imageWorkflow') throw new ImageWorkflowError('image_workflow_not_found', 404);
     const existingPayload = (workflow.payload ?? {}) as ImageWorkflowNodePayload;
     if (existingPayload.status === 'running' && existingPayload.activeRun) {
-      if (dto.actorNodeId && existingPayload.activeRun.executorNodeId === dto.actorNodeId) return this.executionSpec(workspace, workflow, existingPayload.activeRun, agents);
+      if (dto.actorNodeId && existingPayload.activeRun.executorNodeId === dto.actorNodeId) return this.executionSpec(workspace, workflow, existingPayload.activeRun, agents, nodes.find(node => node.id === existingPayload.activeRun!.executorNodeId)?.payload as TerminalNodePayload);
       throw new ImageWorkflowError('image_workflow_already_running', 409);
     }
 
@@ -677,6 +681,8 @@ export class ImageWorkflowService {
       ]);
       if (!file || !inspection) throw new ImageWorkflowError('image_workflow_reference_unavailable');
       if (file.data.length > MAX_REFERENCE_BYTES) throw new ImageWorkflowError('image_workflow_reference_too_large');
+      const botReference = existingPayload.botOrigin?.references.find(reference => reference.path === path);
+      if (botReference && createHash('sha256').update(file.data).digest('hex') !== botReference.sha256) throw new ImageWorkflowError('image_workflow_reference_unavailable');
       const frozen = existingPayload.creativeOrigin?.frozenReference;
       if (frozen?.path === path && createHash('sha256').update(file.data).digest('hex') !== frozen.sha256) throw new ImageWorkflowError('image_workflow_reference_unavailable');
       referenceBytes += file.data.length;
@@ -684,6 +690,7 @@ export class ImageWorkflowService {
       if (!imageMime(file.data)) throw new ImageWorkflowError('image_workflow_reference_format_invalid');
       references.push({ node, data: file.data, path: relativeWorkspacePath(workspace, inspection.path) });
     }
+    if (existingPayload.botOrigin?.references.some(expected => !references.some(reference => reference.path === expected.path))) throw new ImageWorkflowError('image_workflow_reference_missing');
     if (existingPayload.creativeOrigin?.frozenReference && !references.some(reference => reference.path === existingPayload.creativeOrigin!.frozenReference.path)) throw new ImageWorkflowError('image_workflow_reference_missing');
 
     const runId = uuidv7();
@@ -717,7 +724,7 @@ export class ImageWorkflowService {
       payload: nextPayload(existingPayload, dto.config, { status: 'running', activeRunId: runId, activeRun: active, lastError: null }),
     });
     broadcast(dto.workspaceId, workflow.id);
-    return this.executionSpec(workspace, workflow, active, agents);
+    return this.executionSpec(workspace, workflow, active, agents, executorNode.payload as TerminalNodePayload);
   }
 
   async complete(dto: CompleteImageWorkflowDto) {
@@ -1038,11 +1045,11 @@ export class ImageWorkflowService {
     }
   }
 
-  private executionSpec(workspace: Workspace, workflow: CanvasNode, active: ImageWorkflowActiveRun, agents: Awaited<ReturnType<typeof bridgeService.listAgents>>) {
+  private executionSpec(workspace: Workspace, workflow: CanvasNode, active: ImageWorkflowActiveRun, agents: Awaited<ReturnType<typeof bridgeService.listAgents>>, executorPayload?: TerminalNodePayload) {
     const executor = agents.find((agent) => agent.nodeId === active.executorNodeId);
     const imageTool = executor?.provider && hasAgentAdapter(executor.provider) ? getAgentAdapter(executor.provider).imageWorkflowTool : undefined;
     // Managed delegated agents resolve these paths on the guest, independent of WSL and Floor cwd.
-    const outputPath = (path: string) => imageTool?.workspaceReferences ? resolve(workspace.workingDir,path) : agentPath(workspace,path);
+    const outputPath = (path: string) => imageTool?.workspaceReferences ? resolve(workspace.workingDir,path) : workspaceFileForTerminal(workspace, executorPayload, path);
     return {
       workflowNodeId: workflow.id,
       runId: active.id,
@@ -1126,11 +1133,12 @@ export class ImageWorkflowService {
         payload.contextOrder,
       ).map((node) => ({ nodeId: node.id, title: node.title ?? 'Note' })),
       references, executors: summarize('terminal'), outputs,
+      ...(payload.botOrigin ? { sourceMessageId: payload.botOrigin.sourceMessageId, referenceHashes: payload.botOrigin.references.map(reference => ({ path: reference.path, sha256: reference.sha256 })) } : {}),
       assetScope: 'canvas',
       historyIncluded: includeHistory,
       historyCount: (payload.history ?? []).length,
       history: includeHistory ? (payload.history ?? []).slice(-HISTORY_LIMIT) : [],
-      activeExecution: workspace && payload.activeRun ? this.executionSpec(workspace, workflow, payload.activeRun, agents) : null,
+      activeExecution: workspace && payload.activeRun ? this.executionSpec(workspace, workflow, payload.activeRun, agents, nodes.find(node => node.id === payload.activeRun!.executorNodeId)?.payload as TerminalNodePayload) : null,
     };
   }
 

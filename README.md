@@ -40,6 +40,8 @@ Code Intelligence is disabled by default, including legacy workspaces until expl
 
 Large asset checkouts do not require Code Intelligence: Canvas Git polling reads change metadata instead of hashing each asset, and workspace file operations are asynchronous. HTTP previews/downloads stream with bounded buffering; searches have explicit runtime budgets. Reviews and Git mutation guards still check exact file content.
 
+Personal bots accept quoted WhatsApp text, images, PDFs and voice notes, and send native replies and files to the triggering chat. Missing quoted media is explicit. Image references follow the exact request into the native Codex ImageGen workflow with SHA-256 checks. In **Edit bot → Advanced → Work sequence**, configure a command such as `/bug`, an acknowledgment, and the Canvas agents and acceptance criteria in order. Each stage has a durable Kanban card and reply identity; later stages wait for accepted completion. This native sequence is for the owner and explicitly trusted senders. Public support users keep their approved, bounded functions. Deleting local bot history does not delete external messages, files or provider context.
+
 ## Personal bots (local preview)
 
 The separate **Bots** mode creates personal assistants and collaboration groups;

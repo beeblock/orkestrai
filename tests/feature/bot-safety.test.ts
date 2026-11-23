@@ -283,4 +283,37 @@ describe('public bot security boundary', () => {
     expect(answer).toMatchObject({ type: 'text', text: expect.stringContaining('checkout button fails') });
   }, 25_000);
 
+  it('publishes one fixed failure notice to the exact source without reviewing or leaking model diagnostics', async () => {
+    const f = await fixture();
+    vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue(undefined);
+    await Promise.all([channelService.modelFailure(f.workspace.id, f.source.id, 'turn', 'AGENT_USAGE_LIMIT password=DO_NOT_LEAK'),
+      channelService.modelFailure(f.workspace.id, f.source.id, 'turn', 'AGENT_USAGE_LIMIT')]);
+    const source = (await channelRepository.find(f.workspace.id, f.source.id))!;
+    const notice = (await channelRepository.find(f.workspace.id, String(source.meta.failureNoticeId)))!;
+    expect(notice).toMatchObject({ replyToId: f.source.id, authorNodeId: f.bot.id, meta: { operationalFailure: { kind: 'quota' }, bindingId: f.binding.id } });
+    expect(notice.body).not.toContain('DO_NOT_LEAK'); expect(notice.body).not.toContain('AGENT_USAGE_LIMIT');
+    expect((await channelRepository.list(f.workspace.id, `dm:${f.bot.id}`)).filter(row => row.authorKind === 'agent')).toHaveLength(1);
+    expect(await f.service.approved(f.workspace.id, f.bot.id, f.source.id, notice.body, notice.id)).toMatchObject({ bindingId: f.binding.id, artifacts: [] });
+    await expect(f.service.approved(f.workspace.id, f.bot.id, f.source.id, 'Arbitrary private output', notice.id)).rejects.toThrow('UNAPPROVED');
+    await channelBindingRepository.update(f.binding.id, { enabled: false });
+    await expect(f.service.approved(f.workspace.id, f.bot.id, f.source.id, notice.body, notice.id)).rejects.toThrow('UNAPPROVED');
+  });
+  it('does not produce operational chat notices after a source is deleted or its route is revoked', async () => {
+    const f = await fixture();
+    await channelRepository.hideHistory(f.workspace.id, `dm:${f.bot.id}`, f.source.id, false);
+    await channelService.modelFailure(f.workspace.id, f.source.id, 'turn');
+    expect((await channelRepository.list(f.workspace.id, `dm:${f.bot.id}`)).filter(row => row.authorKind === 'agent')).toHaveLength(0);
+    expect(await botDeliveryRepository.pending()).toHaveLength(0);
+  });
+
+  it('announces fixed failure notices through the normal live chat channel', async () => {
+    const f = await fixture(), frames = vi.fn();
+    vi.spyOn(botExternalDeliveryService, 'flush').mockResolvedValue(undefined); vi.stubGlobal('__orkestraiBroadcast', frames);
+    try {
+      await channelService.modelFailure(f.workspace.id, f.source.id, 'turn', 'CODEX_APP_SERVER_EXITED');
+      const notice = frames.mock.calls.map(call => call[0]).find(frame => frame.message?.meta.operationalFailure);
+      expect(notice).toMatchObject({ type: 'channelMessage', channel: `dm:${f.bot.id}` });
+    } finally { vi.unstubAllGlobals(); }
+  });
+
 });

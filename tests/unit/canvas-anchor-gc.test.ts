@@ -8,5 +8,5 @@ it('releases closed Canvas snapshots and callbacks under real garbage collection
     encoding: 'utf8', timeout: 10_000,
     env: { ...process.env, NODE_OPTIONS: '' },
   });
-  expect(JSON.parse(output.trim())).toEqual({ closedCanvasCollection: 'passed', callbacksAndGraphReleased: true, expiredWorkspaceReleased: true });
+  expect(JSON.parse(output.trim())).toEqual({ closedCanvasCollection: 'passed', callbacksAndGraphReleased: true, unloadedWorkspaceReleased: true });
 });

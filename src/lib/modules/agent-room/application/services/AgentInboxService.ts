@@ -159,6 +159,7 @@ function asString(value: unknown): string | null {
 export const taskRecoveryKey = (taskId: string, sessionId: string): string => `task-recovery:${taskId}:${sessionId}`;
 
 function structuredConversation(envelope: AgentMessageEnvelope): string {
+  if (typeof envelope.metadata.botWorkflowRunId === 'string') return `workflow:${envelope.metadata.botWorkflowRunId}:${envelope.id}`;
   if (typeof envelope.metadata.returnConversationKey === 'string') return envelope.kind === 'ask'
     ? `delegated:${envelope.fromNodeId}:${envelope.metadata.returnConversationKey}` : envelope.metadata.returnConversationKey;
   if (typeof envelope.metadata.bindingId === 'string') return `binding:${envelope.metadata.bindingId}`;
@@ -465,6 +466,14 @@ export class AgentInboxService {
     if (input.responderNodeId && envelope.toNodeId !== input.responderNodeId) {
       throw new Error('Somente o destinatário pode responder a esta mensagem.');
     }
+    if (typeof envelope.metadata.botWorkflowRunId === 'string' && typeof envelope.metadata.taskId === 'string') {
+      const { taskBoardService } = await import('./TaskBoardService.js');
+      const card = await taskBoardService.read(envelope.workspaceId, envelope.metadata.taskId);
+      if (card.status !== 'done') {
+        if (input.source === 'explicit') throw new Error('BOT_WORKFLOW_CARD_NOT_ACCEPTED: complete and validate the stage card before sending its final reply.');
+        return { routed: false, via: 'none', envelope };
+      }
+    }
     const answer = text.trim();
     if (!answer) throw new Error('A resposta está vazia.');
     // An answer recorded earlier whose forward never reached the asker's inbox
@@ -472,7 +481,7 @@ export class AgentInboxService {
     if (envelope.state === 'replied' && envelope.metadata.forwardPending === true) return this.forwardAnswer(envelope);
     if (envelope.state === 'replied' || envelope.state === 'failed') return { routed: false, via: 'none', envelope };
     const waiting = this.waiters.get(messageId)?.size ?? 0;
-    const forward = !waiting && Boolean(envelope.fromNodeId && envelope.fromNodeId !== envelope.toNodeId);
+    const forward = !waiting && !envelope.metadata.botWorkflowRunId && Boolean(envelope.fromNodeId && envelope.fromNodeId !== envelope.toNodeId);
     const updated = await controlCenterService.recordInboxTransition(messageId, {
       state: 'replied',
       reply: answer,
@@ -1173,7 +1182,7 @@ export class AgentInboxService {
       const node = await workspaceRepository.getNode(envelope.toNodeId);
       if ((node?.payload as TerminalNodePayload | undefined)?.personalBot) {
         const { channelService } = await import('./ChannelService.js');
-        await channelService.modelFailure(envelope.workspaceId, envelope.metadata.channelMessageId, 'start');
+        await channelService.modelFailure(envelope.workspaceId, envelope.metadata.channelMessageId, 'start', error);
       }
     }
   }
@@ -1202,6 +1211,11 @@ export class AgentInboxService {
   }
 
   private async isRelevant(envelope: AgentMessageEnvelope): Promise<boolean> {
+    if (typeof envelope.metadata.botWorkflowRunId === 'string') {
+      const { botWorkflowRepository } = await import('../../infrastructure/repositories/BotWorkflowRepository.js');
+      const run = await botWorkflowRepository.find(envelope.metadata.botWorkflowRunId);
+      if (!run || run.workspaceId !== envelope.workspaceId || !['queued', 'running', 'waiting'].includes(run.state)) return false;
+    }
     if (['owner', 'bot_group'].includes(envelope.kind) && typeof envelope.metadata.channelMessageId === 'string') {
       const { channelRepository } = await import('../../infrastructure/repositories/ChannelRepository.js');
       const source = await channelRepository.find(envelope.workspaceId, envelope.metadata.channelMessageId);

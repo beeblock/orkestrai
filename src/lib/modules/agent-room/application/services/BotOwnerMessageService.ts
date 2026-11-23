@@ -3,6 +3,7 @@ import { desktopSecretService } from '../../infrastructure/secrets/DesktopSecret
 import { botConnectionRepository } from '../../infrastructure/repositories/BotConnectionRepository.js';
 import { validWhatsAppJid, whatsAppInboundSender } from '../../domain/whatsapp-messages.js';
 import type { ChannelBinding, ChannelMessage } from '../../domain/channels.js';
+import { persistedWhatsAppOrigin } from '../../contracts/schemas/whatsapp-message.schema.js';
 
 /** Server-only authentication of commands sent by the linked WhatsApp account.
  * No HTTP/CLI/MCP operation issues proofs. Text, display names and caller flags
@@ -55,7 +56,10 @@ export class BotOwnerMessageService {
     if (!connection?.enabled) return false;
     const secret = await this.secret(binding.workspaceId, binding.integrationId, false);
     if (!secret) return false;
-    return timingSafeEqual(Buffer.from(proof), Buffer.from(this.signature(secret, binding, scope, source.meta.externalId, source.meta.senderId)));
+    const origin = persistedWhatsAppOrigin(source.meta, binding.externalChatId);
+    if (source.meta.whatsappOrigin && !origin) return false;
+    const externalId = origin ? `${origin.chatId}:${origin.id}` : source.meta.externalId;
+    return timingSafeEqual(Buffer.from(proof), Buffer.from(this.signature(secret, binding, scope, externalId, source.meta.senderId)));
   }
   async revoke(workspaceId: string, connectionId: string) {
     await this.creating.get(this.key(workspaceId, connectionId))?.catch(() => undefined);

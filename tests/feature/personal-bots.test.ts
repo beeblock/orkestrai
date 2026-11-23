@@ -233,11 +233,11 @@ describe('personal bot boundaries and persistence', () => {
 
   it.each(['peer', 'developer'] as const)('carries the native chat return address into an ask to %s (Bots or Canvas)', async target => {
     const f = await fixture();
-    const source = uuidv7(), batchId = uuidv7();
+    const source = (await channelRepository.save({ workspaceId: f.workspace.id, channel: `dm:${f.bot.id}`, authorKind: 'owner', body: 'Check this', meta: {} })).id, batchId = uuidv7();
     vi.spyOn(ptySessionManager, 'structuredRequest').mockReturnValue({ conversationKey: 'binding:private-chat', messageId: batchId });
-    vi.spyOn(controlCenterRepository, 'batchLead').mockResolvedValue({ metadata: { channelMessageId: source } } as never);
+    vi.spyOn(controlCenterRepository, 'batchLead').mockResolvedValue({ workspaceId: f.workspace.id, toNodeId: f.bot.id, metadata: { channelMessageId: source } } as never);
     const ask = vi.spyOn(bridgeService as any, 'askAgent').mockResolvedValue({});
-    await bridgeService.ask(f.workspace.id, { to: f[target].id, from: f.bot.id, message: 'Check this' });
+    await bridgeService.ask(f.workspace.id, { to: f[target].id, from: f.bot.id, verifiedActorNodeId: f.bot.id, message: 'Check this' });
     expect(ask.mock.calls[0][1]).toMatchObject({ metadata: { returnConversationKey: 'binding:private-chat', returnChannelMessageId: source } });
   });
 

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChannelBridgeService } from '$lib/modules/agent-room/application/services/ChannelBridgeService.js';
+import { botSafetyService } from '$lib/modules/agent-room/application/services/BotSafetyService.js';
+import { channelRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelRepository.js';
+import { workspaceRepository } from '$lib/modules/agent-room/infrastructure/repositories/WorkspaceRepository.js';
 import { channelService } from '$lib/modules/agent-room/application/services/ChannelService.js';
 import { IntegrationExecutionService, integrationExecutionService, slackTsBefore } from '$lib/modules/agent-room/application/services/IntegrationExecutionService.js';
 import { channelBindingRepository } from '$lib/modules/agent-room/infrastructure/repositories/ChannelBindingRepository.js';
@@ -183,12 +186,20 @@ describe('channel bridge', () => {
     const disabled = binding({ id: 'b3', externalChatId: '44', enabled: false });
     vi.spyOn(channelBindingRepository, 'list').mockResolvedValue([asked, other, disabled]);
     const execute = vi.spyOn(integrationExecutionService, 'execute').mockResolvedValue({});
+    vi.spyOn(workspaceRepository, 'getNode').mockResolvedValue({ id: 'agent', workspaceId: 'w', payload: {} } as never);
+    const sourceScope = botSafetyService.bindingScope(asked);
+    vi.spyOn(channelRepository, 'find').mockImplementation(async (_workspace, id) => id === 'source'
+      ? { id, workspaceId: 'w', authorKind: 'external', channel: 'dm:agent', meta: { bindingId: 'b1', bindingScope: sourceScope } } as never
+      : { id, workspaceId: 'w', authorNodeId: 'agent', replyToId: 'source', body: id === 'm1' ? 'Deploy concluído.' : 'Nada.', meta: { bindingId: id === 'm1' ? 'b1' : 'b3' } } as never);
     await new ChannelBridgeService().mirrorReply('w', 'agent', 'm1', 'Deploy concluído.', 'b1');
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute).toHaveBeenCalledWith('w', expect.objectContaining({
       integrationId: 'tg', action: 'telegram.send_message', input: { chatId: '42', text: 'Deploy concluído.' }, idempotencyKey: 'agent-reply:m1:b1',
     }), { actorType: 'agent', actorId: 'agent' });
     await new ChannelBridgeService().mirrorReply('w', 'agent', 'm2', 'Nada.', 'b3');
+    expect(execute).toHaveBeenCalledTimes(1);
+    asked.externalChatId = 'changed-recipient';
+    await new ChannelBridgeService().mirrorReply('w', 'agent', 'm1', 'Deploy concluído.', 'b1');
     expect(execute).toHaveBeenCalledTimes(1);
   });
 });

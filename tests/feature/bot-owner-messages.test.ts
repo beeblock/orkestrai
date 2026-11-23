@@ -183,4 +183,23 @@ describe('linked WhatsApp owner commands retain native tools without promoting p
     await expect(botSafetyService.approved(f.workspace.id, f.bot.id, f.source.id, 'The specialist is working.', initial)).rejects.toThrow('BOT_PUBLIC_REPLY_UNAPPROVED');
   });
 
+  it('preserves long WhatsApp root keys in owner proofs and quotes every outbound part to that exact request', async () => {
+    const f = await fixture(), id = 'B'.repeat(128);
+    const key = { ...f.key, id };
+    const proof = await botOwnerMessageService.issue(f.binding, f.scope, key, own);
+    const origin = { id, chatId: chat, fromMe: true, participant: own, preview: '#jarvis send report' };
+    const source = await channelService.postExternal(f.workspace.id, f.bot.id, { body: origin.preview, via: 'whatsapp', bindingId: f.binding.id,
+      expectedBindingScope: f.scope, sender: 'Owner', senderId: own, externalId: `${chat}:${id}`, ownerProof: proof!, whatsappOrigin: origin });
+    expect(await botOwnerMessageService.verify(source, f.binding, f.scope)).toBe(true);
+    expect(await botOwnerMessageService.verify({ ...source, meta: { ...source.meta, whatsappOrigin: { ...origin, id: 'forged' } } }, f.binding, f.scope)).toBe(false);
+    await writeFile(join(f.root, 'report.pdf'), '%PDF-1.4\n%%EOF');
+    await channelService.postStructuredResult(f.workspace.id, f.bot.id, source.id, '**Ready** [PDF](report.pdf)', uuidv7());
+    const send = vi.fn(async (_jid, _payload, options) => ({ key: { id: options.messageId } }));
+    vi.spyOn(whatsappBotService as any, 'open').mockResolvedValue({ state: 'connected', stopped: false, socket: { sendMessage: send } });
+    vi.mocked(botExternalDeliveryService.flush).mockRestore(); await botExternalDeliveryService.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[0][1]).toMatchObject({ text: '*Ready*' });
+    for (const call of send.mock.calls) expect(call).toMatchObject([chat, expect.any(Object), { quoted: { key: { ...key, participant: own }, message: { conversation: origin.preview } } }]);
+  });
+
 });

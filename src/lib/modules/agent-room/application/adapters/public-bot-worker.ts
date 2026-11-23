@@ -5,7 +5,6 @@ import { randomBytes } from 'node:crypto';
 import { parse as parseToml } from 'smol-toml';
 import { spawnStructuredAgent, stopStructuredAgent } from './structured-launch.js';
 import { guestWorkingDirectoryAsync, wslHostPath } from '../../infrastructure/WslRuntime.js';
-import { inferenceOnlyModel } from './delegated-inference.js';
 import type { StructuredAgentOptions } from './structured-types.js';
 
 const allowedEnvironment = /^(?:PATH|HOME|USERPROFILE|USER|LOGNAME|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|LANG|LC_ALL|TMPDIR|TEMP|TMP|SSL_CERT_FILE|SSL_CERT_DIR|HTTPS?_PROXY|NO_PROXY|CLAUDE_CONFIG_DIR|CODEX_HOME|ANTHROPIC_(?:API_KEY|AUTH_TOKEN|BASE_URL)|OPENAI_API_KEY)$/i;
@@ -93,7 +92,7 @@ export async function preparePublicWorker(provider: 'claude' | 'codex', original
       const selected = catalog.models?.find((model: Record<string, unknown>) => model.slug === original.model) ?? (!original.model ? catalog.models?.find((model: Record<string, unknown>) => model.visibility === 'list') : null);
       if (!selected) throw new Error('BOT_PUBLIC_RUNTIME_UNVERIFIED');
       const file = join(directory, 'models.json');
-      await writeFile(file, JSON.stringify({ models: [{ ...inferenceOnlyModel(selected), base_instructions: instructions }] }), { mode: 0o600 });
+      await writeFile(file, JSON.stringify({ models: [{ ...(await import('./delegated-inference.js')).inferenceOnlyModel(selected), base_instructions: instructions }] }), { mode: 0o600 });
       await mkdir(join(directory, 'state')); await mkdir(join(directory, 'logs'));
       const catalogPath = await guest(file);
       options.publicWorker = { serverName, webSearch: capabilities.webSearch === true, codexCatalog: catalogPath, disabledServers, disabledFeatures };
