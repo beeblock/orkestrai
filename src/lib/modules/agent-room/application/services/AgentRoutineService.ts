@@ -10,7 +10,18 @@ import { autonomyPolicyService } from './AutonomyPolicyService.js';
 
 export class AgentRoutineService {
   async execute(workspaceId: string, actorId: string, request: BridgeAutomationInput, assertRelevant: () => Promise<void> = async () => {}) {
+    const candidate = await workspaceRepository.getNode(actorId);
+    if (candidate?.workspaceId === workspaceId && (candidate.payload as { personalBot?: boolean }).personalBot) {
+      const { botRequestContextService } = await import('./BotRequestContextService.js');
+      const context = await botRequestContextService.current(workspaceId, actorId, request.sourceMessageId);
+      if (context?.source.channel === `dm:${actorId}`) {
+        const { botRoutineService } = await import('./BotRoutineService.js');
+        return botRoutineService.execute(workspaceId, actorId, request, context.source.id, assertRelevant);
+      }
+    }
+    if (request.input.command === 'save' && request.input.definition.delivery === 'current_chat') throw new Error('BOT_ROUTINE_OWNER_REQUIRED');
     const validate = async () => {
+      if (!request.taskId) throw new Error('Automation requires an active assigned task and terminal in this workspace.');
       await assertRelevant();
       const workspace = await workspaceRepository.getWorkspace(workspaceId);
       const task = await AgentBoardTask.query().where('workspace_id', workspaceId).where('id', request.taskId).first();
@@ -45,7 +56,7 @@ export class AgentRoutineService {
         const existing = await previous();
         if (existing) return reuse(existing);
         if ((await routineService.list(workspaceId)).filter(r => r.authorAgentId === actorId).length >= 100) throw new Error('Agent automation limit reached. Review existing routines.');
-        try { return await routineService.createAutomation(workspaceId, form, { agentId: actorId, taskId: request.taskId, key: request.idempotencyKey, digest: hash }); }
+        try { return await routineService.createAutomation(workspaceId, form, { agentId: actorId, taskId: request.taskId!, key: request.idempotencyKey, digest: hash }); }
         catch (error) { const raced = await previous(); if (raced) return reuse(raced); throw error; }
       }
       await owned(input.id);

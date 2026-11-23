@@ -2349,12 +2349,12 @@ async function runCommand(argv, options, sink) {
     }
     case 'automation': {
       const [action, ...values] = rest;
-      if (!selfAgent || !flags.task || !flags.idempotency) throw new Error('Automation requires an active agent, --task and --idempotency.');
-      if (!['list', 'history', 'save', 'enabled', 'cancel'].includes(action)) throw new Error('Usage: orkestrai automation list|history|save|enabled|cancel <json> --task <id> --idempotency <key>');
+      if (!selfAgent || !flags.idempotency) throw new Error('Automation requires an active agent and --idempotency. Non-bot agents also require --task.');
+      if (!['list', 'history', 'save', 'enabled', 'cancel'].includes(action)) throw new Error('Usage: orkestrai automation list|history|save|enabled|cancel <json> [--task <id>] [--source-message <id>] --idempotency <key>');
       const serialized = values.join(' ');
       if (serialized.length > 25000) throw new Error('Automation input exceeds the limit.');
       const input = { ...JSON.parse(serialized || '{}'), command: action };
-      const data = await bridge(config, 'POST', '/api/agent-room/bridge/automations', { from: selfAgent, taskId: flags.task, idempotencyKey: flags.idempotency, input });
+      const data = await bridge(config, 'POST', '/api/agent-room/bridge/automations', { from: selfAgent, taskId: flags.task, sourceMessageId: flags['source-message'], idempotencyKey: flags.idempotency, input });
       out(JSON.stringify(data, null, 2)); return 0;
     }
     case 'computer': {

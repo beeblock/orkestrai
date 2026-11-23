@@ -44,6 +44,8 @@ Personal bots accept quoted WhatsApp text, images, PDFs and voice notes, and sen
 
 ## Personal bots (local preview)
 
+The configured role, personality and factual references also apply to owner chats, refreshing before the next turn without discarding the provider conversation. From the linked WhatsApp account, a verified trusted sender or the private Orkestrai chat, ask for an hourly rate, daily reminder or weekly report: the bot saves a native routine with `delivery: "current_chat"`. Final answers and real files return to that exact chat without Computer. Inspect, edit, pause or cancel in **Routines** or through the bot. The computer must stay awake with the app, account and connection available; explicit pauses and revocations remain binding. Public customers do not receive unrestricted scheduling. Reference information is factual context, not a tool grant or automatic memory.
+
 The separate **Bots** mode creates personal assistants and collaboration groups;
 Conversation and existing development agents retain their current behavior.
 Start with one of **16 searchable presets** in Create bot: assistant, support,

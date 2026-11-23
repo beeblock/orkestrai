@@ -67,7 +67,7 @@ export async function preparePublicWorker(provider: 'claude' | 'codex', original
     if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
     const serverName = `p_${randomBytes(6).toString('hex')}`;
     const options: StructuredAgentOptions = { ...original, hostCwd: directory, cwd, workspaceRoot: directory, env,
-      instructions, launchArgs: [], session: () => null, saveSession: async () => {},
+      instructions, loadOwnerInstructions: undefined, launchArgs: [], session: () => null, saveSession: async () => {},
       bridgeMcp: { command: await guest(process.execPath), args: [await guest(resolve('packages/orkestrai-cli/src/inference-proxy.mjs'))],
         env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {} }, publicWorker: { serverName, webSearch: capabilities.webSearch === true } };
     if (provider === 'codex') {

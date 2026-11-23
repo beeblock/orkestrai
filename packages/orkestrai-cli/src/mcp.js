@@ -458,14 +458,15 @@ const calendarProperties = { frequency: { type: 'string', enum: ['once', 'daily'
 for (const action of ['list', 'history', 'save', 'enabled', 'cancel']) {
   /** @type {Record<string, any>} */
   const properties = { taskId: { type: 'string', format: 'uuid' }, idempotencyKey: { type: 'string', minLength: 8, maxLength: 160 } };
-  const required = ['taskId', 'idempotencyKey'];
+  const required = ['idempotencyKey'];
+  properties.sourceMessageId = { type: 'string', format: 'uuid' };
   if (action !== 'list') properties.id = { type: 'string', format: 'uuid' };
   if (['enabled', 'cancel', 'save'].includes(action)) properties.revision = { type: 'integer', minimum: 1 };
-  if (action === 'save') { properties.definition = { type: 'object', additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 120 }, prompt: { type: 'string', minLength: 1, maxLength: 20000 }, trigger: { type: 'string', enum: ['manual', 'interval', 'calendar'] }, intervalMinutes: { type: 'integer', minimum: 1, maximum: 525600 }, calendar: { type: 'object', additionalProperties: false, properties: calendarProperties, required: ['frequency', 'timeZone', 'time'] }, enabled: { type: 'boolean' } }, required: ['name', 'prompt', 'trigger'] }; required.push('definition'); }
+  if (action === 'save') { properties.definition = { type: 'object', additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 120 }, prompt: { type: 'string', minLength: 1, maxLength: 20000 }, trigger: { type: 'string', enum: ['manual', 'interval', 'calendar'] }, intervalMinutes: { type: 'integer', minimum: 1, maximum: 525600 }, calendar: { type: 'object', additionalProperties: false, properties: calendarProperties, required: ['frequency', 'timeZone', 'time'] }, enabled: { type: 'boolean' }, delivery: { type: 'string', enum: ['current_chat', 'none'] } }, required: ['name', 'prompt', 'trigger'] }; required.push('definition'); }
   if (action === 'enabled') { properties.enabled = { type: 'boolean' }; required.push('enabled'); }
   if (['history', 'enabled', 'cancel'].includes(action)) required.push('id');
   if (['enabled', 'cancel'].includes(action)) required.push('revision');
-  TOOLS.push({ name: `automation_${action}`, description: `Manage YOUR existing workspace routines through the persistent Core (${action}). Requires an active task assigned to you; cannot modify owner/other-agent routines. save creates when id is omitted (stable idempotencyKey), updates with id + revision from list. Calendar supports explicit timezone, weekdays and missed-run policy; Monday 14:00 is weekly weekdays:[1],time:14:00, not an interval from now. Use manual for computer_watch without model polling. cancel pauses future runs and cancels pending execution, preserving history. A dispatched prompt is NOT a delivered report. Host must be awake and task/grants active; generated files and sends still use their own authorization. Never ask the owner to manually create a routine you are authorized to create.`, inputSchema: { type: 'object', additionalProperties: false, properties, required } });
+  TOOLS.push({ name: `automation_${action}`, description: `Manage YOUR existing workspace routines through the persistent Core (${action}). Non-bot agents require an active task assigned to them and cannot modify owner/other-agent routines. Personal bots handling a verified owner/trusted request may omit taskId: sourceMessageId binds the exact received request; delivery=current_chat returns scheduled final responses and files through that chat's native connection without Computer or OS-input grants. Voice notes are ordinary requests. These schedules persist until paused/cancelled and do not depend on a setup card remaining open. Do not send final scheduled results again manually. Other public contacts cannot author routines. save creates when id is omitted (stable idempotencyKey), updates with id + revision from list. Calendar supports explicit timezone, weekdays and missed-run policy; Monday 14:00 is weekly weekdays:[1],time:14:00, not an interval from now. Use manual for computer_watch without model polling. cancel pauses future runs and cancels pending execution, preserving history. A dispatched prompt is NOT a delivered report. Host must be awake and task/grants active; generated files and sends still use their own authorization. Never ask the owner to manually create a routine you are authorized to create.`, inputSchema: { type: 'object', additionalProperties: false, properties, required } });
 }
 
 for (const command of ['speech','report','inspect','transcribe']) {
@@ -1228,8 +1229,8 @@ async function callTool(bridge, findFreePort, selfAgent, name, args = {}) {
     case 'automation_save':
     case 'automation_enabled':
     case 'automation_cancel': {
-      const { taskId, idempotencyKey, ...input } = args;
-      return bridge('POST', '/api/agent-room/bridge/automations', { from: selfAgent, taskId, idempotencyKey, input: { ...input, command: name.slice('automation_'.length) } });
+      const { taskId, idempotencyKey, sourceMessageId, ...input } = args;
+      return bridge('POST', '/api/agent-room/bridge/automations', { from: selfAgent, taskId, sourceMessageId, idempotencyKey, input: { ...input, command: name.slice('automation_'.length) } });
     }
     case 'computer_prepare':
       return computerCommand({ command: 'prepare' });

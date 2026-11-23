@@ -12,6 +12,8 @@ export type StructuredAgentOptions = {
   model?: string | null;
   effort?: string | null;
   instructions: string;
+  /** Server-only refresh of a personal bot's owner rules/persona/reference data. */
+  loadOwnerInstructions?: () => Promise<string>;
   launchArgs: string[];
   bridgeMcp: { command: string; args: string[]; env?: Record<string, string> };
   /** Issued only by the public bot boundary, never deserialized from a request. */

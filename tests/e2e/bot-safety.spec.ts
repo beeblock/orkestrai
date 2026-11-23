@@ -27,6 +27,8 @@ test('configures the public boundary without overwriting private rules and keeps
     await page.getByRole('button', { name: copy['bots.safety_title'], exact: true }).first().click();
     const dialog = page.getByTestId('bot-safety-editor');
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(copy['bots.safety_scope_hint'], { exact: true })).toBeVisible();
+    await expect(dialog.getByText(copy['bots.safety_knowledge_hint'], { exact: true })).toBeVisible();
     await expect(dialog.getByRole('combobox')).toHaveCount(0);
     await expect(dialog.getByRole('checkbox', { name: copy['bots.owner_phone_access'], exact: false })).toBeChecked();
     await expect(dialog.getByRole('checkbox', { name: copy['bots.public_web_search'], exact: false })).toBeChecked();
@@ -43,6 +45,7 @@ test('configures the public boundary without overwriting private rules and keeps
     const current = (await (await request.get(`${base}/bots`)).json()).data.bots.find((item: any) => item.id === bot.id);
     expect(current.instructions).toBe('PRIVATE_OWNER_RULES');
     expect(current.safety.publicInstructions).toContain('Answer product support');
+    expect(current.safety.publicKnowledge).toBe('Support hours: Monday to Friday.');
     expect(current.safety.ownerSenders).toEqual([{ kind: 'whatsapp', senderId: '5511999999999@s.whatsapp.net' }]);
     expect(current.safety.webSearch).toBe(true);
     expect(current.safetyRevision).toBe(1);

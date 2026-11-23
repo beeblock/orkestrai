@@ -177,7 +177,7 @@ export class ChannelService {
     }
   }
   /** Persist a native turn's final reply once and retain its exact return address. */
-  async postStructuredResult(workspaceId: string, nodeId: string, sourceId: string, body: string, turnId: string): Promise<ChannelMessage | null> {
+  async postStructuredResult(workspaceId: string, nodeId: string, sourceId: string, body: string, turnId: string, botRoutine?: { id: string; runId: string; revision: number }): Promise<ChannelMessage | null> {
     const original = await channelRepository.find(workspaceId, sourceId);
     if (!original || (original.authorKind === 'agent' && !original.channel.startsWith('botgroup:'))) return null;
     const node = await workspaceRepository.getNode(nodeId);
@@ -239,7 +239,7 @@ export class ChannelService {
       created = true;
       const result = await channelRepository.save({ workspaceId, channel: original.channel, authorKind: 'agent', authorNodeId: nodeId,
         body: clippedBody(visible), replyToId: original.authorKind === 'external' ? sourceId : null,
-        meta: { structuredReply: key, ...(publicApproval ? { publicBotApproval: publicApproval } : {}), ...(artifacts.length ? { artifacts } : {}), ...(attachments.length ? { attachments } : {}), ...(original.meta.bindingId ? { bindingId: original.meta.bindingId } : {}) } }, turnId);
+        meta: { structuredReply: key, ...(botRoutine ? { botRoutineId: botRoutine.id, botRoutineRunId: botRoutine.runId, botRoutineRevision: botRoutine.revision } : {}), ...(publicApproval ? { publicBotApproval: publicApproval } : {}), ...(artifacts.length ? { artifacts } : {}), ...(attachments.length ? { attachments } : {}), ...(original.meta.bindingId ? { bindingId: original.meta.bindingId } : {}) } }, turnId);
       if (original.authorKind === 'external' && typeof original.meta.bindingId === 'string') await botDeliveryRepository.create(workspaceId, nodeId, original.meta.bindingId, result.id);
       return result;
     })).finally(async () => {

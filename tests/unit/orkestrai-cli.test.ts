@@ -261,6 +261,22 @@ describe('orkestrai CLI', () => {
     const lines = [];
     return { lines, out: (line) => lines.push(String(line)) };
   }
+  it('routes a native bot schedule through CLI and MCP with an exact source and no setup task', async () => {
+    const sourceMessageId = '00000000-0000-7000-8000-000000000003';
+    const definition = { name: 'Hourly rate', prompt: 'Fetch the current rate and source.', trigger: 'interval', intervalMinutes: 60, delivery: 'current_chat' };
+    const { out } = capture();
+    expect(await run(['automation', 'save', JSON.stringify({ definition }), '--source-message', sourceMessageId, '--idempotency', 'hourly-rate-test'], {
+      cwd, out, env: { ORKESTRAI_NODE_ID: 'bot', ORKESTRAI_AGENT_TOKEN: 'test-native-bot-token' },
+    })).toBe(0);
+    expect(requests.at(-1)).toMatchObject({ url: '/api/agent-room/bridge/automations', agentToken: 'test-native-bot-token',
+      body: { from: 'bot', sourceMessageId, idempotencyKey: 'hourly-rate-test', input: { command: 'save', definition } } });
+    expect(requests.at(-1)!.body).not.toHaveProperty('taskId');
+    const bridge = vi.fn().mockResolvedValue({ id: 'routine' });
+    await executeMcpTool({ bridge, selfAgent: 'bot' }, 'automation_save', { sourceMessageId, idempotencyKey: 'hourly-rate-test', definition });
+    expect(bridge).toHaveBeenCalledWith('POST', '/api/agent-room/bridge/automations', {
+      from: 'bot', sourceMessageId, taskId: undefined, idempotencyKey: 'hourly-rate-test', input: { command: 'save', definition },
+    });
+  });
   it('requests file selection through the authenticated desktop bridge', async () => {
     const { out } = capture();
     const env = { ORKESTRAI_NODE_ID: 'leader', ORKESTRAI_AGENT_TOKEN: 'live-agent-token' };

@@ -1,3 +1,4 @@
+import { botRoutineOriginSchema, type BotRoutineOrigin } from '../../contracts/schemas/bridge-automation.schema.js';
 import { readdir, stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
@@ -225,9 +226,9 @@ export class RoutineService {
     return true;
   }
 
-  async createAutomation(workspaceId: string, input: AutomationFormInput, author?: { agentId: string; taskId: string; key: string; digest: string }): Promise<Routine> {
+  async createAutomation(workspaceId: string, input: AutomationFormInput, author?: { agentId: string; taskId: string | null; key: string; digest: string; botOrigin?: BotRoutineOrigin }): Promise<Routine> {
     const trigger = triggerConfig(input);
-    const action = actionConfig(input);
+    const action = { ...actionConfig(input), ...(author?.botOrigin ? { botOrigin: botRoutineOriginSchema.parse(author.botOrigin) } : {}) };
     await this.validateAction(workspaceId, input.actionType, action);
     const now = new Date();
     const targetNodeId = input.actionType === 'prompt_agent' ? String(input.targetNodeId ?? '') : '';
@@ -262,12 +263,15 @@ export class RoutineService {
     });
   }
 
-  async updateAutomation(id: string, input: AutomationFormInput, expectedRevision?: number): Promise<Routine | null> {
+  async updateAutomation(id: string, input: AutomationFormInput, expectedRevision?: number, botOrigin?: BotRoutineOrigin): Promise<Routine | null> {
     const existing = await AgentRoutine.find(id);
     if (!existing) return null;
     const workspaceId = String(existing.getAttribute('workspace_id'));
     const trigger = triggerConfig(input, jsonObject(existing.getAttribute('trigger_config_json')));
-    const action = actionConfig(input);
+    const previousOrigin = botRoutineOriginSchema.safeParse(jsonObject(existing.getAttribute('action_config_json')).botOrigin);
+    const keepOrigin = input.actionType === 'prompt_agent' && input.targetNodeId === existing.getAttribute('target_node_id');
+    const origin = botOrigin ?? (keepOrigin && previousOrigin.success ? previousOrigin.data : null);
+    const action = { ...actionConfig(input), ...(origin ? { botOrigin: botRoutineOriginSchema.parse(origin) } : {}) };
     await this.validateAction(workspaceId, input.actionType, action);
     const now = new Date();
     const revision = Number(existing.getAttribute('revision') ?? 1);
@@ -564,7 +568,7 @@ export class RoutineService {
           lease_owner: null, lease_expires_at: null, next_attempt_at: null,
           checkpoint_json: JSON.stringify({ stage: 'cancelled', attempt }),
         });
-      } else if (attempt < maxAttempts && (error as { code?: string } | null)?.code !== 'PTY_DELIVERY_UNCONFIRMED') {
+      } else if (attempt < maxAttempts && (error as { code?: string } | null)?.code !== 'PTY_DELIVERY_UNCONFIRMED' && !['BOT_ROUTINE_REVOKED', 'BOT_ROUTINE_DELIVERY_UNCERTAIN'].includes(message)) {
         // An uncertain terminal delivery may already be in the CLI: never type it again.
         const delay = RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1);
         await AgentRoutineRun.query().where('id', runId).update({
@@ -779,7 +783,7 @@ export class RoutineService {
       const model = await AgentRoutineRun.create({
         id: uuidv7(), routine_id: routine.id, ran_at: new Date(), ok: false, detail: null,
         status: 'queued', trigger_type: triggerType, trigger_key: triggerKey,
-        idempotency_key: idempotencyKey, input_json: JSON.stringify(input), output_json: null,
+        idempotency_key: idempotencyKey, input_json: JSON.stringify({ ...input, ...(botRoutineOriginSchema.safeParse(routine.actionConfig.botOrigin).success ? { botRoutineRevision: routine.revision } : {}) }), output_json: null,
         error: null, agent_node_id: null, provider: null, usage_before_json: null,
         usage_after_json: null, started_at: null, finished_at: null, duration_ms: null,
         attempt, retry_of_id: retryOfId, lease_owner: null, lease_expires_at: null,
@@ -997,6 +1001,11 @@ export class RoutineService {
     if (routine.actionType === 'prompt_agent') {
       const targetNodeId = String(routine.actionConfig.targetNodeId ?? routine.targetNodeId ?? '');
       const prompt = this.interpolate(String(routine.actionConfig.prompt ?? routine.prompt), input);
+      if (botRoutineOriginSchema.safeParse(routine.actionConfig.botOrigin).success) {
+        await agentRuntimeService.assertAutomaticWorkAllowed(targetNodeId, runId);
+        const { botRoutineService } = await import('./BotRoutineService.js');
+        return botRoutineService.dispatch(routine, runId, signal);
+      }
       const assertAuthorship = async () => {
         if (input.scheduledAt && routine.triggerConfig.calendar) {
           const schedule = calendarScheduleSchema.parse(routine.triggerConfig.calendar);

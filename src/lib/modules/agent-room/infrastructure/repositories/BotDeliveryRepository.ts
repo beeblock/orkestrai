@@ -5,6 +5,7 @@ function map(row: AgentBotDelivery): BotDelivery {
   return { id: row.getAttribute('id'), workspaceId: row.getAttribute('workspace_id'), nodeId: row.getAttribute('node_id'), bindingId: row.getAttribute('binding_id'), state: row.getAttribute('state') as BotDelivery['state'], lease: row.getAttribute('lease_token') ?? null };
 }
 export class BotDeliveryRepository {
+  async find(id: string) { const row = await AgentBotDelivery.find(id); return row ? map(row) : null; }
   async create(workspaceId: string, nodeId: string, bindingId: string, messageId: string) {
     const previous = await AgentBotDelivery.find(messageId);
     if (previous) return map(previous);

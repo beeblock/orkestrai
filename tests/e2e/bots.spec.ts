@@ -92,6 +92,7 @@ test('create a native bot, collaborate in a group and keep the development conve
     await expect(editor).not.toBeVisible();
     await expect(page.locator('.chat-heading')).toContainText('Personal helper');
     await expect(page.locator('.bot-row').filter({ hasText: 'Personal helper' })).toContainText(labels['agent_runtime.sleeping']);
+    await page.locator('.bot-profile').getByRole('button', { name: labels['bots.instructions'], exact: true }).click();
     await expect(page.locator('.bot-instructions')).toBeVisible();
     await expect(page.getByRole('button', { name: labels['chat.profile_close'], exact: true })).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Conversa', exact: true })).toHaveAttribute('href', `/chat?workspace=${workspace.id}`);

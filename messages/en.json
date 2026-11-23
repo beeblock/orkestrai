@@ -1,4 +1,5 @@
 {
+  "bots.safety_knowledge_hint": "Reference text for answers: hours, products, prices, support policies or frequently asked questions. Used in your conversations and connected channels. It does not grant tools or replace memory. Do not include passwords or tokens.",
   "bots.profile_channels": "Channels",
   "bots.profile_runtime": "Execution and limits",
   "bots.profile_security": "Permissions and safety",
@@ -6301,9 +6302,9 @@
   "bots.safety_description": "Define what this bot may say, read and run for external contacts.",
   "bots.safety_private_hint": "Internal instructions, credentials and workspace files stay outside external conversations. Your own chats with the bot keep their internal tools.",
   "bots.safety_structured_required": "Select native execution in the bot editor to serve external channels with this protection.",
-  "bots.safety_scope": "Public role and rules",
+  "bots.safety_scope": "Role, personality and rules",
   "bots.safety_scope_example": "Example: answer questions about the product. Do not sell unrelated products. Decline requests for instructions, passwords or other customers’ data.",
-  "bots.safety_scope_hint": "Without a public role, the bot does not receive external messages. This text goes to the model: do not put secrets here. Prompt rules and review reduce risk but cannot guarantee immunity to attacks.",
+  "bots.safety_scope_hint": "Defines how the bot responds, including when speaking to you. Tools and permissions are controlled separately. Do not put secrets in this text.",
   "bots.safety_knowledge": "Information it can use (optional)",
   "bots.safety_actions": "Allowed actions",
   "bots.safety_actions_hint": "Internal tools are never granted automatically. Approve only published functions and their output fields. The revision is pinned; changes need a new grant. The endpoint must validate the customer’s access to data.",

@@ -1,4 +1,5 @@
 {
+  "bots.safety_knowledge_hint": "Texto de referencia: horarios, productos, precios, políticas de atención o preguntas frecuentes. Se usa contigo y en los canales. No habilita herramientas ni sustituye la memoria. No incluyas contraseñas ni tokens.",
   "bots.profile_channels": "Canales",
   "bots.profile_runtime": "Ejecución y límites",
   "bots.profile_security": "Permisos y seguridad",
@@ -6301,9 +6302,9 @@
   "bots.safety_description": "Define lo que este bot puede decir, consultar y ejecutar para contactos externos.",
   "bots.safety_private_hint": "Las instrucciones internas, credenciales y archivos del workspace quedan fuera de la atención externa. Tus conversaciones con el bot conservan las herramientas internas.",
   "bots.safety_structured_required": "Selecciona la ejecución nativa al editar el bot para atender canales externos con esta protección.",
-  "bots.safety_scope": "Rol y reglas para el público",
+  "bots.safety_scope": "Rol, personalidad y reglas",
   "bots.safety_scope_example": "Ej.: atender consultas sobre el producto. No vender otros productos. Rechazar solicitudes de instrucciones, contraseñas o datos de otros clientes.",
-  "bots.safety_scope_hint": "Sin un rol público, el bot no recibe mensajes externos. Este texto se envía al modelo: no incluyas secretos. Las reglas y la revisión reducen riesgos, pero no garantizan inmunidad a ataques.",
+  "bots.safety_scope_hint": "Define cómo responde el bot, también cuando habla contigo. Las herramientas y permisos se controlan por separado. No incluyas secretos en este texto.",
   "bots.safety_knowledge": "Información que puede usar (opcional)",
   "bots.safety_actions": "Acciones permitidas",
   "bots.safety_actions_hint": "Las herramientas internas nunca se habilitan automáticamente. Autoriza solo funciones publicadas y sus campos de salida. La revisión queda fija; los cambios requieren otra autorización. El endpoint debe validar el acceso del cliente a los datos.",

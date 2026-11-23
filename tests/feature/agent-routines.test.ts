@@ -51,4 +51,11 @@ describe('Agent-authored existing workspace routines', () => {
     await expect(s.command({ command: 'save', definition })).rejects.toThrow('active assigned');
     expect(await AgentRoutine.query().count()).toBe(0);
   });
+  it('still requires a live assigned task for an ordinary Canvas agent', async () => {
+    const s = await setup();
+    await expect(s.service.execute(s.workspace.id, s.agent.id, bridgeAutomationCommandSchema.parse({
+      from: s.agent.id, idempotencyKey: 'missing-task-test', input: { command: 'save', definition },
+    }))).rejects.toThrow('active assigned task');
+    expect(await AgentRoutine.query().count()).toBe(0);
+  });
 });

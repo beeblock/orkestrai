@@ -8,6 +8,7 @@ export const agentRoutineDefinitionSchema = z.object({
   intervalMinutes: z.number().int().min(1).max(525600).optional(),
   calendar: calendarScheduleSchema.optional(),
   enabled: z.boolean().default(true),
+  delivery: z.enum(['current_chat', 'none']).optional(),
 }).strict().superRefine((v, ctx) => {
   if (v.trigger === 'interval' && !v.intervalMinutes) ctx.addIssue({ code: 'custom', path: ['intervalMinutes'], message: 'Interval is required.' });
   if (v.trigger === 'calendar' && !v.calendar) ctx.addIssue({ code: 'custom', path: ['calendar'], message: 'Calendar schedule is required.' });
@@ -15,7 +16,8 @@ export const agentRoutineDefinitionSchema = z.object({
 
 export const bridgeAutomationCommandSchema = z.object({
   from: z.string().trim().min(1).max(120),
-  taskId: z.string().uuid(),
+  taskId: z.string().uuid().optional(),
+  sourceMessageId: z.string().uuid().optional(),
   idempotencyKey: z.string().min(8).max(160).regex(/^[a-zA-Z0-9._:@/-]+$/),
   input: z.discriminatedUnion('command', [
     z.object({ command: z.literal('list') }).strict(),
@@ -26,3 +28,10 @@ export const bridgeAutomationCommandSchema = z.object({
   ]),
 }).strict();
 export type BridgeAutomationInput = z.infer<typeof bridgeAutomationCommandSchema>;
+
+/** Issued only by the native bot authoring service; never accepted as form input. */
+export const botRoutineOriginSchema = z.object({
+  sourceMessageId: z.string().uuid(), nodeId: z.string().uuid(),
+  bindingId: z.string().uuid().nullable(), send: z.boolean(),
+}).strict();
+export type BotRoutineOrigin = z.infer<typeof botRoutineOriginSchema>;

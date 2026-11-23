@@ -44,22 +44,33 @@ export class BotStructuredDriver implements StructuredAgentDriver {
   private owner: StructuredAgentDriver | null = null;
   private worker: StructuredAgentDriver | null = null;
   private closed = false;
+  private ownerInstructions: string | null = null;
   get pid() { return this.worker?.pid ?? this.owner?.pid ?? 0; }
   constructor(private readonly provider: 'claude' | 'codex', private readonly options: StructuredAgentOptions,
     private readonly factory: (options: StructuredAgentOptions) => StructuredAgentDriver) {}
 
+  private async runOwner(turn: StructuredTurn): Promise<string> {
+    const instructions = await this.options.loadOwnerInstructions?.() ?? this.options.instructions;
+    if (this.owner && this.ownerInstructions !== null && this.ownerInstructions !== instructions) {
+      await this.owner.close(); this.owner = null;
+    }
+    this.ownerInstructions = instructions;
+    this.owner ??= this.factory(instructions === this.options.instructions ? this.options : { ...this.options, instructions });
+    return this.owner.run(turn);
+  }
+
   async run(turn: StructuredTurn): Promise<string> {
     if (this.closed) throw new Error('STRUCTURED_SESSION_CLOSED');
     if (!turn.publicOrigin && !turn.conversationKey.startsWith('binding:')) {
-      return (this.owner ??= this.factory(this.options)).run(turn);
+      return this.runOwner(turn);
     }
     const origin = turn.publicOrigin;
     if (!origin?.bindingId || !origin.channelMessageId || !this.options.workspaceId || !this.options.nodeId) throw new Error('BOT_PUBLIC_ORIGIN_INVALID');
     const { botSafetyService } = await import('../services/BotSafetyService.js');
     const owner = await botSafetyService.ownerSource(this.options.workspaceId, this.options.nodeId, origin.bindingId, origin.channelMessageId);
     if (owner) {
-      const answer = await (this.owner ??= this.factory(this.options)).run({ ...turn,
-        prompt: `Authenticated owner command from a verified trusted chat account. Use the native Orkestrai bridge and existing Canvas tools, routines and integrations to complete this task. You may recruit specialists without becoming the workspace leader. For an image, recruit or ask Codex and use the native image workflow; return its actual file link in your final answer. Create a persistent routine for recurring work, rather than promising to remember it in conversation. Respect explicit owner rules, pauses and configured gates. Final delivery to this exact chat is automatic.\n\n${turn.prompt}` });
+      const answer = await this.runOwner({ ...turn,
+        prompt: `Authenticated owner command from a verified trusted chat account. Current sourceMessageId=${origin.channelMessageId}. Use the native Orkestrai bridge and existing Canvas tools, routines and integrations to complete this task. You may recruit specialists without becoming the workspace leader. For an image, recruit or ask Codex and use the native image workflow; return its actual file link in your final answer. Create a persistent routine for recurring work, rather than promising to remember it in conversation. Respect explicit owner rules, pauses and configured gates. Final delivery to this exact chat is automatic.\n\n${turn.prompt}` });
       if (!await botSafetyService.ownerSource(this.options.workspaceId, this.options.nodeId, origin.bindingId, origin.channelMessageId)) throw new Error('BOT_PUBLIC_GRANT_REVOKED');
       return answer;
     }

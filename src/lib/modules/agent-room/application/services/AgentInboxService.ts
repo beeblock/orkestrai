@@ -159,6 +159,7 @@ function asString(value: unknown): string | null {
 export const taskRecoveryKey = (taskId: string, sessionId: string): string => `task-recovery:${taskId}:${sessionId}`;
 
 function structuredConversation(envelope: AgentMessageEnvelope): string {
+  if (typeof envelope.metadata.botRoutineId === 'string') return `routine:${envelope.metadata.botRoutineId}`;
   if (typeof envelope.metadata.botWorkflowRunId === 'string') return `workflow:${envelope.metadata.botWorkflowRunId}:${envelope.id}`;
   if (typeof envelope.metadata.returnConversationKey === 'string') return envelope.kind === 'ask'
     ? `delegated:${envelope.fromNodeId}:${envelope.metadata.returnConversationKey}` : envelope.metadata.returnConversationKey;
@@ -1211,6 +1212,10 @@ export class AgentInboxService {
   }
 
   private async isRelevant(envelope: AgentMessageEnvelope): Promise<boolean> {
+    if (typeof envelope.metadata.botRoutineId === 'string' && typeof envelope.metadata.botRoutineRunId === 'string') {
+      const { botRoutineService } = await import('./BotRoutineService.js');
+      if (!await botRoutineService.relevant(envelope.workspaceId, envelope.toNodeId, envelope.metadata.botRoutineId, envelope.metadata.botRoutineRunId, envelope.metadata.botRoutineRevision)) return false;
+    }
     if (typeof envelope.metadata.botWorkflowRunId === 'string') {
       const { botWorkflowRepository } = await import('../../infrastructure/repositories/BotWorkflowRepository.js');
       const run = await botWorkflowRepository.find(envelope.metadata.botWorkflowRunId);

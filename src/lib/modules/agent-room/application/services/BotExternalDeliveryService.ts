@@ -3,6 +3,7 @@ import { channelBindingRepository } from '../../infrastructure/repositories/Chan
 import { channelRepository } from '../../infrastructure/repositories/ChannelRepository.js';
 import { channelTextChunks, botArtifactText, botArtifactSchema, type BotArtifact } from '../../domain/bot-artifacts.js';
 import { integrationExecutionService } from './IntegrationExecutionService.js';
+import type { ChannelBinding, ChannelMessage } from '../../domain/channels.js';
 
 /** Durable, exact-address external output. A retry reuses every provider idempotency key. */
 export class BotExternalDeliveryService {
@@ -25,6 +26,23 @@ export class BotExternalDeliveryService {
       }
     } finally { this.flushing = false; }
   }
+  private async routineAllowed(delivery: BotDelivery, message: ChannelMessage, binding: ChannelBinding): Promise<boolean> {
+    if (typeof message.meta.botRoutineId !== 'string') return true;
+    const { routineService } = await import('./RoutineService.js');
+    const { AgentRoutineRun } = await import('../../domain/models/AgentRoutineRun.js');
+    const { botRoutineOriginSchema } = await import('../../contracts/schemas/bridge-automation.schema.js');
+    const routine = await routineService.get(message.meta.botRoutineId);
+    const run = typeof message.meta.botRoutineRunId === 'string' ? await AgentRoutineRun.find(message.meta.botRoutineRunId) : null;
+    const origin = botRoutineOriginSchema.safeParse(routine?.actionConfig.botOrigin);
+    if (!routine?.enabled || routine.workspaceId !== delivery.workspaceId || routine.authorAgentId !== delivery.nodeId || routine.targetNodeId !== delivery.nodeId
+      || routine.revision !== message.meta.botRoutineRevision || !run || run.getAttribute('routine_id') !== routine.id
+      || run.getAttribute('cancel_requested_at') || run.getAttribute('status') === 'cancelled'
+      || !origin.success || !origin.data.send || origin.data.bindingId !== binding.id || origin.data.sourceMessageId !== message.replyToId) {
+      return false;
+    }
+
+    return true;
+  }
   private async deliver(candidate: BotDelivery) {
     if (this.active.has(candidate.id)) return;
     this.active.add(candidate.id);
@@ -36,6 +54,9 @@ export class BotExternalDeliveryService {
       const binding = await channelBindingRepository.find(delivery.workspaceId, delivery.bindingId);
       const message = await channelRepository.find(delivery.workspaceId, delivery.id);
       if (!message || !binding?.enabled || binding.nodeId !== delivery.nodeId || message.authorNodeId !== delivery.nodeId || message.meta.bindingId !== binding.id) {
+        await botDeliveryRepository.settle(delivery, 'cancelled'); return;
+      }
+      if (!await this.routineAllowed(delivery, message, binding)) {
         await botDeliveryRepository.settle(delivery, 'cancelled'); return;
       }
       let approvedArtifacts: BotArtifact[] = [];
@@ -67,6 +88,11 @@ export class BotExternalDeliveryService {
           return;
         }
         artifacts.push(parsed.data);
+      }
+      // Approval and artifact verification may wait on secure storage or I/O.
+      // Recheck a pause/revision immediately before the external effect.
+      if (!await this.routineAllowed(delivery, message, binding)) {
+        await botDeliveryRepository.settle(delivery, 'cancelled'); return;
       }
       if (binding.kind === 'whatsapp') {
         const { whatsappBotService } = await import('./WhatsAppBotService.js');

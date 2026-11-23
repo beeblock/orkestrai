@@ -264,6 +264,12 @@ describe('servidor MCP (orkestrai mcp)', () => {
     expect(MCP_TOOLS.some(tool=>tool.name===name)).toBe(true);
     server.input.end();
   });
+  it('advertises native-chat scheduling without a mandatory setup task', () => {
+    const schema = MCP_TOOLS.find(tool => tool.name === 'automation_save')!.inputSchema;
+    expect(schema.required).not.toContain('taskId');
+    expect(schema.properties).toHaveProperty('sourceMessageId');
+    expect(schema.properties.definition.properties.delivery.enum).toEqual(['current_chat', 'none']);
+  });
   it('handshake initialize + tools/list com as tools do canvas', async () => {
     const { send, waitFor, input } = startMcp();
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {} } });

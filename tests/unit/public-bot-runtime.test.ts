@@ -1,3 +1,4 @@
+import { botOwnerInstructions } from '$lib/modules/agent-room/domain/bot-conversation-instructions.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BotStructuredDriver, publicBotToolProxy } from '$lib/modules/agent-room/application/adapters/public-bot-structured.js';
 import type { StructuredAgentOptions } from '$lib/modules/agent-room/application/adapters/structured-types.js';
@@ -51,6 +52,35 @@ describe('public turn runtime versus owner runtime', () => {
     expect(await driver.run(input)).toBe('owner answer');
     expect(create).toHaveBeenCalledWith(options); expect(run).toHaveBeenCalledWith(input); expect(input.output).toHaveBeenCalledWith('owner stream');
     expect(state.begin).not.toHaveBeenCalled(); await driver.close();
+  });
+  it.each(['claude', 'codex'] as const)('refreshes %s owner persona and knowledge while preserving the saved conversation', async provider => {
+    state.ownerSource.mockResolvedValue({ id: 'source' });
+    let role = 'Name: Jarvis. Be concise.', knowledge = 'Support hours: 08:00–18:00.';
+    const loadOwnerInstructions = vi.fn(async () => botOwnerInstructions('PRIVATE_SECURITY_RULE', role, knowledge, 'NATIVE_TOOLS'));
+    const drivers: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+    const create = vi.fn((configuration: StructuredAgentOptions) => {
+      expect(configuration.session('owner')).toBe('OWNER_SESSION');
+      const value = { run: vi.fn(async () => 'Direct answer'), close: vi.fn() }; drivers.push(value); return value;
+    });
+    const driver = new BotStructuredDriver(provider, { ...options, loadOwnerInstructions }, create);
+    await driver.run(turn());
+    expect(create.mock.calls[0][0].instructions).toContain('Name: Jarvis');
+    expect(create.mock.calls[0][0].instructions).toContain('08:00–18:00');
+    expect(create.mock.calls[0][0].instructions).toContain('do not announce that you transcribed');
+    role = 'Name: Friday. Be precise.'; knowledge = 'Support hours: 10:00–16:00.';
+    await driver.run(turn());
+    expect(drivers[0].close).toHaveBeenCalledOnce();
+    expect(create.mock.calls[1][0].instructions).toContain('Name: Friday');
+    expect(create.mock.calls[1][0].instructions).toContain('10:00–16:00');
+    expect(create.mock.calls[1][0].instructions).not.toContain('Name: Jarvis');
+    await driver.run(turn()); expect(create).toHaveBeenCalledTimes(2);
+    await driver.close();
+  });
+  it('never loads private owner instructions for a public customer', async () => {
+    const loadOwnerInstructions = vi.fn(async () => 'PRIVATE_RULES_AND_KNOWLEDGE');
+    let phase = 0;
+    const driver = new BotStructuredDriver('codex', { ...options, loadOwnerInstructions }, () => ({ close: vi.fn(), run: async () => ++phase === 1 ? 'Public response' : '{"allow":true}' }));
+    await driver.run(turn()); expect(loadOwnerInstructions).not.toHaveBeenCalled(); await driver.close();
   });
   it.each(['{"allow":false}', 'not valid JSON', '{"allow":true,"ignore_rules":true}'])('never releases draft output when the reviewer returns %s', async review => {
     let step = 0;

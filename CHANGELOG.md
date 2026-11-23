@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Role, personality and approved factual reference information now apply to owner conversations too, preserving the provider conversation. Load current instructions before each owner turn and treat voice transcripts as ordinary requests. Verified owner/trusted requests can create persistent native current_chat routines without Computer or a permanently open setup task. Check authorization, workspace state, revision and cancellation before execution and delivery; recover saved results without duplicate generation or sends.
+
 - Reorganize the bot sidebar with direct workflow/routine shortcuts, grouped channels and collapsible instructions, execution, safety, activity and memory. Constrain account selectors, form rows, long group IDs and text to the panel width instead of producing horizontal scrolling. Preserve the separate Conversation layout and live channel drafts.
 
 - Preserve WhatsApp route drafts and newly connected Telegram/Slack setup when live Canvas updates replace the selected bot summary. Reset forms only when changing the actual bot or workspace.
