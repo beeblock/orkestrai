@@ -180,7 +180,9 @@ jobs:
         run: xvfb-run -a node scripts/run-electron-lifecycle.mjs scripts/test-terminal-renderer-lifecycle.cjs
 
       - name: Run tests
-        run: npm test -- --maxWorkers=2 --exclude tests/unit/knowledge-runtime.test.ts
+        # Cold Vite module transforms count toward the per-test deadline. Match
+        # local release QA while retaining explicit latency assertions in tests.
+        run: npm test -- --maxWorkers=2 --testTimeout=20000 --exclude tests/unit/knowledge-runtime.test.ts
 
       - name: Build production application
         run: npm run build

@@ -70,8 +70,12 @@ describe('agents started manually inside a Shell', () => {
   it('returns the structured Claude answer after cd, never the quiet TUI redraw', async () => {
     const f = await fixture();
     try {
-      const foreground = await ptySessionManager.shellForeground(f.session.id);
-      expect(await shellAgentService.detect(f.workspace.id, f.node.id, f.session.id), JSON.stringify(foreground)).toMatchObject({ provider: 'claude', cwd: f.project });
+      // READY confirms PTY output, while Windows CIM can still be warming up.
+      // Await real discovery; do not add a second diagnostic process probe or
+      // change the production deadline/identity checks to accommodate the runner.
+      await vi.waitFor(async () => {
+        expect(await shellAgentService.detect(f.workspace.id, f.node.id, f.session.id)).toMatchObject({ provider: 'claude', cwd: f.project });
+      }, { timeout: windows ? 10_000 : 5_000, interval: 100 });
       const start = Date.now();
       const reply = await bridgeService.ask(f.workspace.id, { to: f.node.id, message: 'Give the clean status', timeoutMs: 12_000 });
       expect(reply).toMatchObject({ reply: 'Clean answer for this exact question.', replyConfirmed: true, delivered: true, timedOut: false });
