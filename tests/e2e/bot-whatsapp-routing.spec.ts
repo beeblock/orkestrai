@@ -52,6 +52,10 @@ test('reuses one linked account for two bots in a group and edits their reply ru
       await expect(whatsapp.getByRole('combobox', { name: labels['bots.whatsapp_account'], exact: true })).toContainText('Shared account');
       await whatsapp.getByRole('combobox', { name: labels['bots.whatsapp_chat'], exact: true }).click();
       await page.getByRole('option', { name: `Equipe · ${labels['bots.whatsapp_group']}`, exact: true }).click();
+      const refresh = page.waitForResponse(response => response.url().endsWith(`${base}/bots`) && response.request().method() === 'GET');
+      await request.post(`${base}/nodes`, { data: { type: 'note', title: 'Independent Canvas update', payload: { content: 'This update must preserve the route draft.' } } });
+      await refresh;
+      await expect(whatsapp.getByRole('textbox', { name: labels['bots.whatsapp_chat_id'], exact: true })).toHaveValue(group);
       await expect(whatsapp.getByRole('textbox', { name: labels['bots.prefixes'], exact: true })).toHaveValue(`@${bot.title}`);
       await whatsapp.getByRole('textbox', { name: labels['bots.prefixes'], exact: true }).fill(', ,');
       await expect(whatsapp.getByRole('button', { name: labels['bots.connect'], exact: true })).toBeDisabled();

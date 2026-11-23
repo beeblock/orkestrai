@@ -19,6 +19,7 @@
   const senderRules = $derived(senders.split(',').map(value => value.trim()).filter(Boolean));
   const selected = $derived(connections.find(item => item.id === selectedId));
   const base = $derived(`/api/agent-room/workspaces/${workspaceId}/bots`);
+  const nodeScope = $derived(`${workspaceId}:${nodeId}`);
   let generation = 0, displayedConnection = '';
   let statusRevision = $state(0);
   async function load() {
@@ -31,7 +32,7 @@
       failed = false; statusRevision++;
     } catch { if (workspace === workspaceId) failed = true; }
   }
-  $effect(() => { void workspaceId; void nodeId; return untrack(() => {
+  $effect(() => { void nodeScope; return untrack(() => {
     selectedId = ''; qr = null; chatId = ''; senders = ''; prefixes = `@${title.replace(/\s+/g, '')}`; void load();
     const changed = () => void load();
     window.addEventListener('orkestrai:bots-changed', changed);

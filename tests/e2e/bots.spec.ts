@@ -247,6 +247,10 @@ test('bot channel setup stays inside the viewport and opens Telegram setup direc
     expect(submitted.permissions).toContain('telegram.send_message');
     expect(JSON.stringify(submitted)).not.toContain('TEST_ONLY_NOT_A_REAL_TOKEN');
     await expect(profile.getByRole('button', { name: labels['bots.find_chats'], exact: true })).toBeVisible();
+    const refresh = page.waitForResponse(response => response.url().endsWith(`${base}/bots`) && response.request().method() === 'GET');
+    await request.post(`${base}/nodes`, { data: { type: 'note', title: 'Independent Canvas update', payload: { content: 'This update must preserve the newly connected channel.' } } });
+    await refresh;
+    await expect(profile.getByRole('button', { name: labels['bots.find_chats'], exact: true })).toBeVisible();
     await profile.getByRole('combobox', { name: labels['always_on.chat'], exact: true }).click();
     await page.getByRole('option', { name: 'Test owner', exact: true }).click();
     await expect(profile.getByRole('textbox', { name: labels['always_on.chat'], exact: true })).toHaveValue('100001');

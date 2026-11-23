@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Preserve WhatsApp route drafts and newly connected Telegram/Slack setup when live Canvas updates replace the selected bot summary. Reset forms only when changing the actual bot or workspace.
+
 - Save edited bot sequence commands, acknowledgments, selected agents and stage criteria through the shared form state instead of reverting nested edits during validation.
 
 - Preserve ordinary Conversation sends and exact-source legacy Canvas Telegram/Slack replies independently of personal-bot workflow storage and public-worker approval. Reject changed recipient scopes. Load inference-only model helpers lazily to avoid a provider registry/profile initialization cycle.

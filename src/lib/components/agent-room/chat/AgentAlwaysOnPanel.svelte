@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { Activity, CirclePower, Link2, Pencil, Plus, Trash2 } from '@lucide/svelte';
@@ -93,6 +94,7 @@
   }
 
   const base = $derived(`/api/agent-room/workspaces/${encodeURIComponent(workspaceId)}`);
+  const nodeScope = $derived(`${workspaceId}:${nodeId}`);
 
   let loadGeneration = 0;
   async function load() {
@@ -109,15 +111,17 @@
   }
 
   $effect(() => {
-    void nodeId;
     runtimeMode = payload.agentRuntimeMode ?? 'interactive';
-    void load();
-    return () => { loadGeneration++; };
+  });
+  $effect(() => {
+    void nodeScope;
+    return untrack(() => { void load(); return () => { loadGeneration++; }; });
   });
 
   $effect(() => {
     if (!botEvents) return;
-    void workspaceId; void nodeId;
+    void nodeScope;
+    return untrack(() => {
     integrationId = ''; chatId = ''; senders = ''; targets = []; adding = false; replyMode = 'prefix'; editingBindingId = '';
     const changed = () => void load();
     const ready = (event: Event) => {
@@ -129,6 +133,7 @@
     window.addEventListener('orkestrai:bot-integration-ready', ready);
     prefixes = `@${botTitle.replace(/\s+/g, '')}`;
     return () => { window.removeEventListener('orkestrai:bots-changed', changed); window.removeEventListener('orkestrai:bot-integration-ready', ready); };
+    });
   });
 
   async function connect() {
