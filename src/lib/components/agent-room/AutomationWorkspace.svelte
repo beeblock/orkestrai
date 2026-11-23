@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { subscribeKnowledge } from './knowledge-live.js';
   import { getCsrfToken } from '@beeblock/svelar/http';
   import { toast } from '@beeblock/svelar/ui';
   import { defaults, superForm } from 'sveltekit-superforms';
@@ -73,6 +74,7 @@
   let portals = $state<Array<{ id: string; title: string }>>([]);
   let loading = $state(true);
   let busy = $state(false);
+  let routineRevision = 0;
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
   let pendingDelete = $state<Routine | null>(null);
@@ -94,6 +96,7 @@
   }
 
   async function refresh(): Promise<void> {
+    const scope = workspaceId, revision = ++routineRevision;
     loading = true;
     try {
       const loaded = await Promise.all([
@@ -104,8 +107,8 @@
         api<CanvasNode[]>(`/api/agent-room/workspaces/${workspaceId}/nodes`),
         api<WorkspaceToolRecord[]>(`/api/agent-room/workspaces/${workspaceId}/tools`),
       ]);
-      automations = loaded[0] as Routine[];
-      runs = loaded[1] as AutomationRun[];
+      if (scope !== workspaceId) return;
+      if (revision === routineRevision) { automations = loaded[0] as Routine[]; runs = loaded[1] as AutomationRun[]; }
       recipes = loaded[2] as AutomationRecipe[];
       integrations = (loaded[3] as { integrations: AutomationIntegration[] }).integrations;
       portals = (loaded[4] as CanvasNode[]).filter((node) => node.type === 'portal').map((node) => ({ id: node.id, title: node.title ?? m['portal.default_title']() }));
@@ -113,9 +116,26 @@
     } catch (error) {
       toast.error(error instanceof Error ? error.message : m['automation.error_load']());
     } finally {
-      loading = false;
+      if (scope === workspaceId) loading = false;
     }
   }
+
+  $effect(() => {
+    const scope = workspaceId;
+    let stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const reload = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const revision = ++routineRevision;
+        try {
+          const [items, history] = await Promise.all([api<Routine[]>(`/api/agent-room/workspaces/${scope}/automations`), api<AutomationRun[]>(`/api/agent-room/workspaces/${scope}/automations/history`)]);
+          if (!stopped && scope === workspaceId && revision === routineRevision) { automations = items; runs = history; }
+        } catch { /* Reconnection or a later mutation refreshes the existing snapshot. */ }
+      }, 150);
+    };
+    const release = subscribeKnowledge(scope, reload, () => {}, ['routinesChanged']);
+    return () => { stopped = true; clearTimeout(timer); release(); };
+  });
 
   function resetEditor(): void {
     editingId = null;

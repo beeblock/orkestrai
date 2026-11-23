@@ -1,4 +1,5 @@
 {
+  "bots.workflow_short": "Fluxo",
   "bots.safety_knowledge_hint": "Texto de referência para as respostas: horários, produtos, preços, regras de atendimento ou perguntas frequentes. É usado nas conversas com você e nos canais. Não habilita ferramentas nem substitui a memória. Não inclua senhas ou tokens.",
   "bots.profile_channels": "Canais",
   "bots.profile_runtime": "Execução e limites",

@@ -356,9 +356,12 @@ export class BridgeService {
     const agents = await this.listAgents(workspaceId);
     const target = this.findAgent(agents, input.to);
     const origin = input.from ? this.findAgent(agents, input.from) : null;
+    if (origin?.nodeId === target.nodeId && ((await workspaceRepository.getNode(origin.nodeId))?.payload as TerminalNodePayload | undefined)?.personalBot) {
+      throw new Error(`BOT_SELF_MESSAGE: ${target.title} (${target.nodeId}) is your own routing identity. Execute the work directly; use automation_save for a future reminder, not ask to yourself.`);
+    }
     if (origin && input.verifiedActorNodeId === origin.nodeId && (input.sourceMessageId || ptySessionManager.structuredRequest(workspaceId, origin.nodeId))) {
       const { botRequestContextService } = await import('./BotRequestContextService.js');
-      const context = await botRequestContextService.current(workspaceId, origin.nodeId, input.sourceMessageId);
+      const context = await botRequestContextService.current(workspaceId, origin.nodeId, input.sourceMessageId, input.taskId ?? undefined);
       if (context) {
         const workspace = await workspaceRepository.getWorkspace(workspaceId);
         const receiver = await workspaceRepository.getNode(target.nodeId);

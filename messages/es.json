@@ -1,4 +1,5 @@
 {
+  "bots.workflow_short": "Flujo",
   "bots.safety_knowledge_hint": "Texto de referencia: horarios, productos, precios, políticas de atención o preguntas frecuentes. Se usa contigo y en los canales. No habilita herramientas ni sustituye la memoria. No incluyas contraseñas ni tokens.",
   "bots.profile_channels": "Canales",
   "bots.profile_runtime": "Ejecución y límites",

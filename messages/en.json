@@ -1,4 +1,5 @@
 {
+  "bots.workflow_short": "Workflow",
   "bots.safety_knowledge_hint": "Reference text for answers: hours, products, prices, support policies or frequently asked questions. Used in your conversations and connected channels. It does not grant tools or replace memory. Do not include passwords or tokens.",
   "bots.profile_channels": "Channels",
   "bots.profile_runtime": "Execution and limits",

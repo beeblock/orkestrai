@@ -21,6 +21,7 @@ export class AgentBoardTask extends Model {
     'created_at',
     'updated_at',
     'leadership_review_id',
+    'bot_source_message_id',
   ];
 
   static casts = {

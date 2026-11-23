@@ -650,6 +650,13 @@ describe('Modo Maestro', () => {
     expect(await workspaceRepository.getNode(recruited.nodeId)).toBeNull();
     expect((await workspaceRepository.getNode(bot.id))?.payload).toMatchObject({ maestro: false, personalBot: true });
   });
+  it('prevents a personal bot from starting a self-message coordination loop', async () => {
+    const { workspace, leader: bot } = await setupMaestro(false);
+    await workspaceRepository.updateNode(bot.id, { payload: { ...bot.payload, personalBot: true } as never });
+    vi.mocked(agentSessionService.ensure).mockClear();
+    await expect(bridgeService.ask(workspace.id, { from: bot.id, to: bot.id, message: 'Tell the assistant to finish its own work.' })).rejects.toThrow('BOT_SELF_MESSAGE');
+    expect(agentSessionService.ensure).not.toHaveBeenCalled();
+  });
 
   it('keeps workspace pauses and actual leader/deputy nodes protected from bot coordination', async () => {
     const { workspace, leader: bot } = await setupMaestro(false);

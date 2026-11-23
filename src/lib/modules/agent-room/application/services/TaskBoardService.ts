@@ -464,6 +464,8 @@ export class TaskBoardService {
     if (input.noteId) await this.requireNote(workspaceId, input.noteId);
     const now = new Date().toISOString();
     const id = uuidv7();
+    const botSource = input.createdBy && input.createdBy === input.assigneeNodeId
+      ? await (await import('./BotRequestContextService.js')).botRequestContextService.creationSource(workspaceId, input.createdBy) : null;
     await taskExecutionService.validateDependencies(workspaceId, id, input.dependencies ?? []);
     const images = normalizeImages(input.images);
     const attachments = normalizeAttachments(input.attachments);
@@ -488,6 +490,7 @@ export class TaskBoardService {
       assignee_node_id: input.assigneeNodeId ?? null,
       note_node_id: input.noteId ?? null,
       created_by: input.createdBy ?? 'user',
+      bot_source_message_id: botSource,
       created_at: now,
       updated_at: now,
     });

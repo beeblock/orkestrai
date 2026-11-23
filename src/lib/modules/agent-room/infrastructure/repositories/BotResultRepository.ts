@@ -6,6 +6,14 @@ function map(row: AgentBotResult): BotResult {
     messageIds: JSON.parse(row.getAttribute('message_ids_json')), body: row.getAttribute('body') };
 }
 export class BotResultRepository {
+  /** Metadata-only receipt windows; never load historic model answers for authorization. */
+  async completedAfter(workspaceId: string, nodeId: string, since: string) {
+    const rows = await AgentBotResult.query().select('id', 'message_ids_json', 'created_at')
+      .where('workspace_id', workspaceId).where('node_id', nodeId).where('created_at', '>=', since)
+      .orderBy('created_at', 'asc').limit(20).get();
+    return rows.map(row => ({ id: String(row.getAttribute('id')), messageIds: JSON.parse(String(row.getAttribute('message_ids_json'))) as string[],
+      completedAt: Date.parse(String(row.getAttribute('created_at'))) }));
+  }
   async save(input: BotResult) {
     if (input.body.length > 2_000_000 || input.messageIds.length > 50) throw new Error('BOT_RESULT_LIMIT');
     return Connection.transaction(async () => {

@@ -30,7 +30,7 @@ export class BotRoutineService {
   }
 
   async execute(workspaceId: string, nodeId: string, request: BridgeAutomationInput, sourceId: string, assertRelevant: () => Promise<void>) {
-    const context = await botRequestContextService.current(workspaceId, nodeId, sourceId);
+    const context = await botRequestContextService.current(workspaceId, nodeId, sourceId, request.taskId);
     if (!context || context.source.channel !== `dm:${nodeId}`) throw new Error('BOT_ROUTINE_OWNER_REQUIRED');
     if (context.envelope.metadata.botRoutineRunId && !['list', 'history'].includes(request.input.command)) throw new Error('BOT_ROUTINE_RECURSIVE_AUTHORING_DENIED');
     const origin: BotRoutineOrigin = { sourceMessageId: sourceId, nodeId, bindingId: typeof context.source.meta.bindingId === 'string' ? context.source.meta.bindingId : null, send: true };

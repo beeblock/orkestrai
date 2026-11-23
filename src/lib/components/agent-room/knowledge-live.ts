@@ -1,7 +1,7 @@
 type Subscriber = { workspaceId: string; change: () => void; status: (connected: boolean) => void; events?: readonly string[] };
 const subscribers = new Set<Subscriber>();
 let socket: WebSocket | null = null, retry: ReturnType<typeof setTimeout> | undefined, attempt = 0;
-const events = new Set(['workspaceChanged', 'memoryChanged', 'tasksChanged', 'taskBoardChanged', 'controlCenterChanged', 'designChanged', 'codeGraphChanged', 'knowledgeChanged']);
+const events = new Set(['routinesChanged', 'workspaceChanged', 'memoryChanged', 'tasksChanged', 'taskBoardChanged', 'controlCenterChanged', 'designChanged', 'codeGraphChanged', 'knowledgeChanged']);
 function connect() {
   if (!subscribers.size || socket) return;
   const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent-room/pty`);

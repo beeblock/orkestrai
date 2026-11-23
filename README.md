@@ -44,6 +44,8 @@ Personal bots accept quoted WhatsApp text, images, PDFs and voice notes, and sen
 
 ## Personal bots (local preview)
 
+When resuming an existing assigned bot card, automation_save can include taskId to restore its verified original chat. New cards retain their source automatically. Older cards require one exact completed native turn that contains their creation; ambiguous or missing evidence remains blocked rather than selecting another conversation. A simple reminder should use automation_save directly, without creating a development card or recruiting a review team. Automations and Routines update live after native changes, without discarding the current draft.
+
 The configured role, personality and factual references also apply to owner chats, refreshing before the next turn without discarding the provider conversation. From the linked WhatsApp account, a verified trusted sender or the private Orkestrai chat, ask for an hourly rate, daily reminder or weekly report: the bot saves a native routine with `delivery: "current_chat"`. Final answers and real files return to that exact chat without Computer. Inspect, edit, pause or cancel in **Routines** or through the bot. The computer must stay awake with the app, account and connection available; explicit pauses and revocations remain binding. Public customers do not receive unrestricted scheduling. Reference information is factual context, not a tool grant or automatic memory.
 
 The separate **Bots** mode creates personal assistants and collaboration groups;

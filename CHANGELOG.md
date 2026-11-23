@@ -9,6 +9,8 @@ pt-BR, English, and Spanish translations.
 
 ### Fixed
 
+- Restore the verified originating chat when a personal bot resumes its own assigned setup card. Persist the source at task creation; recover older cards only from one unambiguous completed native receipt window and revalidate sender grants. Never select the latest unrelated chat. Refresh Automations and the bot routine list on native changes without clearing drafts or reloading all Canvas nodes. Tick the visible profile timer every second and shorten the workflow shortcut. Give bots their exact native identity and reject self-message coordination loops.
+
 - Role, personality and approved factual reference information now apply to owner conversations too, preserving the provider conversation. Load current instructions before each owner turn and treat voice transcripts as ordinary requests. Verified owner/trusted requests can create persistent native current_chat routines without Computer or a permanently open setup task. Check authorization, workspace state, revision and cancellation before execution and delivery; recover saved results without duplicate generation or sends.
 
 - Reorganize the bot sidebar with direct workflow/routine shortcuts, grouped channels and collapsible instructions, execution, safety, activity and memory. Constrain account selectors, form rows, long group IDs and text to the panel width instead of producing horizontal scrolling. Preserve the separate Conversation layout and live channel drafts.
@@ -29,7 +31,7 @@ pt-BR, English, and Spanish translations.
 
 - Forward generated PNG/JPEG images, PDFs, spreadsheets, documents and archives as native attachments, including explicit absolute paths confined to the owner workspace or its terminal runtime. Keep realpath/policy/hash checks and public artifact approvals; remove only the verified local links from outgoing text. Older text-only owner replies offer Send files to the original chat, with one durable repair identity and no model run or image regeneration.
 
-### Added — 0.55.0-beta.12 local preview
+### Added — 0.55.0-beta.13 local preview
 
 - Configure owner/trusted-sender slash-command bot sequences through up to eight selected Canvas agents. Persist one Kanban card and inbox identity per stage; require the normal card acceptance and exact final reply before advancing. Recover without redelivery, show progress with the request, acknowledge once and return the final artifacts to the originating chat. Stop remaining stages without undoing accepted work. Expose configuration and stop commands through the existing authenticated CLI/MCP; public customers retain restricted approved actions.
 

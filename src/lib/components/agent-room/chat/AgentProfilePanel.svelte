@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack, type Snippet } from 'svelte';
+  import { onMount, tick, untrack, type Snippet } from 'svelte';
   import * as Accordion from '$lib/components/ui/accordion';
   import type { AgentUsageBlock } from '$lib/modules/agent-room/contracts/schemas/agent-runtime.schema.js';
   import { Brain, CalendarClock, Focus, MessageSquare, Network, X } from '@lucide/svelte';
@@ -95,8 +95,14 @@
   const activity = $derived(usageBlock ? 'blocked' : status ? (status.sessionAlive ? status.state : 'disconnected') : 'idle');
   const sleeping = $derived(!usageBlock && embedded && payload.agentRuntimeMode === 'on_demand' && !status?.sessionAlive
     && (!status || status.state === 'disconnected' || status.state === 'idle'));
+  // Only the visible detail panel needs a per-second clock. Do not wake every Canvas node.
+  let detailNow = $state(Date.now());
+  onMount(() => {
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') detailNow = Date.now(); }, 1_000);
+    return () => clearInterval(timer);
+  });
   const since = $derived.by(() => {
-    const parts = status ? elapsedParts(status.stateSince, statusClock.now) : null;
+    const parts = status ? elapsedParts(status.stateSince, Math.max(statusClock.now, detailNow)) : null;
     return parts ? elapsedLabel(parts) : null;
   });
   const model = $derived(modelFromArgs(payload.args ?? []));
@@ -142,13 +148,22 @@
     retryMemory = () => { memoryLoading = true; void loadMemory(); };
     const unsubscribe = subscribeKnowledge(workspace, scheduleMemory, () => {}, ['memoryChanged']);
     void loadMemory();
-    void fetch(`/api/agent-room/workspaces/${encodeURIComponent(workspace)}/routines`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((body: { data?: Routine[] } | null) => {
-        if (!controller.signal.aborted) routines = (body?.data ?? []).filter((routine) => routine.targetNodeId === id);
-      })
-      .catch(() => {});
-    return () => { controller.abort(); clearTimeout(refresh); unsubscribe(); retryMemory = () => {}; };
+    let routineTicket = 0, routineTimer: ReturnType<typeof setTimeout> | undefined;
+    const loadRoutines = () => {
+      clearTimeout(routineTimer);
+      routineTimer = setTimeout(async () => {
+        const ticket = ++routineTicket;
+        try {
+          const response = await fetch(`${root}/routines`, { signal: controller.signal });
+          if (!response.ok) return;
+          const body = await response.json() as { data?: Routine[] };
+          if (!controller.signal.aborted && ticket === routineTicket) routines = (body.data ?? []).filter(routine => routine.targetNodeId === id);
+        } catch { /* Keep the last confirmed snapshot until reconnection. */ }
+      }, 150);
+    };
+    const releaseRoutines = subscribeKnowledge(workspace, loadRoutines, () => {}, ['routinesChanged']);
+    loadRoutines();
+    return () => { controller.abort(); clearTimeout(refresh); clearTimeout(routineTimer); unsubscribe(); releaseRoutines(); retryMemory = () => {}; };
   });
 </script>
 
@@ -221,7 +236,7 @@
     <AgentAvatar {nodeId} {title} size={56} />
     <h2 class="headline">{title}</h2>
     {#if payload.role}<p class="role">{payload.role}</p>{/if}
-    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
+    <p class="status" data-testid="agent-profile-status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
   </div>
   {#if !embedded}<div class="actions">
     <button type="button" onclick={() => onDirect(nodeId)}><MessageSquare size={13} />{m['chat.profile_direct']()}</button>
@@ -232,7 +247,7 @@
     {@render factsContent()}
     {@render routinesContent(true)}
   {:else}
-    <p class="status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
+    <p class="status" data-testid="agent-profile-status"><AgentGlyph tone={agentTone(sleeping ? 'idle' : activity)} label={usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)} /> {usageBlock ? m['bots.quota_paused']() : sleeping ? m['agent_runtime.sleeping']() : agentStateLabel(activity)}{#if since && !sleeping}{` · ${since}`}{/if}</p>
   {/if}
   <AgentAlwaysOnPanel {workspaceId} {nodeId} {payload} botEvents={embedded} botTitle={title} {onSetupChannel}>
     {#snippet children({ runtime, channels, activity })}

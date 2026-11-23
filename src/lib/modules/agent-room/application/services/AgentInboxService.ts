@@ -1212,6 +1212,10 @@ export class AgentInboxService {
   }
 
   private async isRelevant(envelope: AgentMessageEnvelope): Promise<boolean> {
+    if (envelope.kind === 'ask' && envelope.fromNodeId === envelope.toNodeId && !envelope.metadata.botRoutineId && !envelope.metadata.botWorkflowRunId) {
+      const node = await workspaceRepository.getNode(envelope.toNodeId);
+      if ((node?.payload as { personalBot?: boolean } | undefined)?.personalBot) return false;
+    }
     if (typeof envelope.metadata.botRoutineId === 'string' && typeof envelope.metadata.botRoutineRunId === 'string') {
       const { botRoutineService } = await import('./BotRoutineService.js');
       if (!await botRoutineService.relevant(envelope.workspaceId, envelope.toNodeId, envelope.metadata.botRoutineId, envelope.metadata.botRoutineRunId, envelope.metadata.botRoutineRevision)) return false;

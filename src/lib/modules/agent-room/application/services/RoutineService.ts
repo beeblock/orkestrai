@@ -200,6 +200,10 @@ function actionConfig(input: AutomationFormInput): Record<string, unknown> {
 const loopRunMarks: Map<string, { sessionId: string; length: number }> =
   ((globalThis as { __orkestraiLoopRunMarks?: Map<string, { sessionId: string; length: number }> }).__orkestraiLoopRunMarks ??= new Map());
 
+function notifyRoutines(workspaceId: string) {
+  (globalThis as { __orkestraiBroadcast?: (frame: Record<string, unknown>) => void }).__orkestraiBroadcast?.({ type: 'routinesChanged', workspaceId });
+}
+
 export class RoutineService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly lastPolledAt = new Map<string, number>();
@@ -242,6 +246,7 @@ export class RoutineService {
       action_type: input.actionType, action_config_json: JSON.stringify(action), recipe_id: input.recipeId ?? null,
       last_trigger_key: null, created_at: now, updated_at: now,
     });
+    notifyRoutines(workspaceId);
     return mapRoutine(model);
   }
 
@@ -293,6 +298,7 @@ export class RoutineService {
     });
     if (!changed) throw new Error('Automation changed; read its current revision.');
     const model = await AgentRoutine.find(id);
+    if (model) notifyRoutines(String(model.getAttribute('workspace_id')));
     return model ? mapRoutine(model) : null;
   }
 
@@ -303,6 +309,7 @@ export class RoutineService {
     if (expectedRevision !== undefined && expectedRevision !== revision) throw new Error('Automation changed; read its current revision.');
     if (!await AgentRoutine.query().where('id', id).where('revision', revision).update({ enabled, revision: revision + 1, updated_at: new Date() })) throw new Error('Automation changed; read its current revision.');
     const model = await AgentRoutine.find(id);
+    if (model) notifyRoutines(String(model.getAttribute('workspace_id')));
     return model ? mapRoutine(model) : null;
   }
 
@@ -328,12 +335,16 @@ export class RoutineService {
     });
     if (!changed) throw new Error('Automation changed; read its current revision.');
     const model = await AgentRoutine.find(id);
+    if (model) notifyRoutines(String(model.getAttribute('workspace_id')));
     return model ? mapRoutine(model) : null;
   }
 
   async remove(id: string): Promise<boolean> {
+    const existing = await AgentRoutine.find(id);
     await AgentRoutineRun.query().where('routine_id', id).delete();
-    return (await AgentRoutine.query().where('id', id).delete()) > 0;
+    const removed = (await AgentRoutine.query().where('id', id).delete()) > 0;
+    if (removed && existing) notifyRoutines(String(existing.getAttribute('workspace_id')));
+    return removed;
   }
 
   async history(id: string, limit = 50): Promise<AutomationRun[]> {
@@ -510,6 +521,7 @@ export class RoutineService {
       : null;
     const controller = new AbortController();
     this.activeRuns.set(runId, controller);
+    notifyRoutines(routine.workspaceId);
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -591,6 +603,7 @@ export class RoutineService {
       clearTimeout(timeout);
       clearInterval(leasePulse);
       this.activeRuns.delete(runId);
+      notifyRoutines(routine.workspaceId);
     }
   }
 
@@ -791,6 +804,7 @@ export class RoutineService {
         cancel_requested_at: null, timeout_at: null, max_attempts: MAX_ATTEMPTS,
         next_attempt_at: null, dead_lettered_at: null,
       });
+      notifyRoutines(routine.workspaceId);
       return mapRun(model);
     } catch (error) {
       const raced = await AgentRoutineRun.query().where('idempotency_key', idempotencyKey).first();

@@ -13,7 +13,7 @@ export class AgentRoutineService {
     const candidate = await workspaceRepository.getNode(actorId);
     if (candidate?.workspaceId === workspaceId && (candidate.payload as { personalBot?: boolean }).personalBot) {
       const { botRequestContextService } = await import('./BotRequestContextService.js');
-      const context = await botRequestContextService.current(workspaceId, actorId, request.sourceMessageId);
+      const context = await botRequestContextService.current(workspaceId, actorId, request.sourceMessageId, request.taskId);
       if (context?.source.channel === `dm:${actorId}`) {
         const { botRoutineService } = await import('./BotRoutineService.js');
         return botRoutineService.execute(workspaceId, actorId, request, context.source.id, assertRelevant);

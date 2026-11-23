@@ -183,7 +183,7 @@
         <Button variant="ghost" size="icon-sm" aria-label={m['chat.profile_close']()} onclick={() => (profileOpen = false)}><X size={15} /></Button>
       </div></div>
       <div class="profile-shortcuts" data-testid="bot-profile-shortcuts">
-        <Button variant="outline" size="sm" class="h-auto min-h-10 min-w-0 whitespace-normal" onclick={() => edit(selected, true)}><Workflow size={15} class="shrink-0" /><span>{m['bots.workflow_title']()}</span></Button>
+        <Button variant="outline" size="sm" class="h-10 min-w-0 whitespace-nowrap" aria-label={m['bots.workflow_title']()} title={m['bots.workflow_title']()} onclick={() => edit(selected, true)}><Workflow size={15} class="shrink-0" /><span>{m['bots.workflow_short']()}</span></Button>
         <Button variant="outline" size="sm" class="h-auto min-h-10 min-w-0 whitespace-normal" onclick={() => void profilePanel?.openRoutines()}><CalendarClock size={15} class="shrink-0" /><span>{m['chat.profile_routines']()}</span></Button>
       </div>
       <AgentProfilePanel bind:this={profilePanel} embedded usageBlock={selected.usageBlock} {workspaceId}

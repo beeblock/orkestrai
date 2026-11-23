@@ -7,6 +7,7 @@ for (const locale of ['pt-BR', 'en', 'es']) {
   const labels = JSON.parse(await readFile(new URL(`../../messages/${locale}.json`, import.meta.url), 'utf8')) as Record<string, string>;
   test(`${locale} bot profile fits long account names and groups, and exposes workflows and routines`, async ({ page, request }) => {
     test.setTimeout(60_000);
+    await page.clock.install();
     const root = await mkdtemp(join(tmpdir(), 'bot-profile-layout-'));
     const workspace = (await (await request.post('/api/agent-room/workspaces', { data: { name: 'Profile layout', workingDir: root } })).json()).data;
     const base = `/api/agent-room/workspaces/${workspace.id}`;
@@ -22,6 +23,10 @@ for (const locale of ['pt-BR', 'en', 'es']) {
       await page.route(`**${base}/channel-bindings?*`, route => route.fulfill({ json: { data: [{ id: '01955555-2222-7222-8222-222222222222', workspaceId: workspace.id,
         nodeId: bot.id, kind: 'whatsapp', externalChatId: group, enabled: true, allowedSenders: [], replyPrefixes: ['#jarvis'], lastError: null, lastInboundAt: null }] } }));
       const profile = page.locator('.bot-profile');
+      const workingSince = new Date(Date.now() - 4_000).toISOString();
+      await page.route(`**${base}/control-center*`, route => route.fulfill({ json: { data: { workspaceId: workspace.id, counts: { working: 1 }, agents: [{
+        nodeId: bot.id, title: bot.title, provider: 'codex', state: 'working', stateSince: workingSince, sessionAlive: true, lastAction: null,
+      }] } } }));
       const fits = async () => {
         const sizes = await profile.evaluate(element => {
           const panel = element.getBoundingClientRect();
@@ -38,6 +43,13 @@ for (const locale of ['pt-BR', 'en', 'es']) {
         await page.goto(`/bots?workspace=${workspace.id}&node=${bot.id}`);
         await expect(profile.getByRole('combobox', { name: labels['bots.whatsapp_account'], exact: true })).toContainText(longAccount);
         await expect(profile.locator('.mono')).toContainText(group);
+        const status = profile.getByTestId('agent-profile-status');
+        await expect(status).toContainText(labels['control_center.state_working']);
+        const previousTime = await status.innerText();
+        await page.clock.fastForward(2_000);
+        await expect.poll(() => status.innerText(), { timeout: 4_000 }).not.toBe(previousTime);
+        const workflow = profile.getByTestId('bot-profile-shortcuts').getByRole('button', { name: labels['bots.workflow_title'], exact: true });
+        expect(await workflow.locator('span').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(25);
         for (const [width, height] of [[1440, 900], [1100, 800], [960, 600], [375, 600], [320, 600]]) {
           await page.setViewportSize({ width, height });
           await fits();
@@ -62,6 +74,23 @@ for (const locale of ['pt-BR', 'en', 'es']) {
         await expect(page.getByTestId('bot-editor').getByRole('button', { name: labels['bots.advanced'], exact: true })).toHaveAttribute('aria-expanded', 'true');
         await page.getByTestId('bot-editor').getByRole('button', { name: labels['bots.cancel'], exact: true }).click();
         await expect(profile.getByRole('textbox', { name: labels['chat.routine_label'], exact: true })).toHaveValue('Keep this routine draft');
+        if (theme === 'light') {
+          const saved = await request.post(`${base}/automations`, { data: { name: `Hourly fixture ${locale}`, triggerType: 'schedule', intervalMinutes: 60,
+            actionType: 'prompt_agent', targetNodeId: bot.id, prompt: 'Fixture only; disabled.', enabled: false } });
+          expect(saved.ok(), await saved.text()).toBe(true);
+          await expect(profile.getByText(`Hourly fixture ${locale}`, { exact: true })).toBeVisible();
+          await profile.getByRole('button', { name: labels['bots.automations'], exact: true }).click();
+          const overview = page.getByTestId('automation-workspace');
+          await expect(overview.getByText(`Hourly fixture ${locale}`, { exact: true })).toBeVisible();
+          const second = await request.post(`${base}/automations`, { data: { name: `Live fixture ${locale}`, triggerType: 'manual',
+            actionType: 'prompt_agent', targetNodeId: bot.id, prompt: 'Fixture only; disabled.', enabled: false } });
+          expect(second.ok(), await second.text()).toBe(true);
+          await expect(overview.getByText(`Live fixture ${locale}`, { exact: true })).toBeVisible();
+          await page.keyboard.press('Escape');
+          await expect(overview).not.toBeVisible();
+          await expect(profile.getByText(`Live fixture ${locale}`, { exact: true })).toBeVisible();
+          await expect(profile.getByRole('textbox', { name: labels['chat.routine_label'], exact: true })).toHaveValue('Keep this routine draft');
+        }
         await page.setViewportSize({ width: 375, height: 720 });
         await profile.getByTestId('bot-profile-shortcuts').scrollIntoViewIfNeeded();
         await page.screenshot({ path: test.info().outputPath(`profile-${locale}-${theme}.png`) });

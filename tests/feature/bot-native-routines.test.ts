@@ -31,6 +31,9 @@ import { AgentRoutineRun } from '$lib/modules/agent-room/domain/models/AgentRout
 import { AgentMessageEnvelope } from '$lib/modules/agent-room/domain/models/AgentMessageEnvelope.js';
 import { controlCenterRepository } from '$lib/modules/agent-room/infrastructure/repositories/ControlCenterRepository.js';
 import { ptySessionManager } from '$lib/modules/agent-room/infrastructure/pty/PtySessionManager.ts';
+import { taskBoardService } from '$lib/modules/agent-room/application/services/TaskBoardService.js';
+import { AgentBoardTask } from '$lib/modules/agent-room/domain/models/AgentBoardTask.js';
+import { botResultRepository } from '$lib/modules/agent-room/infrastructure/repositories/BotResultRepository.js';
 import type { Routine } from '$lib/modules/agent-room/domain/types.js';
 
 const roots: string[] = [], secrets = new Map<string, string>();
@@ -83,6 +86,13 @@ describe('native owner bot routines without Computer grants', () => {
     expect(results[0]).toMatchObject({ authorAgentId: f.bot.id, authorTaskId: null, intervalMinutes: 60, actionConfig: { botOrigin: { sourceMessageId: f.source.id, bindingId: f.binding.id, send: true } } });
     expect(await f.command({ command: 'list' })).toHaveLength(1);
   });
+  it('retires a legacy self-ask instead of wasting another model turn on coordination', async () => {
+    const f = await fixture();
+    const self = await agentInboxService.enqueue({ workspaceId: f.workspace.id, toNodeId: f.bot.id, fromNodeId: f.bot.id, kind: 'ask', content: 'Tell yourself to finish your own work.' });
+    const claimed = await agentInboxService.claim(f.workspace.id, f.bot.id);
+    expect(claimed.items.some(item => item.messageId === self.id)).toBe(false);
+    expect((await controlCenterRepository.findEnvelope(self.id))?.state).toBe('failed');
+  });
   it('resolves the real received native source without the model guessing an ID', async () => {
     const f = await fixture(); vi.mocked(botRequestContextService.current).mockRestore();
     const envelopes = await controlCenterRepository.inboxEnvelopes(f.bot.id, ['queued']);
@@ -96,6 +106,62 @@ describe('native owner bot routines without Computer grants', () => {
     })) as Routine;
     expect(routine.actionConfig.botOrigin).toMatchObject({ sourceMessageId: f.source.id, bindingId: f.binding.id });
     expect(routine.authorTaskId).toBeNull();
+  });
+  async function resumedCard(legacy = false) {
+    const f = await fixture(); vi.mocked(botRequestContextService.current).mockRestore();
+    const original = (await controlCenterRepository.inboxEnvelopes(f.bot.id, ['queued'])).find(item => item.metadata.channelMessageId === f.source.id)!;
+    const firstBatch = uuidv7(), started = Date.now() - 60_000;
+    await AgentMessageEnvelope.query().where('id', original.id).update({ state: 'delivered', metadata_json: JSON.stringify({ ...original.metadata,
+      batchId: firstBatch, batchPrompt: 'Received owner request', batchSize: 1, batchSince: started, confirmation: 'provider' }) });
+    const active = vi.spyOn(ptySessionManager, 'structuredRequest').mockReturnValue({ messageId: firstBatch, conversationKey: `binding:${f.binding.id}` });
+    const task = await taskBoardService.create(f.workspace.id, { title: 'Set up hourly delivery', assigneeNodeId: f.bot.id, createdBy: f.bot.id, dispatch: false });
+    expect((await AgentBoardTask.find(task.id))!.getAttribute('bot_source_message_id')).toBe(f.source.id);
+    if (legacy) await AgentBoardTask.query().where('id', task.id).update({ bot_source_message_id: null });
+    await botResultRepository.save({ id: firstBatch, workspaceId: f.workspace.id, nodeId: f.bot.id, messageIds: [original.id], body: 'Old turn did not create the schedule.' });
+    await botResultRepository.finish(firstBatch);
+    const recovery = await agentInboxService.enqueue({ workspaceId: f.workspace.id, toNodeId: f.bot.id, fromNodeId: null, kind: 'task_recovery', taskId: task.id, content: 'Resume the assigned request after restart.' });
+    const secondBatch = uuidv7();
+    await AgentMessageEnvelope.query().where('id', recovery.id).update({ state: 'sent', metadata_json: JSON.stringify({ ...recovery.metadata, batchId: secondBatch, batchPrompt: 'Resume the card', batchSize: 1 }) });
+    active.mockReturnValue({ messageId: secondBatch, conversationKey: 'resumed-card' });
+    const create = () => new AgentRoutineService().execute(f.workspace.id, f.bot.id, bridgeAutomationCommandSchema.parse({
+      from: f.bot.id, taskId: task.id, idempotencyKey: 'resumed-context-test', input: { command: 'save', definition },
+    })) as Promise<Routine>;
+    return { ...f, task, create, original, firstBatch, started };
+  }
+  it.each([false, true])('restores the exact original chat when resuming a card (legacy=%s)', async legacy => {
+    const f = await resumedCard(legacy), routine = await f.create();
+    expect(routine.actionConfig.botOrigin).toMatchObject({ sourceMessageId: f.source.id, bindingId: f.binding.id });
+    expect((await AgentBoardTask.find(f.task.id))!.getAttribute('bot_source_message_id')).toBe(f.source.id);
+    expect(routine.authorTaskId).toBeNull();
+  });
+  it('refuses to restore another assignee or a revoked source', async () => {
+    const f = await resumedCard();
+    await workspaceRepository.updateNode(f.bot.id, { payload: { ...f.bot.payload, botSafety: botSafetySchema.parse({ ownerMessages: false, publicInstructions: 'Support' }) } as never });
+    await expect(f.create()).rejects.toThrow('OWNER_REQUIRED');
+    await AgentBoardTask.query().where('id', f.task.id).update({ assignee_node_id: uuidv7() });
+    await expect(f.create()).rejects.toThrow('OWNER_REQUIRED');
+    expect(await AgentRoutine.query().count()).toBe(0);
+  });
+  it('does not infer an old source without a completed native receipt containing task creation', async () => {
+    const f = await resumedCard(true);
+    await AgentMessageEnvelope.query().where('id', f.original.id).update({ metadata_json: JSON.stringify({ ...f.original.metadata, batchId: f.firstBatch,
+      confirmation: 'provider', batchSize: 1, batchSince: Date.now() + 60_000 }) });
+    await expect(f.create()).rejects.toThrow('OWNER_REQUIRED');
+    expect(await AgentRoutine.query().count()).toBe(0);
+  });
+  it('rejects ambiguous legacy native windows instead of choosing the latest chat', async () => {
+    const f = await resumedCard(true);
+    const key = { id: uuidv7(), fromMe: true, remoteJid: chat }, scope = botSafetyService.bindingScope(f.binding);
+    const ownerProof = await botOwnerMessageService.issue(f.binding, scope, key, own);
+    const source = await channelService.postExternal(f.workspace.id, f.bot.id, { body: '#jarvis a different owner request', via: 'whatsapp', bindingId: f.binding.id,
+      expectedBindingScope: scope, sender: 'Owner', senderId: own, externalId: `${chat}:${key.id}`, ownerProof: ownerProof! });
+    const envelope = (await controlCenterRepository.inboxEnvelopes(f.bot.id, ['queued'])).find(item => item.metadata.channelMessageId === source.id)!;
+    const batchId = uuidv7();
+    await AgentMessageEnvelope.query().where('id', envelope.id).update({ state: 'delivered', metadata_json: JSON.stringify({ ...envelope.metadata,
+      confirmation: 'provider', batchSize: 1, batchId, batchSince: f.started }) });
+    await botResultRepository.save({ id: batchId, workspaceId: f.workspace.id, nodeId: f.bot.id, messageIds: [envelope.id], body: 'Other result' });
+    await expect(f.create()).rejects.toThrow('OWNER_REQUIRED');
+    expect(await AgentRoutine.query().count()).toBe(0);
   });
   it('uses the native outbox once and reuses persisted reply/output after worker recovery', async () => {
     const f = await fixture(), routine = await f.create(), generations = answerOccurrences();
