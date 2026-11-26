@@ -7,9 +7,15 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+## 0.55.1 - 2026-11-26
+
 ### Fixed
 
 - Switch Claude account profiles with saved conversations larger than 512 MiB, including subagent transcripts and rewind snapshots. Transfer remains streamed and validates available disk space before stopping the old terminal; the final check no longer reserves the staged copy a second time. Preserve the exact conversation, account credentials and existing path/conflict protections.
+
+### Security review
+
+- Individually re-review the existing remote-function and source-pinned dependency mitigations for 0.55.1. Keep unused remote functions disabled, exact dependency/source checks and every other moderate-or-higher audit finding blocking. The 0.55.1 review expires on November 28, 2026; older releases retain their original expired windows. These are application mitigations, not upstream package fixes.
 
 ## 0.55.0 - 2026-11-23
 

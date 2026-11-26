@@ -55,11 +55,29 @@ describe('release-specific reviewed audit guards', () => {
     expect(await verifyReviewedGuards(root, new Date('2026-11-23T12:00:00Z'))).toEqual(new Set([id, 'GHSA-6cf5-gc4q-fm3x', 'GHSA-fc5q-39xc-vjpf']));
     await expect(verifyReviewedGuards(root, new Date('2026-11-26'))).rejects.toThrow();
   });
-  it.each(['0.55.0-beta.1', '0.55.0-beta.2', '0.54.1', '0.55.1', '0.56.0'])('does not carry release authorization into unreviewed %s', async version => {
+  it('limits the separately reviewed 0.55.1 to its own review window', async () => {
+    const root = fixture();
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version: '0.55.1' }));
+    expect(await verifyReviewedGuards(root, new Date('2026-11-26T12:00:00Z'))).toEqual(new Set([id, 'GHSA-6cf5-gc4q-fm3x', 'GHSA-fc5q-39xc-vjpf']));
+    await expect(verifyReviewedGuards(root, new Date('2026-11-25T23:59:59Z'))).rejects.toThrow();
+    await expect(verifyReviewedGuards(root, new Date('2026-11-29T00:00:00Z'))).rejects.toThrow();
+    const unsafe = fixture();
+    writeFileSync(join(unsafe, 'package.json'), JSON.stringify({ ...manifest, version: '0.55.1' }));
+    writeFileSync(join(unsafe, 'svelte.config.js'), 'export default { kit: { experimental: { remoteFunctions: true } } };');
+    await expect(verifyReviewedGuards(unsafe, new Date('2026-11-26T12:00:00Z'))).rejects.toThrow();
+  });
+  it.each(['0.54.0', '0.55.0'])('does not extend the expired review for %s', async version => {
     const root = fixture();
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version }));
-    await expect(verifyReviewedGuards(root, now)).rejects.toThrow();
+    await expect(verifyReviewedGuards(root, new Date('2026-11-26T12:00:00Z'))).rejects.toThrow();
+  });
+  it.each(['0.55.0-beta.1', '0.55.0-beta.2', '0.54.1', '0.55.1-beta.1', '0.55.2', '0.56.0'])('does not carry release authorization into unreviewed %s', async version => {
+    const root = fixture();
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, version }));
+    await expect(verifyReviewedGuards(root, new Date('2026-11-26T12:00:00Z'))).rejects.toThrow();
   });
   it('runs the Picomatch amplification regressions outside the event loop with a hard deadline', () => {
     const result = spawnSync(process.execPath, ['--max-old-space-size=128', '-e', `
