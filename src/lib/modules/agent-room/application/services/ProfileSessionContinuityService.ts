@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { transcriptTail } from '../../infrastructure/transcript/TranscriptFiles.js';
 
-const MAX_BYTES = 512 * 1024 * 1024;
+const MIN_FREE_BYTES = 512 * 1024 * 1024;
 const MAX_FILES = 10_000;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const sensitive = /^(?:\.env(?:\..*)?|\.?credentials(?:\.json)?|auth\.json)$|\.(?:pem|p12|key)$/i;
@@ -31,9 +31,9 @@ export class ProfileSessionContinuityService {
     }));
     if (!resumable) throw new Error('PROFILE_SAVED_CONVERSATION_UNAVAILABLE');
     if (sourceRoot === targetRoot) return { commit: async () => {} };
-    const scan = async () => {
+    const scan = async (staged = false) => {
       const files: Artifact[] = [];
-      let entries = 0, totalBytes = 0;
+      let entries = 0;
       const visit = async (rel: string, required = false, depth = 0): Promise<void> => {
         if (depth > 8 || ++entries > MAX_FILES) throw new Error('PROFILE_SESSION_TOO_LARGE');
         const path = join(sourceRoot, rel);
@@ -62,7 +62,6 @@ export class ProfileSessionContinuityService {
           if (current && (!current.isFile() || current.isSymbolicLink() || current.size > item.size
             || !(await this.prefixMatches(path, target, current.size)))) throw new Error('PROFILE_SESSION_CONFLICT');
           files.push({ source: path, target, relative: rel, size: item.size, dev: item.dev, ino: item.ino });
-          if ((totalBytes += item.size) > MAX_BYTES) throw new Error('PROFILE_SESSION_TOO_LARGE');
         }
       };
       await visit(transcript, true);
@@ -71,7 +70,9 @@ export class ProfileSessionContinuityService {
       await visit(join('file-history', input.sessionId));
       const bytes = files.reduce((total, file) => total + file.size, 0);
       const disk = await statfs(targetRoot);
-      if (disk.bavail * disk.bsize < bytes + 512 * 1024 * 1024) throw new Error('PROFILE_SESSION_NO_SPACE');
+      // History size follows available disk space, not an arbitrary session cap.
+      // After staging, its bytes already occupy disk; reserve only the headroom.
+      if (disk.bavail * disk.bsize < (staged ? 0 : bytes) + MIN_FREE_BYTES) throw new Error('PROFILE_SESSION_NO_SPACE');
       return files;
     };
     await scan(); // Validate every source and destination before stopping the old PTY.
@@ -105,7 +106,7 @@ export class ProfileSessionContinuityService {
           } finally { await from.close(); }
         }
         // Recheck ALL targets after staging; a conflict leaves the existing transcripts intact.
-        await scan();
+        await scan(true);
         // Install companions before the transcript, so no reader sees incomplete context.
         for (const index of [...files.keys()].sort((a, b) => (files[a].relative === transcript ? 1 : 0) - (files[b].relative === transcript ? 1 : 0))) {
           const file = files[index];

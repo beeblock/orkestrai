@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { appendFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appendFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, statfs, symlink, truncate, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,8 +8,16 @@ import { AgentSessionTracker } from '$lib/modules/agent-room/infrastructure/pty/
 import { findPromptInTranscript, findReplyToPrompt, latestTurnComplete } from '$lib/modules/agent-room/infrastructure/transcript/AgentTranscript.js';
 import { agentStorageRoots } from '$lib/modules/agent-room/infrastructure/transcript/AgentStorageRoots.js';
 
+vi.mock('node:fs/promises', async original => {
+  const fs = await original<typeof import('node:fs/promises')>();
+  return { ...fs, statfs: vi.fn(fs.statfs) };
+});
+
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => {
+  vi.mocked(statfs).mockReset();
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'orkestrai-profile-transfer-'))); roots.push(root);
   const sourceRoot = join(root, 'account-a'), targetRoot = join(root, 'account-b'), cwd = join(root, 'workspace');
@@ -29,6 +37,49 @@ async function fixture() {
 const service = new ProfileSessionContinuityService();
 
 describe('profile conversation continuity', () => {
+  it('accepts a conversation with more than 512 MiB of context when disk space permits', async () => {
+    const f = await fixture();
+    const result = join(f.sourceRoot, f.project, f.sessionId, 'tool-results', 'large-result.txt');
+    await mkdir(join(result, '..'), { recursive: true });
+    await writeFile(result, '');
+    // A sparse file reproduces the real limit without allocating/copying 512 MiB.
+    await truncate(result, 512 * 1024 * 1024 + 1);
+    vi.mocked(statfs).mockResolvedValueOnce({ bavail: 2 * 1024 ** 3, bsize: 1 } as never);
+    const prepared = await service.prepare(f);
+    expect(prepared.commit).toBeTypeOf('function');
+    await expect(readFile(join(f.targetRoot, f.transcript))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses a transfer without enough disk space before changing either account', async () => {
+    const f = await fixture();
+    vi.mocked(statfs).mockResolvedValueOnce({ bavail: 512 * 1024 * 1024 + Buffer.byteLength(f.text) - 1, bsize: 1 } as never);
+    await expect(service.prepare(f)).rejects.toThrow('PROFILE_SESSION_NO_SPACE');
+    expect(await readFile(join(f.sourceRoot, f.transcript), 'utf8')).toBe(f.text);
+    expect(await readdir(f.targetRoot)).toEqual(['.credentials.json']);
+  });
+
+  it('does not reserve the same transfer twice after its temporary copy is on disk', async () => {
+    const f = await fixture(), reserve = 512 * 1024 * 1024;
+    vi.mocked(statfs)
+      .mockResolvedValueOnce({ bavail: reserve + Buffer.byteLength(f.text), bsize: 1 } as never)
+      .mockResolvedValueOnce({ bavail: reserve + Buffer.byteLength(f.text), bsize: 1 } as never)
+      .mockResolvedValueOnce({ bavail: reserve, bsize: 1 } as never);
+    await (await service.prepare(f)).commit();
+    expect(await readFile(join(f.targetRoot, f.transcript), 'utf8')).toBe(f.text);
+    expect(await readFile(join(f.sourceRoot, f.transcript), 'utf8')).toBe(f.text);
+  });
+
+  it('keeps the old history and removes staging if disk headroom disappears during copying', async () => {
+    const f = await fixture(), reserve = 512 * 1024 * 1024;
+    vi.mocked(statfs)
+      .mockResolvedValueOnce({ bavail: 2 * 1024 ** 3, bsize: 1 } as never)
+      .mockResolvedValueOnce({ bavail: 2 * 1024 ** 3, bsize: 1 } as never)
+      .mockResolvedValueOnce({ bavail: reserve - 1, bsize: 1 } as never);
+    await expect((await service.prepare(f)).commit()).rejects.toThrow('PROFILE_SESSION_NO_SPACE');
+    expect(await readFile(join(f.sourceRoot, f.transcript), 'utf8')).toBe(f.text);
+    expect(await readdir(f.targetRoot)).toEqual(['.credentials.json']);
+  });
+
   it('moves only the selected context, tool results and rewind files, preserving both accounts and other sessions', async () => {
     const f = await fixture();
     const result = join(f.project, f.sessionId, 'tool-results', 'result.txt');

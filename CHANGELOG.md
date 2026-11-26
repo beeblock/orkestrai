@@ -7,6 +7,10 @@ pt-BR, English, and Spanish translations.
 
 ## Unreleased
 
+### Fixed
+
+- Switch Claude account profiles with saved conversations larger than 512 MiB, including subagent transcripts and rewind snapshots. Transfer remains streamed and validates available disk space before stopping the old terminal; the final check no longer reserves the staged copy a second time. Preserve the exact conversation, account credentials and existing path/conflict protections.
+
 ## 0.55.0 - 2026-11-23
 
 ### Added
